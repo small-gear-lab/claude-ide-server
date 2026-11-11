@@ -17,6 +17,7 @@ use crate::model::{
     document_state_from_adapter, document_state_to_tool_text, file_uri, open_editors_to_tool_text,
     save_from_adapter, save_to_tool_text,
 };
+use crate::paths;
 
 /// What runs a tool.
 enum Backing {
@@ -497,29 +498,14 @@ fn absolute_file_path(arguments: &mut Value, folders: &[String]) {
     let Some(path) = arguments.get("filePath").and_then(Value::as_str) else {
         return;
     };
-    if path.starts_with('/') || path.is_empty() {
+    if path.is_empty() || paths::is_absolute(path, paths::Flavor::NATIVE) {
         return;
     }
     let Some(first) = folders.first() else {
         return;
     };
-    let joined = join_normalized(first, path);
+    let joined = paths::join_normalized(first, path, paths::Flavor::NATIVE);
     arguments["filePath"] = Value::String(joined);
-}
-
-/// `base` and `relative` joined, with `.` and `..` resolved, and no `..` going above the root.
-fn join_normalized(base: &str, relative: &str) -> String {
-    let mut parts: Vec<&str> = Vec::new();
-    for part in base.split('/').chain(relative.split('/')) {
-        match part {
-            "" | "." => {}
-            ".." => {
-                parts.pop();
-            }
-            other => parts.push(other),
-        }
-    }
-    format!("/{}", parts.join("/"))
 }
 
 /// A string is the text as it is (for example `FILE_SAVED`); anything else is written as JSON.
@@ -642,7 +628,6 @@ mod tests {
             absolute_file_path(&mut arguments, folders);
             assert_eq!(arguments["filePath"], given);
         }
-        assert_eq!(join_normalized("/a", "../../b"), "/b");
     }
 
     #[test]

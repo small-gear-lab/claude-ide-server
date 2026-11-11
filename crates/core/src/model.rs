@@ -12,6 +12,8 @@ use std::fmt;
 
 use serde_json::{Map, Value, json};
 
+use crate::paths;
+
 /// What is wrong with a message from an adapter: where, and why.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelError {
@@ -63,7 +65,7 @@ fn optional_string(value: &Value, key: &str, path: &str) -> Result<Option<String
 /// relative to the directory that Claude Code runs in, which is not that of the editor.
 fn absolute_path(value: &Value, key: &str, path: &str) -> Result<String, ModelError> {
     let text = string(value, key, path)?;
-    if text.starts_with('/') {
+    if paths::is_absolute(&text, paths::Flavor::NATIVE) {
         Ok(text)
     } else {
         Err(error(&format!("{path}.{key}"), "expected an absolute path"))
@@ -529,18 +531,9 @@ impl AtMention {
     }
 }
 
-/// `file://` and the path, with every byte that is not safe in a URI written as `%XX` (the `/` stays).
+/// The `file://` URI of a path of this system (see [`paths::file_uri`]).
 pub(crate) fn file_uri(path: &str) -> String {
-    let mut uri = String::from("file://");
-    for byte in path.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'/' => {
-                uri.push(char::from(byte));
-            }
-            other => uri.push_str(&format!("%{other:02X}")),
-        }
-    }
-    uri
+    paths::file_uri(path, paths::Flavor::NATIVE)
 }
 
 /// What came of an `openDiff`: the user accepted the change, with the contents of the file as they are now (the user may

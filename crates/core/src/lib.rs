@@ -17,6 +17,7 @@ pub mod lock;
 pub mod mcp;
 pub mod model;
 mod notifications;
+mod paths;
 mod tools;
 pub mod workspace;
 pub mod ws;
