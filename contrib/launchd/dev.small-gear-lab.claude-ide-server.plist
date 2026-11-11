@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  NOT TESTED: written from launchd's documentation. The macOS runner of CI is where it will be tried (issue #18).
+
+  Runs claude-ide-server at log-in and keeps it running, and the server makes its adapter socket itself. launchd's own
+  socket activation (starting the server at the first connection) is not used yet: it hands the socket over through an
+  interface of its own, which the server does not speak (see docs/DESIGN.md, "Running the server").
+
+    cp contrib/launchd/dev.small-gear-lab.claude-ide-server.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.small-gear-lab.claude-ide-server.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>dev.small-gear-lab.claude-ide-server</string>
+  <key>ProgramArguments</key>
+  <array>
+    <!-- Change the path to where the executable is. -->
+    <string>/usr/local/bin/claude-ide-server</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+</dict>
+</plist>

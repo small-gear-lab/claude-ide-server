@@ -1,0 +1,9 @@
+[Unit]
+Description=Claude IDE server
+Requires=claude-ide-server.socket
+After=claude-ide-server.socket
+
+[Service]
+# The server takes the socket that systemd hands over. It ends when the last adapter has been gone for five minutes,
+# and the next connection starts it again. Change the path to where the executable is.
+ExecStart=%h/.cargo/bin/claude-ide-server --idle-timeout 300

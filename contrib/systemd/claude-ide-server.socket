@@ -1,0 +1,15 @@
+# systemd starts claude-ide-server at the first connection of an editor adapter, and keeps the socket between runs.
+#
+#   install -D -t ~/.config/systemd/user contrib/systemd/claude-ide-server.{socket,service}
+#   systemctl --user enable --now claude-ide-server.socket
+[Unit]
+Description=Claude IDE server: the socket of the editor adapters
+
+[Socket]
+# %t is the runtime directory ($XDG_RUNTIME_DIR): where the server looks when it makes the socket itself.
+ListenStream=%t/claude-ide-server/adapter.sock
+SocketMode=0600
+DirectoryMode=0700
+
+[Install]
+WantedBy=sockets.target
