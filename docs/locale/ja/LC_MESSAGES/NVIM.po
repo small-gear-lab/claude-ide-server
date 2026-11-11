@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-ide-server\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-11 20:51+0900\n"
+"POT-Creation-Date: 2026-11-11 21:28+0900\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: ja <LL@li.org>\n"
@@ -66,12 +66,12 @@ msgstr ""
 
 #: ../../NVIM.md:16
 msgid ""
-"Not Windows yet: the server runs there (see \"Running the server\" in "
-"[DESIGN](DESIGN.md)), but this adapter does not connect over a named pipe, "
-"and its tests are for Unix (issue #23)."
+"Windows works too: the server runs there (see \"Running the server\" in "
+"[DESIGN](DESIGN.md)), and the adapter connects over its named pipe. See "
+"\"Windows\" below."
 msgstr ""
-"まだ Windows には対応していません。サーバーはそこで動きます（[DESIGN](DESIGN.md) "
-"の「サーバーの実行」を参照）が、このアダプタは名前付きパイプで接続せず、テストも Unix 向けです（Issue #23）。"
+"Windows でも動きます。サーバーはそこで動き（[DESIGN](DESIGN.md) "
+"の「サーバーの実行」を参照）、アダプタは名前付きパイプで接続します。下の「Windows」を参照してください。"
 
 #: ../../NVIM.md:17
 msgid ""
@@ -107,11 +107,11 @@ msgstr ""
 msgid "Options"
 msgstr "オプション"
 
-#: ../../NVIM.md:64
+#: ../../NVIM.md:65
 msgid "Main windows only"
 msgstr "メインウィンドウだけ"
 
-#: ../../NVIM.md:66
+#: ../../NVIM.md:67
 msgid ""
 "Each Neovim that calls `setup` registers a workspace of its own, which "
 "Claude Code lists in `/ide`. A Neovim that is a child of another one (a "
@@ -124,11 +124,78 @@ msgstr ""
 "Neovim の子（Git グラフや差分を、別の Neovim で開く構成でのそのウィンドウ）は、そこに現れないほうがよいはずです。どの Neovim "
 "がどれなのかはアダプタには分からず、設定側が `should_register` で伝えます。これは、アダプタが起動するときに1回だけ呼ばれます。"
 
-#: ../../NVIM.md:79
+#: ../../NVIM.md:80
+msgid "Windows"
+msgstr "Windows"
+
+#: ../../NVIM.md:82
+msgid ""
+"The adapter runs on Windows: the tests of `crates/server/tests/nvim.rs` are "
+"run on a Windows runner of CI, with Neovim 0.12.6 (not with 0.11, which was "
+"not tried there). What is particular to it:"
+msgstr ""
+"アダプタは Windows で動きます。`crates/server/tests/nvim.rs` のテストを、CI の Windows "
+"ランナーで、Neovim 0.12.6 で動かしています（0.11 は、そこでは試していません）。Windows に特有のことは次のとおりです。"
+
+#: ../../NVIM.md:85
+msgid ""
+"**The pipe.** The server listens on a named pipe, `\\\\.\\pipe\\claude-ide-"
+"server-<sid>`, with the security identifier of the user in its name. Neovim "
+"does not give a SID, so the adapter asks the executable, once: `claude-ide-"
+"server --print-socket` (`server.command` says which executable; a path works"
+" as well as a name on the `PATH`). If the executable is not found, the user "
+"is told, once, and the adapter tries again later (as it does for a server "
+"that is not there). `socket`, or the environment variable "
+"`CLAUDE_IDE_SERVER_SOCKET`, which the server reads too, says where it is, "
+"and then nothing is asked."
+msgstr ""
+"**パイプ。** サーバーは、名前付きパイプ `\\\\.\\pipe\\claude-ide-server-<sid>` "
+"で待ち受けます。名前にはユーザーのセキュリティ識別子が入っています。Neovim は SID "
+"を与えてくれないので、アダプタが実行ファイルに1回尋ねます: `claude-ide-server --print-socket`（どの実行ファイルかは"
+" `server.command` が決めます。名前でも、`PATH` "
+"上でない場所のパスでも構いません）。実行ファイルが見つからなければ、ユーザーに1回だけ知らせ、アダプタは（サーバーがいないときと同じように）あとでやり直します。`socket`、またはサーバーも読む環境変数"
+" `CLAUDE_IDE_SERVER_SOCKET` が場所を決めていれば、何も尋ねません。"
+
+#: ../../NVIM.md:90
+msgid ""
+"**Starting the server.** As elsewhere: `vim.system` starts it detached, so "
+"that it is not a child of this Neovim and goes on when Neovim ends (this was"
+" tried: a server that the adapter starts is found by the others that start "
+"at the same time, and ends by itself when no adapter has been there for the "
+"idle time)."
+msgstr ""
+"**サーバーの起動。** ほかのシステムと同じです。`vim.system` が切り離して起動するので、この Neovim "
+"の子プロセスではなく、Neovim "
+"が終了しても動き続けます（これは試しました。アダプタが起動したサーバーは、同時に起動したほかのアダプタが見つけ、アダプタがいなくなってアイドル時間が過ぎると、自分で終了します）。"
+
+#: ../../NVIM.md:93
+msgid ""
+"**Paths.** The adapter reports a file, and the working directory of the "
+"workspace, by their real path, the names written out in full: Neovim keeps "
+"the name that it was given, which may be the short form of 8.3 "
+"(`C:\\Users\\RUNNER~1\\...`), and Claude Code compares paths with its own "
+"working directory as text. A path is what Neovim says, with backslashes, and"
+" a URI is `file:///C:/Users/...`."
+msgstr ""
+"**パス。** アダプタは、ファイルと、ワークスペースの作業ディレクトリを、実在するパスで、名前を省略せずに報告します。Neovim "
+"は、渡された名前をそのまま保つので、それが 8.3 の短い名前（`C:\\Users\\RUNNER~1\\...`）のことがあり、Claude "
+"Code は、パスを自分の作業ディレクトリとテキストとして比べるからです。パスは Neovim が言うとおり（バックスラッシュ入り）で、URI は "
+"`file:///C:/Users/...` です。"
+
+#: ../../NVIM.md:98
+msgid ""
+"What was not tried: a Claude Code on Windows (the tests have a stand-in for "
+"it), Neovim 0.11, file names that are not ASCII, and paths of a share "
+"(`\\\\server\\share`). WSL is another case, which is issue #24."
+msgstr ""
+"試していないこと: Windows 上の Claude Code（テストには代役がいます）、Neovim 0.11、ASCII "
+"でないファイル名、共有のパス（`\\\\server\\share`）。WSL は別の場合で、Issue #24 です。"
+
+#: ../../NVIM.md:101
 msgid "Commands"
 msgstr "コマンド"
 
-#: ../../NVIM.md:81
+#: ../../NVIM.md:103
 msgid ""
 "`:ClaudeIde status` shows whether the adapter is connected, the port of the "
 "workspace, the socket, and the last problem. `:ClaudeIde start` and "
@@ -137,11 +204,11 @@ msgstr ""
 "`:ClaudeIde status` は、アダプタが接続しているか、ワークスペースのポート、ソケット、直近の問題を表示します。`:ClaudeIde "
 "start` と `:ClaudeIde stop` は、接続を始めたり止めたりします。"
 
-#: ../../NVIM.md:84
+#: ../../NVIM.md:106
 msgid "How it connects"
 msgstr "接続のしかた"
 
-#: ../../NVIM.md:86
+#: ../../NVIM.md:108
 msgid ""
 "Nobody has to start the server by hand. The adapter connects to the socket "
 "of the server, and what happens when nobody is listening depends on how the "
@@ -149,7 +216,7 @@ msgid ""
 msgstr ""
 "サーバーを手で起動する必要はありません。アダプタはサーバーのソケットに接続し、誰も待ち受けていないときにどうなるかは、サーバーのセットアップ次第です。"
 
-#: ../../NVIM.md:89
+#: ../../NVIM.md:111
 msgid ""
 "**A supervisor holds the socket** (systemd socket activation, or launchd on "
 "macOS; see `contrib/`): the connection works, and the first one starts the "
@@ -158,7 +225,7 @@ msgstr ""
 "**監督プロセスがソケットを持っている**（systemd のソケットアクティベーション、または macOS の launchd。`contrib/` "
 "を参照）: 接続は成功し、最初の接続でサーバーが起動します。アダプタは、サーバーが動いていなかったことに気づきません。"
 
-#: ../../NVIM.md:91
+#: ../../NVIM.md:113
 msgid ""
 "**Nothing holds it:** the adapter starts `claude-ide-server` itself, once, "
 "and then waits for it like for any other server. The server is not a child "
@@ -189,7 +256,7 @@ msgstr ""
 "以上）はメッセージで知らせます。アダプタがサーバーを起動したあとの最初の再試行は、100 ms 後です（`reconnect.initial_ms` "
 "がそれより小さければ、その値）。サーバーは数十ミリ秒で用意できるからです。そのあとの再試行は、下の待ち時間に従います。"
 
-#: ../../NVIM.md:103
+#: ../../NVIM.md:125
 msgid ""
 "Either way the adapter keeps trying: after `reconnect.initial_ms`, then "
 "after twice that, and so on up to `reconnect.max_ms`, without a message, so "
@@ -208,7 +275,7 @@ msgstr ""
 " "
 "を拒否するサーバー（知らないプロトコルのバージョンなど）は、まだいないサーバーとは違います。やり直しても何も変わらないので、アダプタはユーザーに、1回だけ知らせます。"
 
-#: ../../NVIM.md:110
+#: ../../NVIM.md:132
 msgid ""
 "After each registration the current selection is sent once, so that the "
 "server, and a Claude Code that connects to it, start from what the user has "
@@ -217,11 +284,11 @@ msgstr ""
 "登録のたびに、現在の選択範囲が1回送られます。サーバーと、それに接続する Claude Code "
 "が、いまユーザーが見ているところから始められるようにするためです。"
 
-#: ../../NVIM.md:113
+#: ../../NVIM.md:135
 msgid "The selection"
 msgstr "選択範囲"
 
-#: ../../NVIM.md:115
+#: ../../NVIM.md:137
 #, python-brace-format
 msgid ""
 "`selectionChanged` is sent once the cursor has stayed still for "
@@ -237,11 +304,11 @@ msgstr ""
 "line, character }` で、`line` は 0 始まり、`character` は UTF-16 コードユニット単位（Neovim "
 "はバイトで数えます）、範囲の終端は含みません。ファイルでないバッファ（ターミナル、ヘルプ、名前のないバッファ）には、選択範囲はありません。"
 
-#: ../../NVIM.md:120
+#: ../../NVIM.md:142
 msgid "What Claude Code can ask"
 msgstr "Claude Code が頼めること"
 
-#: ../../NVIM.md:122
+#: ../../NVIM.md:144
 msgid ""
 "The adapter answers these requests of the server (the `methods` that it "
 "declares in `register`; a configuration can replace them or add to them with"
@@ -250,7 +317,7 @@ msgstr ""
 "アダプタは、サーバーの次のリクエストに答えます（`register` で宣言する `methods`。設定の `methods` "
 "オプションで、置き換えたり、足したりできます）。"
 
-#: ../../NVIM.md:125
+#: ../../NVIM.md:147
 msgid ""
 "`getOpenEditors`: the listed buffers that are files, with the active one "
 "(the file of the current window, or, when the focus is in a terminal or a "
@@ -266,7 +333,7 @@ msgstr ""
 "で、まだ読み込まれていないバッファは、ファイル名から決まるものです。いくつかの filetype は、Claude Code が使う言語 ID "
 "に直します（`sh` は `shellscript`、filetype なしは `plaintext`）。"
 
-#: ../../NVIM.md:130
+#: ../../NVIM.md:152
 msgid ""
 "`getCurrentSelection` and `getLatestSelection`: the selection of the file "
 "that the user is in, or the last one that there was while the focus is "
@@ -275,7 +342,7 @@ msgstr ""
 "`getCurrentSelection` と `getLatestSelection`: "
 "ユーザーがいるファイルの選択範囲。ファイルのない場所にフォーカスがあるあいだは、直前にあった選択範囲。"
 
-#: ../../NVIM.md:132
+#: ../../NVIM.md:154
 msgid ""
 "`openFile`: opens the file in a window that shows files (one that shows it "
 "already, or else one that shows another file; with the focus in a terminal "
@@ -293,7 +360,7 @@ msgstr ""
 "は選択を持てません）。そのため、`makeFrontmost` が false "
 "のときは、テキストの位置にカーソルを置くだけで、何も選択しません。ディレクトリや、ないファイルは、エラーです。"
 
-#: ../../NVIM.md:138
+#: ../../NVIM.md:160
 msgid ""
 "`checkDocumentDirty` and `saveDocument`: for a file whose text is in memory."
 " A file that is not open is answered with `success = false`. `saveDocument` "
@@ -304,7 +371,7 @@ msgstr ""
 "`success = false` と答えます。`saveDocument` は、変更のあるファイルだけを書きます。`lineCount` は、VS "
 "Code の拡張機能と同じく、最後の改行のあとの空行も数えます。"
 
-#: ../../NVIM.md:141
+#: ../../NVIM.md:163
 msgid ""
 "`getDiagnostics`: the diagnostics of `vim.diagnostic`, for the file of a "
 "`uri` or for every open file that has some, with `Error`, `Warning`, "
@@ -315,7 +382,7 @@ msgstr ""
 "のファイル、またはその診断を持つ開いているすべてのファイルについて。重大度は "
 "`Error`、`Warning`、`Information`、`Hint`、列は UTF-16 コードユニット単位です。"
 
-#: ../../NVIM.md:144
+#: ../../NVIM.md:166
 msgid ""
 "Claude Code 2.1.322 asks for `getDiagnostics` itself, around its own edits, "
 "and does not use the others. See \"What Claude Code sends on its own\" in "
@@ -324,11 +391,11 @@ msgstr ""
 "Claude Code 2.1.322 は、自分で編集する前後に `getDiagnostics` "
 "を頼み、ほかのものは使いません。[DESIGN](DESIGN.md) の「Claude Code が自分から送るもの」を参照してください。"
 
-#: ../../NVIM.md:147
+#: ../../NVIM.md:169
 msgid "Diagnostics"
 msgstr "診断"
 
-#: ../../NVIM.md:149
+#: ../../NVIM.md:171
 msgid ""
 "`getDiagnostics` answers with what `vim.diagnostic` has. Two things are done"
 " for a file that is asked for by its `uri`:"
@@ -336,7 +403,7 @@ msgstr ""
 "`getDiagnostics` は、`vim.diagnostic` が持っているものを答えます。`uri` "
 "で求められたファイルには、2つのことをします。"
 
-#: ../../NVIM.md:151
+#: ../../NVIM.md:173
 msgid ""
 "**The file is found by its real path, and answered under the `uri` that was "
 "asked for.** Claude Code does not resolve symbolic links, and drops an "
@@ -351,7 +418,7 @@ msgstr ""
 "が合わない答えは捨てるので、リンク経由で名指されたファイルは、実際にある場所で探し、渡された名前のままで返します。一覧にあってまだ読み込まれていないファイルには診断なしで答え、Neovim"
 " の一覧にないファイルには空の一覧で答えます。"
 
-#: ../../NVIM.md:155
+#: ../../NVIM.md:177
 msgid ""
 "**A file that was written by someone else is read again, and its diagnostics"
 " are waited for.** Claude Code asks for the diagnostics of a file right "
@@ -375,7 +442,7 @@ msgstr ""
 "`cap_hidden_ms`）まで待ちます。書き込まれていない変更があるバッファはユーザーのものなので、そのままにします。待つのはリクエストだけで、Neovim"
 " は待ちません。`diagnostics_wait = false` でこれをやめられ、テーブルで時間の一部を決められます。"
 
-#: ../../NVIM.md:164
+#: ../../NVIM.md:186
 msgid ""
 "Checked with Claude Code 2.1.322 and pyright: right after it edited a file, "
 "`getDiagnostics` answered with the diagnostics of the new text. That does "
@@ -391,11 +458,11 @@ msgstr ""
 "で同じ実行をしても、同じ答えでした）。待ちは、アダプタのテストで、ファイルの読み込みの 150 ms 後に答える Lua "
 "製のリンターを使って試していて、待ちがなければテストは失敗します。"
 
-#: ../../NVIM.md:169
+#: ../../NVIM.md:191
 msgid "Diffs"
 msgstr "差分"
 
-#: ../../NVIM.md:171
+#: ../../NVIM.md:193
 msgid ""
 "When Claude Code proposes a change to a file, the adapter shows it in a tab "
 "page of its own: on the left the file as it is now (the open buffer, with "
@@ -406,7 +473,7 @@ msgstr ""
 "がファイルへの変更を提案すると、アダプタは、専用のタブページに表示します。左は、いまのファイル（開いているバッファがあれば、書いていない変更を含むそのバッファ）、右は、Claude"
 " Code の提案で、編集できます。2つは Neovim の差分モードになります。"
 
-#: ../../NVIM.md:175
+#: ../../NVIM.md:197
 msgid ""
 "**`:write` on the right side accepts it**, with the contents as they are "
 "then (edit them first to accept something else). Nothing is written to the "
@@ -416,7 +483,7 @@ msgstr ""
 "そのときの内容で承認されます（別のものを承認したいときは、先に編集してください）。アダプタは、ファイルには何も書きません。ファイルを書くのは "
 "Claude Code で、その内容を使います。"
 
-#: ../../NVIM.md:177
+#: ../../NVIM.md:199
 msgid ""
 "**`:ClaudeIdeDiffReject` rejects it**, and so does closing the tab page, or "
 "the right window. `:ClaudeIdeDiffAccept` is the same as `:write`. The "
@@ -428,7 +495,7 @@ msgstr ""
 "と同じです。コマンドは、現在のバッファの差分、待っている差分が1つだけならそれ、名前を指定したもの（`:ClaudeIdeDiffReject "
 "edit-1`）に対して働きます。"
 
-#: ../../NVIM.md:180
+#: ../../NVIM.md:202
 msgid ""
 "A diff that Claude Code closes (it asks for that when the user decides in "
 "the terminal) goes from the screen, and so does one whose Claude Code has "
@@ -437,15 +504,15 @@ msgstr ""
 "Claude Code が閉じる差分（ユーザーがターミナルで決めたときに、そう頼みます）は、画面から消えます。Claude Code "
 "がいなくなった差分も同じです。"
 
-#: ../../NVIM.md:182
+#: ../../NVIM.md:204
 msgid "A new diff of the name of one that is shown replaces it."
 msgstr "表示中の差分と同じ名前の新しい差分は、それを置き換えます。"
 
-#: ../../NVIM.md:184
+#: ../../NVIM.md:206
 msgid "Keys can be given, mapped in both buffers of a diff, with `diff.keys`:"
 msgstr "キーを指定でき、差分の2つのバッファの両方に割り当てられます（`diff.keys`）。"
 
-#: ../../NVIM.md:192
+#: ../../NVIM.md:214
 msgid ""
 "**Where a diff is shown is the job of a provider**, which a configuration "
 "can replace. The adapter has the flow (the request that waits, the names, "
@@ -455,14 +522,14 @@ msgstr ""
 "**差分をどこに表示するかは、提供元（provider）の仕事で、設定から置き換えられます。** "
 "アダプタが流れ（待っているリクエスト、名前、置き換え、閉じること）を持ち、提供元は、差分を表示することと、画面から外すことだけをします。"
 
-#: ../../NVIM.md:210
+#: ../../NVIM.md:232
 msgid ""
 "`diff = false` leaves diffs out: the adapter does not declare them, and "
 "Claude Code shows its changes in the terminal."
 msgstr ""
 "`diff = false` にすると、差分を省きます。アダプタは差分を宣言せず、Claude Code は、変更をターミナルに表示します。"
 
-#: ../../NVIM.md:212
+#: ../../NVIM.md:234
 msgid ""
 "The diffs were tried with a real Claude Code (2.1.322) in a terminal, with "
 "the adapter in a headless Neovim. Claude Code asks for a diff only when it "
@@ -485,11 +552,11 @@ msgstr ""
 " では `User rejected update` となり、ファイルは変わりません。ターミナルで決めたときは、差分が Neovim "
 "の画面から消えます。"
 
-#: ../../NVIM.md:219
+#: ../../NVIM.md:241
 msgid "Mentioning to Claude Code"
 msgstr "Claude Code へのメンション"
 
-#: ../../NVIM.md:221
+#: ../../NVIM.md:243
 msgid ""
 "`:ClaudeIdeMention` mentions the current file to Claude Code, and "
 "`:'<,'>ClaudeIdeMention` (or any range, as in `:2,4ClaudeIdeMention`) the "
@@ -506,11 +573,11 @@ msgstr ""
 "`require('claude_ide').mention(first, last)` で同じことができ、行（1 "
 "始まり）を渡すか、渡さなければファイル全体になります。Claude Code に伝えられたかどうかを返します。"
 
-#: ../../NVIM.md:226
+#: ../../NVIM.md:248
 msgid "Tests"
 msgstr "テスト"
 
-#: ../../NVIM.md:233
+#: ../../NVIM.md:255
 msgid ""
 "The second needs `nvim` on the path. Without it the tests say so and pass, "
 "unless `CLAUDE_IDE_REQUIRE_NVIM` is set (CI sets it)."

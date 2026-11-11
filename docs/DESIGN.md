@@ -17,7 +17,7 @@ checked against Claude Code itself.
 
 - Starting or managing the Claude Code CLI or its terminal. The CLI runs wherever the user runs it; `/ide`
   finds the server through the lock file.
-- Everything that an editor needs on Windows. The server runs there (a named pipe for the adapters, lock files, Task Scheduler), but the Neovim adapter on Windows and the Windows forms of paths and URIs are issue #23.
+- WSL: Claude Code in Linux, under WSL, with an editor on Windows (issue #24). The server and the Neovim adapter run on Windows itself (see "Running the server").
 - Replacing the official integrations. This is for editors that do not have one.
 - A hub entry that stands for all workspaces. Considered and left out: a CLI normally runs inside the project that its editor has open, and a second entry that matches the same directory would make `/ide` ambiguous.
 
@@ -289,8 +289,19 @@ it means that the notification is not passed on and the owner of the workspace i
   without a selection is a selection with an empty `text` and `start` equal to `end`. The server works out `isEmpty`
   from the range.
 - **`atMention`** is `{ filePath, lineStart, lineEnd }`, 0-based, `lineEnd` being the last line.
-- A **`filePath`** is an absolute path (it starts with `/`). Claude Code works out what to show from it, and a relative
-  one would be taken relative to the directory that Claude Code runs in, which is not that of the editor.
+- A **`filePath`** is an absolute path (on Unix it starts with `/`; on Windows with a drive and a separator, `C:\Users\u\a.lua`,
+  or with a separator, as Node, which Claude Code is, takes it: `path.win32.isAbsolute`). Claude Code works out what to show
+  from it, and a relative one would be taken relative to the directory that Claude Code runs in, which is not that of the
+  editor.
+- **Paths on Windows** are native paths, written out in full. An editor may know a file by the short form of 8.3
+  (`C:\Users\RUNNER~1\a.lua`), and Claude Code compares a path with its own working directory as text, which has the long
+  form: the Neovim adapter reports the long form (the real path, in its own case). Otherwise the server does not change what
+  an editor reports (the separators and the case of the drive letter stay as they are). The `fileUrl` that the server makes
+  from a `filePath` is `file:///C:/Users/u/a%20b.lua`, and `file://server/share/a.lua` for a path of a share; a `uri` that an
+  adapter makes is its own (Neovim's `vim.uri_from_fname` writes the same). A relative `filePath` in a tool call is
+  joined with the first folder of the workspace, with the separator that the folder uses, and no `..` goes above the drive
+  or the share (`crates/core/src/paths.rs`, which works on strings and is tested for both ways of writing a path on every
+  system).
 - **The answer to `getOpenEditors`** is `{ tabs: [ ... ] }`. A tab has five things that every client of this protocol
   takes, and all five are required: `uri`, `isActive`, `label`, `languageId`, `isDirty`. The VS Code extension adds more
   to a tab, and an adapter may leave any of them out: `isPinned`, `isPreview`, `groupIndex`, `viewColumn` (the group of
@@ -451,6 +462,13 @@ of the user (`gui/<uid>`; the runner has one) and checks the same four things: n
 connection starts the server and it serves the socket that launchd handed over, it ends after the idle time with the
 socket still there, and the next connection starts it again.
 
+**Where the adapters look for it.** By default each of them works out the same place as the server does. The place can also
+be set once, for the server and for the adapters that read it, with `CLAUDE_IDE_SERVER_SOCKET` (`--socket` wins over it for
+the server, and the `socket` option for the Neovim adapter): a supervisor, or a test that must not share the default, sets it.
+`claude-ide-server --print-socket` prints the place (what `--socket` or the environment says, or else the default) and ends,
+for an adapter that cannot work the default out: Neovim on Windows, where the name of the pipe has the security identifier of
+the user in it, which Neovim does not give. That adapter asks the executable that `server.command` names, once.
+
 What a system does differently is absorbed in a source of its own, selected by `cfg` where the system decides it:
 
 - **systemd** (Linux): the handed-over source.
@@ -499,8 +517,12 @@ What a system does differently is absorbed in a source of its own, selected by `
     it lists `*.lock` in `<config dir>/ide`, asks whether the process of `pid` is alive (`process.kill(pid, 0)`), and
     compares its working directory (the drive letter in upper case, in NFC) with each of `workspaceFolders` by
     containment. It connects to `127.0.0.1`; another address is for WSL with an editor on Windows (`runningInWindows`).
-  - Not done: starting the server on demand from an adapter on Windows (the adapter starts the executable itself, or
-    triggers the task), and everything about paths and the Neovim adapter: issue #23.
+  - The Neovim adapter was run on the Windows runner (Neovim 0.12.6, in the tests of `crates/server/tests/nvim.rs`, which are
+    for every system now): it registers over the pipe, follows `:cd`, reports the selection, the open editors and the
+    diagnostics, opens, checks and saves files, shows the changes that Claude Code proposes and takes the user's decision, and
+    starts the server detached and finds it again after it restarts. See "Windows" in [NVIM](NVIM.md).
+  - Not done: starting the task on demand from an adapter (the adapter starts the executable itself, detached; it does not
+    trigger the task), and WSL, which is issue #24.
 
 An adapter that finds nobody listening starts this same executable itself (the Neovim adapter does, unless told not to):
 connecting is how the server is activated, whether a supervisor or the adapter answers it. The server is then not a
@@ -513,6 +535,10 @@ same moment are safe, because a second server on the same socket refuses to star
 - The token is checked on every WebSocket upgrade. A web page cannot set that header, so a browser cannot talk
   to the port.
 - Frame and message sizes are capped. A malformed message closes that connection and nothing else.
+- On Windows the name of a pipe is shared by everyone on the machine. The access list keeps other users out of the pipe of the
+  server, but a user who makes a pipe of that name first leaves the server unable to start (it says that another server is
+  listening), and can get what an adapter sends to it: the folders of the workspace, the selection. Nothing is done about
+  it yet: an adapter in Lua cannot see who owns a pipe. It matters on a machine that more than one user uses at the same time.
 - Paths from Claude are used as given by the adapter; the server never reads or writes project files itself.
   Writing a file after an accepted diff is the adapter's job.
 
@@ -543,7 +569,7 @@ same moment are safe, because a second server on the same socket refuses to star
 
 ## Open questions
 
-- Windows: the Neovim adapter over a pipe, and the Windows forms of paths and URIs (issue #23).
+- WSL, where Claude Code and the editor are on the two sides of the boundary between Linux and Windows (issue #24).
 - What an adapter should do when the server is not there: retry, and for how long (issue #10).
 - Whether to write both a path and its symlink-resolved form into `workspaceFolders`, since the CLI compares text.
 - A process id can be reused: if an unrelated process takes the id that a dead server recorded, its leftover lock

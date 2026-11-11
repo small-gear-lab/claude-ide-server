@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-ide-server\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-11 20:51+0900\n"
+"POT-Creation-Date: 2026-11-11 21:28+0900\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: Small Gear Lab\n"
 "Language-Team: ja <LL@li.org>\n"
@@ -82,13 +82,12 @@ msgstr ""
 
 #: ../../DESIGN.md:20
 msgid ""
-"Everything that an editor needs on Windows. The server runs there (a named "
-"pipe for the adapters, lock files, Task Scheduler), but the Neovim adapter "
-"on Windows and the Windows forms of paths and URIs are issue #23."
+"WSL: Claude Code in Linux, under WSL, with an editor on Windows (issue #24)."
+" The server and the Neovim adapter run on Windows itself (see \"Running the "
+"server\")."
 msgstr ""
-"エディタが Windows で必要とするものすべて。サーバーは Windows "
-"で動きます（アダプタ用の名前付きパイプ、ロックファイル、タスクスケジューラ）が、Windows での Neovim アダプタと、パスや URI の "
-"Windows での形は Issue #23 です。"
+"WSL: Windows 上のエディタと、WSL の Linux 上の Claude Code（Issue #24）。サーバーと Neovim "
+"アダプタは、Windows そのものの上で動きます（「サーバーの実行」を参照）。"
 
 #: ../../DESIGN.md:21
 msgid ""
@@ -1090,15 +1089,47 @@ msgstr ""
 
 #: ../../DESIGN.md:292
 msgid ""
-"A **`filePath`** is an absolute path (it starts with `/`). Claude Code works"
-" out what to show from it, and a relative one would be taken relative to the"
-" directory that Claude Code runs in, which is not that of the editor."
+"A **`filePath`** is an absolute path (on Unix it starts with `/`; on Windows"
+" with a drive and a separator, `C:\\Users\\u\\a.lua`, or with a separator, "
+"as Node, which Claude Code is, takes it: `path.win32.isAbsolute`). Claude "
+"Code works out what to show from it, and a relative one would be taken "
+"relative to the directory that Claude Code runs in, which is not that of the"
+" editor."
 msgstr ""
-"**`filePath`** は、絶対パス（`/` で始まる）です。Claude Code "
+"**`filePath`** は、絶対パスです（Unix では `/` で始まります。Windows "
+"では、ドライブと区切り文字（`C:\\Users\\u\\a.lua`）か、区切り文字で始まります。Claude Code は Node "
+"なので、そのように扱います: `path.win32.isAbsolute`）。Claude Code "
 "は、これから、見せるものを決めます。相対パスだと、Claude Code "
 "が動いているディレクトリが基準になりますが、それはエディタのものではありません。"
 
-#: ../../DESIGN.md:294
+#: ../../DESIGN.md:296
+msgid ""
+"**Paths on Windows** are native paths, written out in full. An editor may "
+"know a file by the short form of 8.3 (`C:\\Users\\RUNNER~1\\a.lua`), and "
+"Claude Code compares a path with its own working directory as text, which "
+"has the long form: the Neovim adapter reports the long form (the real path, "
+"in its own case). Otherwise the server does not change what an editor "
+"reports (the separators and the case of the drive letter stay as they are). "
+"The `fileUrl` that the server makes from a `filePath` is "
+"`file:///C:/Users/u/a%20b.lua`, and `file://server/share/a.lua` for a path "
+"of a share; a `uri` that an adapter makes is its own (Neovim's "
+"`vim.uri_from_fname` writes the same). A relative `filePath` in a tool call "
+"is joined with the first folder of the workspace, with the separator that "
+"the folder uses, and no `..` goes above the drive or the share "
+"(`crates/core/src/paths.rs`, which works on strings and is tested for both "
+"ways of writing a path on every system)."
+msgstr ""
+"**Windows のパス**は、ネイティブのパスを、省略せずに書いたものです。エディタは、ファイルを 8.3 "
+"の短い名前（`C:\\Users\\RUNNER~1\\a.lua`）で知っていることがありますが、Claude Code "
+"は、自分の作業ディレクトリ（長い名前を持っています）と、パスをテキストとして比べます。そこで、Neovim "
+"アダプタは長い名前（実在するパスで、元の大文字小文字のまま）を報告します。それ以外では、サーバーはエディタの報告を変えません（区切り文字やドライブレターの大文字小文字は、そのままです）。サーバーが"
+" `filePath` から作る `fileUrl` は `file:///C:/Users/u/a%20b.lua` で、共有のパスでは "
+"`file://server/share/a.lua` です。アダプタが作る `uri` はそのアダプタのものです（Neovim の "
+"`vim.uri_from_fname` も同じ形を書きます）。ツール呼び出しの相対的な `filePath` "
+"は、ワークスペースの最初のフォルダと、そのフォルダが使う区切り文字で結合され、`..` "
+"はドライブや共有より上には出ません（`crates/core/src/paths.rs`。文字列だけを扱い、パスの2つの書き方の両方を、どのシステムでもテストしています）。"
+
+#: ../../DESIGN.md:305
 #, python-brace-format
 msgid ""
 "**The answer to `getOpenEditors`** is `{ tabs: [ ... ] }`. A tab has five "
@@ -1116,7 +1147,7 @@ msgstr ""
 "の拡張機能は、タブにさらに加えており、アダプタはどれを省いてもかまいません。`isPinned`、`isPreview`、`groupIndex`、`viewColumn`（そのタブがいるグループと、その列）、`isGroupActive`、`fileName`、`lineCount`、`isUntitled`、そしてアクティブなタブには"
 " `selection: { start, end, isReversed }` です。あるものはそのまま渡し、あれば検査します。"
 
-#: ../../DESIGN.md:299
+#: ../../DESIGN.md:310
 #, python-brace-format
 msgid ""
 "**The answer to `openFile`** is `{ filePath, languageId, lineCount, isDirty,"
@@ -1146,7 +1177,7 @@ msgstr ""
 "<path>`）で、ツール呼び出しは失敗します。絶対パスでないパスは、アダプタに聞く前に、最初のワークスペースフォルダからの絶対パスに直されるので、アダプタは絶対パスを受け取ります（VS"
 " Code の拡張機能と同じです）。"
 
-#: ../../DESIGN.md:308
+#: ../../DESIGN.md:319
 #, python-brace-format
 msgid ""
 "**The answers to `checkDocumentDirty` and `saveDocument`** are `{ isDirty, "
@@ -1159,7 +1190,7 @@ msgstr ""
 "`Document not open: <path>` と言います）。`saved` は、書くものがなかった、または書けなかったときに false "
 "です。"
 
-#: ../../DESIGN.md:311
+#: ../../DESIGN.md:322
 #, python-brace-format
 msgid ""
 "**`diagnosticsChanged`** is `{ uris: [ ... ] }`: the URIs of the files whose"
@@ -1169,7 +1200,7 @@ msgstr ""
 "**`diagnosticsChanged`** は `{ uris: [ ... ] }` で、診断が変わったファイルの URI "
 "です。これは出来事（イベント）で、それぞれがファイルを名指しし、どれもほかを置き換えず、あとから接続した Claude Code には伝えません。"
 
-#: ../../DESIGN.md:313
+#: ../../DESIGN.md:324
 #, python-brace-format
 msgid ""
 "**The answer to `getDiagnostics`** (with `{ uri }` as the parameters, or "
@@ -1188,7 +1219,7 @@ msgstr ""
 "Code "
 "が自分から送るもの」を参照）、答えはいまのファイルの診断です。エディタの下で変更されたばかりのファイルの診断は、アダプタが短い時間だけ待つのが望ましいです。"
 
-#: ../../DESIGN.md:320
+#: ../../DESIGN.md:331
 msgid ""
 "The server passes these on to Claude Code in the shapes that it expects (see"
 " the notifications above): `selectionChanged` becomes `selection_changed` "
@@ -1210,7 +1241,7 @@ msgstr ""
 "`selection_changed`（最後のもの）が送られ、ユーザーがいま見ている選択範囲から始められます。最初のものが捨てられることがあるので、ハンドシェイクのあとに数回、送り直されます（「Claude"
 " Code が自分から送るもの」を参照）。"
 
-#: ../../DESIGN.md:327
+#: ../../DESIGN.md:338
 msgid ""
 "**Diffs.** The editor does not write the file: Claude Code does, with the "
 "contents that the editor gives back (the VS Code extension answers "
@@ -1224,7 +1255,7 @@ msgstr ""
 "と、そのときのファイルの内容を答えます。内容は、差分の中で編集されたものかもしれません。Claude Code "
 "は、2つ目のテキストを読んで使い、`FILE_SAVED` 以外は、承認されなかったものとして扱います）。そのため、次のようになります。"
 
-#: ../../DESIGN.md:332
+#: ../../DESIGN.md:343
 #, python-brace-format
 msgid ""
 "`openDiff` is answered when the user decides, and until then it is not "
@@ -1241,7 +1272,7 @@ msgstr ""
 "がファイルを書けないからです）か `{ accepted: false }` です。サーバーは、これらを、`FILE_SAVED` "
 "と内容、`DIFF_REJECTED` と タブ名に変えます。"
 
-#: ../../DESIGN.md:336
+#: ../../DESIGN.md:347
 msgid ""
 "The server gives each diff a number, `diffId`. A new `openDiff` of the name "
 "of a diff that is shown replaces that diff: the adapter ends the older one, "
@@ -1258,17 +1289,17 @@ msgstr ""
 "を送ります。誰にも聞けない差分が、画面に残らないようにするためです。アダプタは、その名前で表示されているのがその差分のときだけ閉じます（新しいものには触りません）。Claude"
 " Code からの `close_tab` には `diffId` がなく、その名前の差分なら、どれでも閉じます。"
 
-#: ../../DESIGN.md:341
+#: ../../DESIGN.md:352
 #, python-brace-format
 msgid ""
 "`closeAllDiffs` is answered with how many diffs it closed (`{ closed: n }`)."
 msgstr "`closeAllDiffs` には、いくつ閉じたかを答えます（`{ closed: n }`）。"
 
-#: ../../DESIGN.md:343
+#: ../../DESIGN.md:354
 msgid "Versioning"
 msgstr "バージョン"
 
-#: ../../DESIGN.md:345
+#: ../../DESIGN.md:356
 msgid ""
 "`register` carries `protocolVersion`, an integer; the version described here"
 " is `1`. The server refuses an adapter whose version it does not know. "
@@ -1278,11 +1309,11 @@ msgstr ""
 "`register` は、整数の `protocolVersion` を持ちます。ここに書いてある版は `1` "
 "です。サーバーは、知らない版のアダプターを断ります。メソッドは、版を上げずに足せます。アダプターは、実装しているものを `methods` に並べます。"
 
-#: ../../DESIGN.md:349
+#: ../../DESIGN.md:360
 msgid "`register` in detail"
 msgstr "`register` の詳細"
 
-#: ../../DESIGN.md:351
+#: ../../DESIGN.md:362
 msgid ""
 "It must be the first message, and it is a request. Anything else first is "
 "answered with an error (a request) or just closes the connection (a "
@@ -1292,7 +1323,7 @@ msgstr ""
 "は、最初のメッセージで、要求でなければなりません。ほかのものが最初に来たときは、要求ならエラーで答え、通知なら、接続を閉じるだけです。`register`"
 " を 2 回送るのも、エラーです。"
 
-#: ../../DESIGN.md:353
+#: ../../DESIGN.md:364
 msgid ""
 "Parameters: `protocolVersion` (integer), `ideName` (non-empty string), `pid`"
 " (positive integer), `workspaceFolders` (a non-empty array of strings), "
@@ -1300,19 +1331,19 @@ msgid ""
 msgstr ""
 "引数は、`protocolVersion`（整数）、`ideName`（空でない文字列）、`pid`（正の整数）、`workspaceFolders`（空でない文字列の配列）、`methods`（文字列の配列）です。足りない引数や、型が違う引数は、エラーです。"
 
-#: ../../DESIGN.md:355
+#: ../../DESIGN.md:366
 #, python-brace-format
 msgid ""
 "The result is `{ \"port\": <integer> }`. By then the port listens and the "
 "lock file exists."
 msgstr "結果は `{ \"port\": <整数> }` です。この時点で、そのポートは待ち受けていて、ロックファイルもあります。"
 
-#: ../../DESIGN.md:356
+#: ../../DESIGN.md:367
 msgid ""
 "An adapter has 10 seconds to send it; a connection that does not is closed."
 msgstr "アダプターは、10 秒以内に送らなければなりません。送らない接続は、閉じられます。"
 
-#: ../../DESIGN.md:357
+#: ../../DESIGN.md:368
 #, python-brace-format
 msgid ""
 "`workspaceFoldersChanged` takes `{ \"workspaceFolders\": [...] }` (non-"
@@ -1321,7 +1352,7 @@ msgstr ""
 "`workspaceFoldersChanged` の引数は、`{ \"workspaceFolders\": [...] "
 "}`（空でない）です。それ以外は、無視されます。"
 
-#: ../../DESIGN.md:358
+#: ../../DESIGN.md:369
 msgid ""
 "The server's methods that an adapter has not declared in `methods` are not "
 "called. A request that the server does not know, sent by a registered "
@@ -1330,7 +1361,7 @@ msgstr ""
 "アダプターが `methods` で宣言していないメソッドは、呼ばれません。登録したアダプターが、サーバーの知らない要求を送ると、`-32601` "
 "が返ります。"
 
-#: ../../DESIGN.md:361
+#: ../../DESIGN.md:372
 msgid ""
 "Error codes: the JSON-RPC ones (`-32602` for bad parameters, `-32601` for an"
 " unknown method) and three of this protocol: `-32000` the protocol version "
@@ -1343,7 +1374,7 @@ msgstr ""
 "は最初のメッセージが `register` ではなかった、または `register` が 2 回来た、です。`register` "
 "へのエラーのあと、サーバーは、接続を閉じます。"
 
-#: ../../DESIGN.md:366
+#: ../../DESIGN.md:377
 msgid ""
 "When the server drops a workspace it sends the notification `shutdown` and "
 "closes the connection. A request that is waiting for an answer when the "
@@ -1351,11 +1382,11 @@ msgid ""
 msgstr ""
 "サーバーがワークスペースを手放すときは、通知 `shutdown` を送って、接続を閉じます。接続が終わったときに、答えを待っている要求は、失敗します。"
 
-#: ../../DESIGN.md:369
+#: ../../DESIGN.md:380
 msgid "Structure of the core crate"
 msgstr "core クレートの構成"
 
-#: ../../DESIGN.md:371
+#: ../../DESIGN.md:382
 msgid ""
 "The crate runs on tokio: its `async` functions must be called inside a tokio"
 " runtime, and tokio's I/O traits (`AsyncRead`, `AsyncWrite`) are the common "
@@ -1366,26 +1397,26 @@ msgstr ""
 " の I/O のトレイト（`AsyncRead`、`AsyncWrite`）を使います。それ以外の tokio "
 "の型（チャネル、タスク）と、下の層のライブラリの型は、このクレートの公開されたインターフェースに出しません。"
 
-#: ../../DESIGN.md:375
+#: ../../DESIGN.md:386
 msgid ""
 "Each outside library sits behind a type of the crate's own, and what lies "
 "inside knows only those types. There are three layers:"
 msgstr "外のライブラリは、それぞれ、このクレート自身の型の後ろに置きます。内側は、その型だけを知っています。層は 3 つです。"
 
-#: ../../DESIGN.md:378
+#: ../../DESIGN.md:389
 msgid ""
 "**The Claude side:** the WebSocket server (`ws`), the MCP handling, the lock"
 " files (`lock`)."
 msgstr "**Claude 側:** WebSocket サーバー（`ws`）、MCP の処理、ロックファイル（`lock`）。"
 
-#: ../../DESIGN.md:379
+#: ../../DESIGN.md:390
 msgid ""
 "**The middle:** workspaces (`workspace`), the dispatch of tool calls, and "
 "the crate's own types for tools, selections and diagnostics."
 msgstr ""
 "**中間:** ワークスペース（`workspace`）、ツール呼び出しの振り分け、ツール・選択範囲・診断についての、このクレート自身の型。"
 
-#: ../../DESIGN.md:381
+#: ../../DESIGN.md:392
 msgid ""
 "**The adapter side:** the adapter transport, the `register` exchange and the"
 " requests (`adapter`), and the JSON-RPC framing (`jsonrpc`)."
@@ -1393,7 +1424,7 @@ msgstr ""
 "**アダプター側:** アダプターとの通信路、`register` のやりとり、要求（`adapter`）と、JSON-RPC "
 "の区切り（`jsonrpc`）。"
 
-#: ../../DESIGN.md:384
+#: ../../DESIGN.md:395
 msgid ""
 "The sides do not know each other. `adapter` has no port and no lock file in "
 "it: when an adapter registers, it hands the registration up (as a "
@@ -1409,13 +1440,13 @@ msgstr ""
 "サーバーを起動し、ロックファイルを書き、アダプターにポートを渡し、それぞれの寿命を結びつけます。`ws` と `lock` "
 "は、アダプターのことを何も知りません。"
 
-#: ../../DESIGN.md:390
+#: ../../DESIGN.md:401
 msgid ""
 "Three seams are drawn on purpose, where this design already says that "
 "something may change:"
 msgstr "この設計がすでに「変わるかもしれない」と言っている所に、3 つの境界を、わざと引いています。"
 
-#: ../../DESIGN.md:392
+#: ../../DESIGN.md:403
 msgid ""
 "**The adapter transport.** A Unix socket, or a named pipe on Windows. "
 "Everything above it works with a duplex byte stream that a listener accepts,"
@@ -1424,7 +1455,7 @@ msgstr ""
 "**アダプターとの通信路。** Unix ソケット、Windows では名前付きパイプ。これより上は、Unix "
 "ソケットの型ではなく、待ち受けが受け付ける、双方向のバイトストリームを使います。"
 
-#: ../../DESIGN.md:394
+#: ../../DESIGN.md:405
 msgid ""
 "**The MCP SDK.** If `rmcp` is used, its types stay inside the Claude side. "
 "The middle and the adapter side use the crate's own types, so that a new "
@@ -1433,7 +1464,7 @@ msgstr ""
 "**MCP の SDK。** `rmcp` を使うなら、その型は、Claude "
 "側の中にとどめます。中間とアダプター側は、このクレート自身の型を使います。SDK の新しい版や、別の SDK に替えても、1 つの層だけで済みます。"
 
-#: ../../DESIGN.md:396
+#: ../../DESIGN.md:407
 msgid ""
 "**The file system and the environment.** The lock file directory, the "
 "runtime directory and the check that a `pid` is alive are passed in as "
@@ -1442,7 +1473,7 @@ msgstr ""
 "**ファイルシステムと環境。** ロックファイルのディレクトリ、実行時のディレクトリ、`pid` "
 "が生きているかの確認は、設定として外から渡します。テストでは、一時ディレクトリを渡します。"
 
-#: ../../DESIGN.md:399
+#: ../../DESIGN.md:410
 msgid ""
 "Nothing else is put behind a trait in advance (TCP itself, the JSON shape of"
 " a lock file). A seam is added when something is known to change, not "
@@ -1451,7 +1482,7 @@ msgstr ""
 "それ以外は、前もってトレイトの後ろには置きません（TCP そのもの、ロックファイルの JSON "
 "の形）。境界は、変わることが分かったときに足します。その前には足しません。"
 
-#: ../../DESIGN.md:402
+#: ../../DESIGN.md:413
 msgid ""
 "One thing is kept out of the seams on purpose: the source of the token. The "
 "token is the only thing that keeps the other processes of the machine away "
@@ -1469,19 +1500,19 @@ msgstr ""
 " `test-support` という feature を通して、差し替えられます。この feature "
 "は、このクレート自身のテストでだけ有効で、ふつうのビルドでは、有効になりません。"
 
-#: ../../DESIGN.md:408
+#: ../../DESIGN.md:419
 msgid "Lifecycle"
 msgstr "起動から終了までの流れ"
 
-#: ../../DESIGN.md:410
+#: ../../DESIGN.md:421
 msgid "The server starts and listens on the adapter socket."
 msgstr "サーバーが起動して、アダプターのソケットで待ち受けます。"
 
-#: ../../DESIGN.md:411
+#: ../../DESIGN.md:422
 msgid "An adapter connects and sends `register`."
 msgstr "アダプターが接続して、`register` を送ります。"
 
-#: ../../DESIGN.md:412
+#: ../../DESIGN.md:423
 msgid ""
 "The server picks a free port on `127.0.0.1`, generates a 128-bit token from "
 "the OS CSPRNG, writes the lock file atomically (write to a temporary name, "
@@ -1490,7 +1521,7 @@ msgstr ""
 "サーバーは、`127.0.0.1` の空いているポートを選び、OS の暗号論的乱数から 128 "
 "ビットのトークンを作り、ロックファイルを原子的に書き（一時的な名前で書いてから、名前を変える）、ポートを返します。"
 
-#: ../../DESIGN.md:414
+#: ../../DESIGN.md:425
 msgid ""
 "The CLI finds the lock file, connects, and authenticates. Selection and "
 "diagnostics flow to it; its tool calls become adapter requests."
@@ -1498,19 +1529,19 @@ msgstr ""
 "CLI が、ロックファイルを見つけて、つないで、認証します。選択範囲と診断は、CLI へ流れます。CLI "
 "のツール呼び出しは、アダプターへの要求になります。"
 
-#: ../../DESIGN.md:416
+#: ../../DESIGN.md:427
 msgid ""
 "The adapter disconnects (or crashes): the server closes the workspace's "
 "connections, removes the lock file, and fails any pending requests."
 msgstr "アダプターが切れる（か、落ちる）と、サーバーは、そのワークスペースの接続を閉じ、ロックファイルを消し、保留中の要求を失敗にします。"
 
-#: ../../DESIGN.md:418
+#: ../../DESIGN.md:429
 msgid ""
 "On shutdown the server sends `shutdown` to adapters and removes every lock "
 "file it wrote."
 msgstr "終了するとき、サーバーは、アダプターに `shutdown` を送り、自分が書いたロックファイルをすべて消します。"
 
-#: ../../DESIGN.md:420
+#: ../../DESIGN.md:431
 msgid ""
 "If the server itself is killed, its lock files are left behind. The server "
 "records the lock files it wrote under its runtime directory and removes the "
@@ -1518,11 +1549,11 @@ msgid ""
 msgstr ""
 "サーバー自身が強制終了されると、ロックファイルが残ります。サーバーは、自分が書いたロックファイルを、実行時のディレクトリに記録しておき、次の起動で、まだ残っているものを消します。"
 
-#: ../../DESIGN.md:423
+#: ../../DESIGN.md:434
 msgid "Running the server"
 msgstr "サーバーの実行"
 
-#: ../../DESIGN.md:425
+#: ../../DESIGN.md:436
 msgid ""
 "`claude-ide-server` (the `crates/server` crate) is one executable for every "
 "editor. `claude-ide-server --help` lists its switches: `--socket` (where the"
@@ -1545,11 +1576,11 @@ msgstr ""
 "を伝えて、ロックファイルとポート（と、自分で作ったソケット）を片付けます。終了コードは、0 が指示どおりの停止、1 "
 "が起動できなかった（またはソケットが閉じた）、2 がコマンドラインの誤り、3 が時間内にワークスペースを閉じられなかった、です。"
 
-#: ../../DESIGN.md:432
+#: ../../DESIGN.md:443
 msgid "Where the adapter socket comes from"
 msgstr "アダプタ用のソケットの出どころ"
 
-#: ../../DESIGN.md:434
+#: ../../DESIGN.md:445
 msgid ""
 "The server does not care how it was started: by hand, by a supervisor that "
 "listens for it and starts it at the first connection (socket activation), or"
@@ -1562,64 +1593,64 @@ msgstr ""
 " "
 "`SocketSource`（`crates/server/src/activation.rs`）の裏に隠してあります。当てはまる最初の取得元が使われます。"
 
-#: ../../DESIGN.md:439
+#: ../../DESIGN.md:450
 msgid "source"
 msgstr "取得元"
 
-#: ../../DESIGN.md:439
+#: ../../DESIGN.md:450
 msgid "for"
 msgstr "対象"
 
-#: ../../DESIGN.md:439
+#: ../../DESIGN.md:450
 msgid "how"
 msgstr "方法"
 
-#: ../../DESIGN.md:439
+#: ../../DESIGN.md:450
 msgid "handed over"
 msgstr "受け取る"
 
-#: ../../DESIGN.md:439
+#: ../../DESIGN.md:450
 msgid ""
 "systemd, and other supervisors and container runtimes that follow the same "
 "convention"
 msgstr "systemd、および同じ規約に従う他の監督プロセスやコンテナランタイム"
 
-#: ../../DESIGN.md:439
+#: ../../DESIGN.md:450
 msgid ""
 "the socket is already listening on an inherited file descriptor "
 "(`LISTEN_PID`, `LISTEN_FDS`)"
 msgstr "ソケットが、引き継いだファイルディスクリプタですでに待ち受けている（`LISTEN_PID`、`LISTEN_FDS`）"
 
-#: ../../DESIGN.md:441
+#: ../../DESIGN.md:452
 msgid "handed over by launchd"
 msgstr "launchd から受け取る"
 
-#: ../../DESIGN.md:441
+#: ../../DESIGN.md:452
 msgid "launchd on macOS"
 msgstr "macOS の launchd"
 
-#: ../../DESIGN.md:441
+#: ../../DESIGN.md:452
 msgid ""
 "the socket is asked for by name, `adapter`, from the property list of the "
 "job (`launch_activate_socket`)"
 msgstr "ソケットは、ジョブのプロパティリストにある名前（`adapter`）で求めます（`launch_activate_socket`）。"
 
-#: ../../DESIGN.md:442
+#: ../../DESIGN.md:453
 msgid "bound"
 msgstr "自分で作る"
 
-#: ../../DESIGN.md:442
+#: ../../DESIGN.md:453
 msgid "everything else, and the default"
 msgstr "それ以外のすべて。既定"
 
-#: ../../DESIGN.md:442
+#: ../../DESIGN.md:453
 msgid ""
 "the server makes the socket itself, mode 0600 in a 0700 directory (on "
 "Windows, a named pipe that only the user can open)"
 msgstr ""
 "サーバーが自分でソケットを作る。0700 のディレクトリの中に、モード 0600 で（Windows では、ユーザーだけが開ける名前付きパイプ）"
 
-#: ../../DESIGN.md:445
+#: ../../DESIGN.md:456
 msgid ""
 "A handed-over socket is not the server's to delete: it stays when the server"
 " exits, and the supervisor starts the server again at the next connection. "
@@ -1643,17 +1674,40 @@ msgstr ""
 "が、同梱のプロパティリストをユーザーのドメイン（`gui/<uid>`。ランナーにはあります）に読み込み、同じ4つのことを確かめます。読み込んだあとは何も動いていないこと、最初の接続でサーバーが起動し、launchd"
 " が渡したソケットを提供すること、アイドル時間が過ぎるとソケットを残したまま終了すること、次の接続でまた起動することです。"
 
-#: ../../DESIGN.md:454
+#: ../../DESIGN.md:465
+msgid ""
+"**Where the adapters look for it.** By default each of them works out the "
+"same place as the server does. The place can also be set once, for the "
+"server and for the adapters that read it, with `CLAUDE_IDE_SERVER_SOCKET` "
+"(`--socket` wins over it for the server, and the `socket` option for the "
+"Neovim adapter): a supervisor, or a test that must not share the default, "
+"sets it. `claude-ide-server --print-socket` prints the place (what "
+"`--socket` or the environment says, or else the default) and ends, for an "
+"adapter that cannot work the default out: Neovim on Windows, where the name "
+"of the pipe has the security identifier of the user in it, which Neovim does"
+" not give. That adapter asks the executable that `server.command` names, "
+"once."
+msgstr ""
+"**アダプタがそれを探す場所。** "
+"既定では、アダプタは、それぞれ、サーバーと同じ場所を割り出します。場所は、サーバーと、それを読むアダプタのために、`CLAUDE_IDE_SERVER_SOCKET`"
+" で1回だけ決めることもできます（サーバーでは `--socket` が、Neovim アダプタでは `socket` "
+"オプションが、これより優先されます）。監督プロセスや、既定の場所を共有してはいけないテストが、これを設定します。`claude-ide-server "
+"--print-socket` は、その場所（`--socket` "
+"や環境変数が言うもの、なければ既定）を出力して終了します。既定の場所を割り出せないアダプタのためのもので、Windows の Neovim "
+"がそうです。Windows ではパイプの名前にユーザーのセキュリティ識別子が入っていて、Neovim "
+"はそれを与えてくれません。そのアダプタは、`server.command` が指す実行ファイルに、1回だけ尋ねます。"
+
+#: ../../DESIGN.md:472
 msgid ""
 "What a system does differently is absorbed in a source of its own, selected "
 "by `cfg` where the system decides it:"
 msgstr "システムごとの違いは、そのシステム専用の取得元に吸収し、システムで決まる箇所では `cfg` で選びます。"
 
-#: ../../DESIGN.md:456
+#: ../../DESIGN.md:474
 msgid "**systemd** (Linux): the handed-over source."
 msgstr "**systemd**（Linux）: 受け取る取得元です。"
 
-#: ../../DESIGN.md:457
+#: ../../DESIGN.md:475
 msgid ""
 "**launchd** (macOS): launchd's socket activation hands a socket over by "
 "name, through `launch_activate_socket`, and not through the environment. The"
@@ -1685,7 +1739,7 @@ msgstr ""
 "のドメインがないマシン（誰もログインしていないセッション、コンテナ）では、この試験は動かせません。そう表示して終了しますが、`CLAUDE_IDE_REQUIRE_LAUNCHD=1`"
 " が設定されていれば（CI がそうしています）失敗にします。"
 
-#: ../../DESIGN.md:467
+#: ../../DESIGN.md:485
 msgid ""
 "**Task Scheduler** (Windows): a task cannot be started by a connection, so "
 "there is no socket activation: the server runs from log-on on "
@@ -1701,7 +1755,7 @@ msgstr ""
 "で別の名前も指定できます）。パイプは、コアクレートの `PipeListener` が Unix "
 "ソケットの代わりに作り、サーバーのほかの部分は違いを知りません。このパイプに特有のことは次のとおりです。"
 
-#: ../../DESIGN.md:471
+#: ../../DESIGN.md:489
 msgid ""
 "The name has the security identifier (SID) of the user in it, since the "
 "names of pipes are shared by everyone on the machine, and the pipe has an "
@@ -1715,7 +1769,7 @@ msgstr ""
 " と同じように、起動に失敗します（終了コード "
 "1）。パイプは最後のハンドルとともになくなるので、死んだサーバーが置き換えの要るものを残すことはありません。"
 
-#: ../../DESIGN.md:476
+#: ../../DESIGN.md:494
 msgid ""
 "The calls that need `unsafe` (whether a process is alive, who the user is, "
 "making the pipe with its access list) are in a crate of their own, `claude-"
@@ -1724,7 +1778,7 @@ msgstr ""
 "`unsafe` が要る呼び出し（プロセスが生きているかどうか、ユーザーが誰か、アクセスリストつきのパイプを作ること）は、launchd "
 "のものと同じように、専用のクレート `claude-ide-windows` に置いてあります。"
 
-#: ../../DESIGN.md:478
+#: ../../DESIGN.md:496
 msgid ""
 "The lock files are in `CLAUDE_CONFIG_DIR`, or else "
 "`%USERPROFILE%\\.claude\\ide` (`USERPROFILE` is where Node, which Claude "
@@ -1735,7 +1789,7 @@ msgstr ""
 "に置きます（Windows で Claude Code、つまり Node がホームディレクトリを取るのが `USERPROFILE` "
 "だからです）。モードはありません。ファイルは、ユーザーのディレクトリが与えるものを持ちます。"
 
-#: ../../DESIGN.md:481
+#: ../../DESIGN.md:499
 msgid ""
 "**Task Scheduler ends a task by killing the process**: on the runner the "
 "last result of a task that was stopped was `267014` (terminated by the "
@@ -1752,7 +1806,7 @@ msgstr ""
 "は、これに妨げられず、ファイルを置き換えることもできます。書き直しはその方法です。停電で残ったものや、これを行わないシステムで残ったものは、Unix "
 "と同じように、次のサーバーが消します。）"
 
-#: ../../DESIGN.md:487
+#: ../../DESIGN.md:505
 msgid ""
 "The console events of a server that is run by hand: Ctrl-C and Ctrl-Break "
 "are \"interrupted\", the closing of the console and the shutdown of the "
@@ -1763,7 +1817,7 @@ msgstr ""
 "は「interrupted」、コンソールを閉じることとシステムのシャットダウンは「terminated」で、どちらも `SIGINT` や "
 "`SIGTERM` と同じようにサーバーを終了させます。"
 
-#: ../../DESIGN.md:489
+#: ../../DESIGN.md:507
 msgid ""
 "`contrib/windows/claude-ide-server.xml` is the task. Its declaration says "
 "UTF-16, as Task Scheduler writes it, because the `schtasks` program reads "
@@ -1776,7 +1830,7 @@ msgstr ""
 "を使い、そちらにはテキストが渡されます（`Register-ScheduledTask "
 "-Xml`）。タスクには環境変数がないので、サーバーはユーザーのパスを使います。"
 
-#: ../../DESIGN.md:492
+#: ../../DESIGN.md:510
 msgid ""
 "Tried on the Windows runner of CI: all the tests of the core, and of the "
 "executable (an adapter registers over the pipe, a stand-in for Claude Code "
@@ -1796,7 +1850,7 @@ msgstr ""
 " `CLAUDE_IDE_TRY_TASK_SCHEDULER=1` "
 "があるときだけ動きます（タスクはユーザーのパスを使うので、自分のサーバーがあるマシンから、試験がそれを取ってはいけません）。CI がそれを設定します。"
 
-#: ../../DESIGN.md:498
+#: ../../DESIGN.md:516
 msgid ""
 "What Claude Code does with the lock file on Windows, from its code "
 "(2.1.322), not tried with a Claude Code on Windows: it lists `*.lock` in "
@@ -1812,17 +1866,33 @@ msgstr ""
 "0)`）、自分の作業ディレクトリ（ドライブレターは大文字、NFC）を、`workspaceFolders` のそれぞれと、包含で比べます。接続先は "
 "`127.0.0.1` で、別のアドレスは、エディタが Windows にある WSL のためのものです（`runningInWindows`）。"
 
-#: ../../DESIGN.md:502
+#: ../../DESIGN.md:520
 msgid ""
-"Not done: starting the server on demand from an adapter on Windows (the "
-"adapter starts the executable itself, or triggers the task), and everything "
-"about paths and the Neovim adapter: issue #23."
+"The Neovim adapter was run on the Windows runner (Neovim 0.12.6, in the "
+"tests of `crates/server/tests/nvim.rs`, which are for every system now): it "
+"registers over the pipe, follows `:cd`, reports the selection, the open "
+"editors and the diagnostics, opens, checks and saves files, shows the "
+"changes that Claude Code proposes and takes the user's decision, and starts "
+"the server detached and finds it again after it restarts. See \"Windows\" in"
+" [NVIM](NVIM.md)."
 msgstr ""
-"まだしていないこと: Windows "
-"で、アダプタからサーバーをオンデマンドで起動すること（アダプタが実行ファイルを自分で起動するか、タスクを起動する）。そして、パスと Neovim "
-"アダプタに関するすべて: Issue #23。"
+"Neovim アダプタを Windows のランナーで動かしました（Neovim "
+"0.12.6。`crates/server/tests/nvim.rs` のテストで、いまはどのシステムでも動きます）。パイプで登録し、`:cd` "
+"に追従し、選択範囲、開いているエディタ、診断を報告し、ファイルを開き、確かめ、保存し、Claude Code "
+"が提案する変更を見せてユーザーの判断を受け取り、サーバーを切り離して起動し、再起動したあとにまた見つけます。[NVIM](NVIM.md) "
+"の「Windows」を参照してください。"
 
-#: ../../DESIGN.md:505
+#: ../../DESIGN.md:524
+msgid ""
+"Not done: starting the task on demand from an adapter (the adapter starts "
+"the executable itself, detached; it does not trigger the task), and WSL, "
+"which is issue #24."
+msgstr ""
+"まだしていないこと: "
+"アダプタからタスクをオンデマンドで起動すること（アダプタは実行ファイルを自分で、切り離して起動します。タスクは起動しません）。そして WSL で、これは"
+" Issue #24 です。"
+
+#: ../../DESIGN.md:527
 msgid ""
 "An adapter that finds nobody listening starts this same executable itself "
 "(the Neovim adapter does, unless told not to): connecting is how the server "
@@ -1837,11 +1907,11 @@ msgstr ""
 "があれば、最後のアダプタがいなくなったところで終了します。2つのアダプタが同時にそうしても安全です。同じソケットで2つ目のサーバーは、起動を拒否する（終了コード"
 " 1）からです。"
 
-#: ../../DESIGN.md:510
+#: ../../DESIGN.md:532
 msgid "Security"
 msgstr "セキュリティ"
 
-#: ../../DESIGN.md:512
+#: ../../DESIGN.md:534
 msgid ""
 "Every listener is on `127.0.0.1`. The adapter socket is in a 0700 directory "
 "and is itself 0600 (on Windows the pipe has an access list with the user "
@@ -1850,7 +1920,7 @@ msgstr ""
 "待ち受けは、すべて `127.0.0.1` です。アダプターのソケットは、モード 0700 のディレクトリの中にあり、ソケット自身も 0600 "
 "です（Windows では、パイプのアクセスリストにユーザーだけがいて、ほかのマシンからのクライアントは拒否されます）。"
 
-#: ../../DESIGN.md:513
+#: ../../DESIGN.md:535
 msgid ""
 "The token is checked on every WebSocket upgrade. A web page cannot set that "
 "header, so a browser cannot talk to the port."
@@ -1858,13 +1928,27 @@ msgstr ""
 "トークンは、WebSocket へのアップグレードのたびに確かめます。Web "
 "ページは、そのヘッダーを付けられないので、ブラウザーは、そのポートと話せません。"
 
-#: ../../DESIGN.md:515
+#: ../../DESIGN.md:537
 msgid ""
 "Frame and message sizes are capped. A malformed message closes that "
 "connection and nothing else."
 msgstr "フレームとメッセージの大きさには、上限があります。壊れたメッセージは、その接続だけを閉じます。"
 
-#: ../../DESIGN.md:516
+#: ../../DESIGN.md:538
+msgid ""
+"On Windows the name of a pipe is shared by everyone on the machine. The "
+"access list keeps other users out of the pipe of the server, but a user who "
+"makes a pipe of that name first leaves the server unable to start (it says "
+"that another server is listening), and can get what an adapter sends to it: "
+"the folders of the workspace, the selection. Nothing is done about it yet: "
+"an adapter in Lua cannot see who owns a pipe. It matters on a machine that "
+"more than one user uses at the same time."
+msgstr ""
+"Windows "
+"では、パイプの名前は、マシン上のすべての人に共通です。アクセスリストはほかのユーザーをサーバーのパイプに入れませんが、先にその名前のパイプを作ったユーザーは、サーバーを起動できなくし（別のサーバーが待ち受けていると表示されます）、アダプタが送るもの（ワークスペースのフォルダ、選択範囲）を受け取ることができます。これについては、まだ何もしていません。Lua"
+" のアダプタは、パイプの持ち主を見ることができません。複数のユーザーが同時に使うマシンで問題になります。"
+
+#: ../../DESIGN.md:542
 msgid ""
 "Paths from Claude are used as given by the adapter; the server never reads "
 "or writes project files itself. Writing a file after an accepted diff is the"
@@ -1873,11 +1957,11 @@ msgstr ""
 "Claude "
 "からのパスは、アダプターが渡したとおりに使います。サーバー自身は、プロジェクトのファイルを読み書きしません。差分が承認されたあとの、ファイルの書き込みは、アダプターの仕事です。"
 
-#: ../../DESIGN.md:519
+#: ../../DESIGN.md:545
 msgid "Testing"
 msgstr "テスト"
 
-#: ../../DESIGN.md:521
+#: ../../DESIGN.md:547
 msgid ""
 "A mock Claude client (WebSocket) and a mock adapter (Unix socket) run in the"
 " same test process. Tests cover the handshake, authentication, every tool, "
@@ -1896,7 +1980,7 @@ msgstr ""
 " つは、本物の Unix ソケットで、全部の経路を動かします（`tests/end_to_end.rs`: "
 "登録し、ロックファイルのトークンで接続し、ツールの一覧を取り、1 つ呼び、切断し、後始末をします）。"
 
-#: ../../DESIGN.md:528
+#: ../../DESIGN.md:554
 msgid ""
 "The expected shapes of what the server sends and writes come from the "
 "observed behaviour above, written down as fixtures in "
@@ -1910,17 +1994,17 @@ msgstr ""
 "`initialize`、ロックファイルの形、`initialize`・`tools/list`・`tools/call` "
 "の結果の形です。形を変えるのは、新しい観察が、そうすべきだと言ったときで、テストを通すためではありません。"
 
-#: ../../DESIGN.md:532
+#: ../../DESIGN.md:558
 msgid ""
 "Each adapter has its own tests; the Neovim one runs headless Neovim against "
 "a real server."
 msgstr "アダプターごとに、自分のテストを持ちます。Neovim のものは、ヘッドレスの Neovim を、本物のサーバーにつないで動かします。"
 
-#: ../../DESIGN.md:534
+#: ../../DESIGN.md:560
 msgid "Milestones"
 msgstr "マイルストーン"
 
-#: ../../DESIGN.md:536
+#: ../../DESIGN.md:562
 msgid ""
 "**M0, server skeleton.** WebSocket server, lock file, token, `initialize`, "
 "`tools/list`. A mock adapter."
@@ -1928,7 +2012,7 @@ msgstr ""
 "**M0、サーバーの骨組み。** WebSocket "
 "サーバー、ロックファイル、トークン、`initialize`、`tools/list`。偽のアダプター。"
 
-#: ../../DESIGN.md:537
+#: ../../DESIGN.md:563
 msgid ""
 "**M1, read-only tools.** `getOpenEditors`, `getWorkspaceFolders`, "
 "`getCurrentSelection`, `getLatestSelection`, `getDiagnostics`; "
@@ -1937,7 +2021,7 @@ msgstr ""
 "**M1、読み取りだけのツール。** "
 "`getOpenEditors`、`getWorkspaceFolders`、`getCurrentSelection`、`getLatestSelection`、`getDiagnostics`。`selection_changed`、`at_mentioned`。"
 
-#: ../../DESIGN.md:539
+#: ../../DESIGN.md:565
 msgid ""
 "**M2, Neovim adapter.** The server executable (`crates/server`), and a Lua "
 "adapter, over `vim.lsp.rpc`. Registers the main windows only."
@@ -1945,7 +2029,7 @@ msgstr ""
 "**M2、Neovim アダプタ。** サーバーの実行ファイル（`crates/server`）と、`vim.lsp.rpc` 上の Lua "
 "アダプタ。メインのウィンドウだけを登録する。"
 
-#: ../../DESIGN.md:540
+#: ../../DESIGN.md:566
 msgid ""
 "**M3, actions.** `openFile`, `checkDocumentDirty`, `saveDocument`, "
 "`diagnostics_changed`."
@@ -1953,7 +2037,7 @@ msgstr ""
 "**M3、操作。** "
 "`openFile`、`checkDocumentDirty`、`saveDocument`、`diagnostics_changed`。"
 
-#: ../../DESIGN.md:541
+#: ../../DESIGN.md:567
 msgid ""
 "**M4, diffs.** `openDiff`, `close_tab`, `closeAllDiffTabs`, and an "
 "accept/reject flow in the Neovim adapter, with a provider that shows the "
@@ -1962,29 +2046,29 @@ msgstr ""
 "**M4、差分。** `openDiff`、`close_tab`、`closeAllDiffTabs`、そして Neovim "
 "アダプタでの承認・却下の流れ。差分を見せる提供元は、差し替えられる。"
 
-#: ../../DESIGN.md:544
+#: ../../DESIGN.md:570
 msgid "Open questions"
 msgstr "未解決の問い"
 
-#: ../../DESIGN.md:546
+#: ../../DESIGN.md:572
 msgid ""
-"Windows: the Neovim adapter over a pipe, and the Windows forms of paths and "
-"URIs (issue #23)."
-msgstr "Windows: パイプ越しの Neovim アダプタと、パスや URI の Windows での形（Issue #23）。"
+"WSL, where Claude Code and the editor are on the two sides of the boundary "
+"between Linux and Windows (issue #24)."
+msgstr "WSL。Claude Code とエディタが、Linux と Windows の境界の両側にいる場合（Issue #24）。"
 
-#: ../../DESIGN.md:547
+#: ../../DESIGN.md:573
 msgid ""
 "What an adapter should do when the server is not there: retry, and for how "
 "long (issue #10)."
 msgstr "サーバーがいないときに、アダプターがどうするか。再試行するか、どのくらいの間か（Issue #10）。"
 
-#: ../../DESIGN.md:548
+#: ../../DESIGN.md:574
 msgid ""
 "Whether to write both a path and its symlink-resolved form into "
 "`workspaceFolders`, since the CLI compares text."
 msgstr "CLI は文字列で比べるので、`workspaceFolders` に、パスと、シンボリックリンクを解決した形の両方を書くか。"
 
-#: ../../DESIGN.md:549
+#: ../../DESIGN.md:575
 msgid ""
 "A process id can be reused: if an unrelated process takes the id that a dead"
 " server recorded, its leftover lock files are not cleaned up until that "
@@ -2210,3 +2294,17 @@ msgstr ""
 
 #~ msgid "A named-pipe transport for Windows."
 #~ msgstr "Windows 向けの、名前付きパイプの経路。"
+
+#~ msgid ""
+#~ "Everything that an editor needs on Windows. The server runs there (a named "
+#~ "pipe for the adapters, lock files, Task Scheduler), but the Neovim adapter "
+#~ "on Windows and the Windows forms of paths and URIs are issue #23."
+#~ msgstr ""
+#~ "エディタが Windows で必要とするものすべて。サーバーは Windows "
+#~ "で動きます（アダプタ用の名前付きパイプ、ロックファイル、タスクスケジューラ）が、Windows での Neovim アダプタと、パスや URI の "
+#~ "Windows での形は Issue #23 です。"
+
+#~ msgid ""
+#~ "Windows: the Neovim adapter over a pipe, and the Windows forms of paths and "
+#~ "URIs (issue #23)."
+#~ msgstr "Windows: パイプ越しの Neovim アダプタと、パスや URI の Windows での形（Issue #23）。"

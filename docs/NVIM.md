@@ -13,7 +13,7 @@ real Claude Code (2.1.322).
 
 - Neovim 0.11 or newer. CI runs the tests with 0.11.7 and 0.12.6, and 0.11.0 (the first of the 0.11 series) was tried by
   hand. Neovim 0.10 does not work (`vim.str_utfindex` takes other arguments there; nothing was tried beyond that).
-- Not Windows yet: the server runs there (see "Running the server" in [DESIGN](DESIGN.md)), but this adapter does not connect over a named pipe, and its tests are for Unix (issue #23).
+- Windows works too: the server runs there (see "Running the server" in [DESIGN](DESIGN.md)), and the adapter connects over its named pipe. See "Windows" below.
 - `claude-ide-server` on the `PATH` (see "Running the server" in [DESIGN](DESIGN.md)), or a supervisor that starts it at
   the first connection. The adapter starts the executable itself if nobody is listening.
 
@@ -33,7 +33,8 @@ require('claude_ide').setup()
 
 ```lua
 require('claude_ide').setup({
-  -- The server's adapter socket. By default, where the server puts it: $XDG_RUNTIME_DIR/claude-ide-server/adapter.sock.
+  -- The server's adapter socket. By default, where the server puts it: $XDG_RUNTIME_DIR/claude-ide-server/adapter.sock, or
+  -- what $CLAUDE_IDE_SERVER_SOCKET says (the server reads it too); on Windows, the pipe that the server says.
   socket = nil,
   -- The name that /ide shows.
   ide_name = 'Neovim',
@@ -75,6 +76,27 @@ require('claude_ide').setup({
   end,
 })
 ```
+
+## Windows
+
+The adapter runs on Windows: the tests of `crates/server/tests/nvim.rs` are run on a Windows runner of CI, with Neovim 0.12.6 (not
+with 0.11, which was not tried there). What is particular to it:
+
+- **The pipe.** The server listens on a named pipe, `\\.\pipe\claude-ide-server-<sid>`, with the security identifier of the user
+  in its name. Neovim does not give a SID, so the adapter asks the executable, once: `claude-ide-server --print-socket`
+  (`server.command` says which executable; a path works as well as a name on the `PATH`). If the executable is not found, the
+  user is told, once, and the adapter tries again later (as it does for a server that is not there). `socket`, or the
+  environment variable `CLAUDE_IDE_SERVER_SOCKET`, which the server reads too, says where it is, and then nothing is asked.
+- **Starting the server.** As elsewhere: `vim.system` starts it detached, so that it is not a child of this Neovim and goes on
+  when Neovim ends (this was tried: a server that the adapter starts is found by the others that start at the same time, and
+  ends by itself when no adapter has been there for the idle time).
+- **Paths.** The adapter reports a file, and the working directory of the workspace, by their real path, the names written
+  out in full: Neovim keeps the name that it was given, which may be the short form of 8.3 (`C:\Users\RUNNER~1\...`), and
+  Claude Code compares paths with its own working directory as text. A path is what Neovim says, with backslashes, and a URI
+  is `file:///C:/Users/...`.
+
+What was not tried: a Claude Code on Windows (the tests have a stand-in for it), Neovim 0.11, file names that are not ASCII, and
+paths of a share (`\\server\share`). WSL is another case, which is issue #24.
 
 ## Commands
 

@@ -7,7 +7,7 @@ Neovim 側の接続部分です。Neovim を `claude-ide-server` に登録して
 ## 必要なもの
 
 - Neovim 0.11 以降。CI は 0.11.7 と 0.12.6 でテストを動かし、0.11.0（0.11 系の最初のリリース）は手で試しました。Neovim 0.10 では動きません（`vim.str_utfindex` の引数が違います。それより先は試していません）。
-- まだ Windows には対応していません。サーバーはそこで動きます（[DESIGN](DESIGN.md) の「サーバーの実行」を参照）が、このアダプタは名前付きパイプで接続せず、テストも Unix 向けです（Issue #23）。
+- Windows でも動きます。サーバーはそこで動き（[DESIGN](DESIGN.md) の「サーバーの実行」を参照）、アダプタは名前付きパイプで接続します。下の「Windows」を参照してください。
 - `PATH` の通った `claude-ide-server`（[DESIGN](DESIGN.md) の「サーバーの実行」を参照）、または最初の接続で起動する監督プロセス。誰も待ち受けていなければ、アダプタが実行ファイルを自分で起動します。
 
 ## インストール
@@ -25,7 +25,8 @@ require('claude_ide').setup()
 
 ```lua
 require('claude_ide').setup({
-  -- The server's adapter socket. By default, where the server puts it: $XDG_RUNTIME_DIR/claude-ide-server/adapter.sock.
+  -- The server's adapter socket. By default, where the server puts it: $XDG_RUNTIME_DIR/claude-ide-server/adapter.sock, or
+  -- what $CLAUDE_IDE_SERVER_SOCKET says (the server reads it too); on Windows, the pipe that the server says.
   socket = nil,
   -- The name that /ide shows.
   ide_name = 'Neovim',
@@ -64,6 +65,16 @@ require('claude_ide').setup({
   end,
 })
 ```
+
+## Windows
+
+アダプタは Windows で動きます。`crates/server/tests/nvim.rs` のテストを、CI の Windows ランナーで、Neovim 0.12.6 で動かしています（0.11 は、そこでは試していません）。Windows に特有のことは次のとおりです。
+
+- **パイプ。** サーバーは、名前付きパイプ `\\.\pipe\claude-ide-server-<sid>` で待ち受けます。名前にはユーザーのセキュリティ識別子が入っています。Neovim は SID を与えてくれないので、アダプタが実行ファイルに1回尋ねます: `claude-ide-server --print-socket`（どの実行ファイルかは `server.command` が決めます。名前でも、`PATH` 上でない場所のパスでも構いません）。実行ファイルが見つからなければ、ユーザーに1回だけ知らせ、アダプタは（サーバーがいないときと同じように）あとでやり直します。`socket`、またはサーバーも読む環境変数 `CLAUDE_IDE_SERVER_SOCKET` が場所を決めていれば、何も尋ねません。
+- **サーバーの起動。** ほかのシステムと同じです。`vim.system` が切り離して起動するので、この Neovim の子プロセスではなく、Neovim が終了しても動き続けます（これは試しました。アダプタが起動したサーバーは、同時に起動したほかのアダプタが見つけ、アダプタがいなくなってアイドル時間が過ぎると、自分で終了します）。
+- **パス。** アダプタは、ファイルと、ワークスペースの作業ディレクトリを、実在するパスで、名前を省略せずに報告します。Neovim は、渡された名前をそのまま保つので、それが 8.3 の短い名前（`C:\Users\RUNNER~1\...`）のことがあり、Claude Code は、パスを自分の作業ディレクトリとテキストとして比べるからです。パスは Neovim が言うとおり（バックスラッシュ入り）で、URI は `file:///C:/Users/...` です。
+
+試していないこと: Windows 上の Claude Code（テストには代役がいます）、Neovim 0.11、ASCII でないファイル名、共有のパス（`\\server\share`）。WSL は別の場合で、Issue #24 です。
 
 ## コマンド
 
