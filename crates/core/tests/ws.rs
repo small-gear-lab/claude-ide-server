@@ -214,3 +214,43 @@ async fn dropping_the_server_closes_the_connections_it_accepted() {
         other => panic!("expected a close frame, got {other:?}"),
     }
 }
+
+/// Connects offering the given subprotocols, and returns the one that the server picked.
+async fn picked_subprotocol(port: u16, offered: Option<&str>) -> Option<String> {
+    let mut request = format!("ws://127.0.0.1:{port}/")
+        .into_client_request()
+        .unwrap();
+    request
+        .headers_mut()
+        .insert(AUTH_HEADER, TOKEN.parse().unwrap());
+    if let Some(offered) = offered {
+        request
+            .headers_mut()
+            .insert("Sec-WebSocket-Protocol", offered.parse().unwrap());
+    }
+    let (_client, response) = tokio_tungstenite::connect_async(request).await.unwrap();
+    response
+        .headers()
+        .get("sec-websocket-protocol")
+        .map(|value| value.to_str().unwrap().to_owned())
+}
+
+#[tokio::test]
+async fn the_first_subprotocol_that_the_client_offers_is_picked() {
+    // Claude Code's MCP client offers "mcp" and gives up on a server that does not pick one.
+    let server = start(Config::default()).await;
+    assert_eq!(
+        picked_subprotocol(server.port(), Some("mcp"))
+            .await
+            .as_deref(),
+        Some("mcp")
+    );
+    assert_eq!(
+        picked_subprotocol(server.port(), Some("mcp, other"))
+            .await
+            .as_deref(),
+        Some("mcp")
+    );
+    // A client that offers none gets none.
+    assert_eq!(picked_subprotocol(server.port(), None).await, None);
+}

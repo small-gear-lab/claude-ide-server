@@ -16,7 +16,8 @@ use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 use tokio_tungstenite::WebSocketStream;
 use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, Response};
-use tokio_tungstenite::tungstenite::http::StatusCode;
+use tokio_tungstenite::tungstenite::http::header::SEC_WEBSOCKET_PROTOCOL;
+use tokio_tungstenite::tungstenite::http::{HeaderValue, StatusCode};
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::{CloseFrame, WebSocketConfig};
 use tokio_tungstenite::tungstenite::{Error as WsError, Message};
@@ -249,13 +250,30 @@ async fn upgrade(
 ) -> Result<WebSocketStream<TcpStream>, WsError> {
     // The callback's signature, with its large error type, is fixed by tungstenite.
     #[allow(clippy::result_large_err)]
-    let check = |request: &Request, response: Response| -> Result<Response, ErrorResponse> {
+    let check = |request: &Request, mut response: Response| -> Result<Response, ErrorResponse> {
         let given = request
             .headers()
             .get(AUTH_HEADER)
             .map(|value| value.as_bytes());
         match given {
-            Some(given) if constant_time_eq(given, token.as_bytes()) => Ok(response),
+            Some(given) if constant_time_eq(given, token.as_bytes()) => {
+                // An MCP client offers the subprotocol "mcp" and gives up on a server that does not pick one, so
+                // the first one offered is chosen (as the `ws` library does, which the other IDE integrations use).
+                let offered = request
+                    .headers()
+                    .get(SEC_WEBSOCKET_PROTOCOL)
+                    .and_then(|value| value.to_str().ok())
+                    .and_then(|value| value.split(',').next())
+                    .map(str::trim)
+                    .filter(|protocol| !protocol.is_empty())
+                    .and_then(|protocol| HeaderValue::from_str(protocol).ok());
+                if let Some(protocol) = offered {
+                    response
+                        .headers_mut()
+                        .insert(SEC_WEBSOCKET_PROTOCOL, protocol);
+                }
+                Ok(response)
+            }
             _ => {
                 let mut refusal = ErrorResponse::new(Some("Unauthorized".to_owned()));
                 *refusal.status_mut() = StatusCode::UNAUTHORIZED;
