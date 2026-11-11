@@ -70,6 +70,21 @@ fn absolute_path(value: &Value, key: &str, path: &str) -> Result<String, ModelEr
     }
 }
 
+fn optional_bool(value: &Value, key: &str, path: &str) -> Result<Option<bool>, ModelError> {
+    match value.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Bool(flag)) => Ok(Some(*flag)),
+        Some(_) => Err(error(&format!("{path}.{key}"), "expected a boolean")),
+    }
+}
+
+fn optional_count(value: &Value, key: &str, path: &str) -> Result<Option<u32>, ModelError> {
+    match value.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(_) => count(value, key, path).map(Some),
+    }
+}
+
 fn boolean(value: &Value, key: &str, path: &str) -> Result<bool, ModelError> {
     field(value, key, path)?
         .as_bool()
@@ -177,15 +192,17 @@ impl Selection {
         })
     }
 
-    /// The text of the result of `getCurrentSelection` and `getLatestSelection`.
+    /// The text of the result of `getCurrentSelection`: the notification, and `success`.
     pub fn to_tool_text(&self) -> String {
-        json!({
-            "success": true,
-            "text": self.text,
-            "filePath": self.file_path,
-            "selection": self.range.to_selection_json(),
-        })
-        .to_string()
+        let mut result = self.to_notification();
+        result["success"] = Value::Bool(true);
+        result.to_string()
+    }
+
+    /// The text of the result of `getLatestSelection`, which the VS Code extension writes without `success`: it is the
+    /// selection as it was last reported, and the same as the notification.
+    pub fn to_latest_text(&self) -> String {
+        self.to_notification().to_string()
     }
 }
 
@@ -207,16 +224,48 @@ impl SelectionAnswer {
         Selection::from_adapter(value).map(Self::Selection)
     }
 
-    /// The text of the tool result.
+    /// The text of the result of `getCurrentSelection`.
     pub fn to_tool_text(&self) -> String {
         match self {
             Self::Selection(selection) => selection.to_tool_text(),
             Self::None(message) => json!({ "success": false, "message": message }).to_string(),
         }
     }
+
+    /// The text of the result of `getLatestSelection`.
+    pub fn to_latest_text(&self) -> String {
+        match self {
+            Self::Selection(selection) => selection.to_latest_text(),
+            Self::None(message) => json!({ "success": false, "message": message }).to_string(),
+        }
+    }
 }
 
-/// A file that is open in the editor.
+/// The selection that an editor reports for a tab (the active one).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EditorSelection {
+    pub start: Position,
+    pub end: Position,
+    /// Whether the cursor is at the start (the selection was made backwards).
+    pub is_reversed: bool,
+}
+
+impl EditorSelection {
+    fn from_adapter(value: &Value, path: &str) -> Result<Self, ModelError> {
+        Ok(Self {
+            start: Position::from_adapter(field(value, "start", path)?, &format!("{path}.start"))?,
+            end: Position::from_adapter(field(value, "end", path)?, &format!("{path}.end"))?,
+            is_reversed: optional_bool(value, "isReversed", path)?.unwrap_or(false),
+        })
+    }
+
+    fn to_json(self) -> Value {
+        json!({ "start": self.start.to_json(), "end": self.end.to_json(), "isReversed": self.is_reversed })
+    }
+}
+
+/// A file that is open in the editor: the five things that every client of this protocol takes, and what the VS Code
+/// extension adds to them (where the tab is, and what the document is), which an adapter may leave out.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpenEditor {
     pub uri: String,
@@ -224,27 +273,73 @@ pub struct OpenEditor {
     pub label: String,
     pub language_id: String,
     pub is_dirty: bool,
+    pub is_pinned: Option<bool>,
+    pub is_preview: Option<bool>,
+    /// The index of the group of tabs (a window, or a tab page).
+    pub group_index: Option<u32>,
+    /// The column of the group, 1-based.
+    pub view_column: Option<u32>,
+    pub is_group_active: Option<bool>,
+    pub file_name: Option<String>,
+    pub line_count: Option<u32>,
+    pub is_untitled: Option<bool>,
+    /// The selection, for the active tab.
+    pub selection: Option<EditorSelection>,
 }
 
 impl OpenEditor {
     fn from_adapter(value: &Value, path: &str) -> Result<Self, ModelError> {
+        let selection = match value.get("selection") {
+            None | Some(Value::Null) => None,
+            Some(selection) => Some(EditorSelection::from_adapter(
+                selection,
+                &format!("{path}.selection"),
+            )?),
+        };
         Ok(Self {
             uri: string(value, "uri", path)?,
             is_active: boolean(value, "isActive", path)?,
             label: string(value, "label", path)?,
             language_id: string(value, "languageId", path)?,
             is_dirty: boolean(value, "isDirty", path)?,
+            is_pinned: optional_bool(value, "isPinned", path)?,
+            is_preview: optional_bool(value, "isPreview", path)?,
+            group_index: optional_count(value, "groupIndex", path)?,
+            view_column: optional_count(value, "viewColumn", path)?,
+            is_group_active: optional_bool(value, "isGroupActive", path)?,
+            file_name: optional_string(value, "fileName", path)?,
+            line_count: optional_count(value, "lineCount", path)?,
+            is_untitled: optional_bool(value, "isUntitled", path)?,
+            selection,
         })
     }
 
     fn to_json(&self) -> Value {
-        json!({
-            "uri": self.uri,
-            "isActive": self.is_active,
-            "label": self.label,
-            "languageId": self.language_id,
-            "isDirty": self.is_dirty,
-        })
+        let mut tab = Map::new();
+        tab.insert("uri".to_owned(), json!(self.uri));
+        tab.insert("isActive".to_owned(), json!(self.is_active));
+        tab.insert("label".to_owned(), json!(self.label));
+        tab.insert("languageId".to_owned(), json!(self.language_id));
+        tab.insert("isDirty".to_owned(), json!(self.is_dirty));
+        let optional: [(&str, Option<Value>); 8] = [
+            ("isPinned", self.is_pinned.map(Value::Bool)),
+            ("isPreview", self.is_preview.map(Value::Bool)),
+            ("groupIndex", self.group_index.map(|n| json!(n))),
+            ("viewColumn", self.view_column.map(|n| json!(n))),
+            ("isGroupActive", self.is_group_active.map(Value::Bool)),
+            ("fileName", self.file_name.as_ref().map(|name| json!(name))),
+            ("lineCount", self.line_count.map(|n| json!(n))),
+            ("isUntitled", self.is_untitled.map(Value::Bool)),
+        ];
+        for (key, value) in optional {
+            if let Some(value) = value {
+                tab.insert(key.to_owned(), value);
+            }
+        }
+        if let Some(selection) = self.selection {
+            tab.insert("selection".to_owned(), selection.to_json());
+        }
+        Value::Object(tab)
     }
 }
 
@@ -913,5 +1008,33 @@ mod tests {
         assert_eq!(not_saved["saved"], false);
         let closed: Value = serde_json::from_str(&save_to_tool_text("/a", None)).unwrap();
         assert_eq!(closed["message"], "Document not open: /a");
+    }
+
+    #[test]
+    fn what_the_extension_adds_to_a_tab_is_taken_when_it_is_there_and_checked() {
+        let tab = json!({
+            "uri": "file:///a.lua", "isActive": true, "label": "a.lua", "languageId": "lua", "isDirty": false,
+            "isPinned": false, "isPreview": true, "groupIndex": 0, "viewColumn": 1, "isGroupActive": true,
+            "fileName": "/a.lua", "lineCount": 40, "isUntitled": false,
+            "selection": {"start": {"line": 1, "character": 2}, "end": {"line": 3, "character": 4}, "isReversed": true},
+        });
+        let editors = open_editors_from_adapter(&json!({ "tabs": [tab.clone()] })).unwrap();
+        // Everything that was given comes out as it was given.
+        let text: Value = serde_json::from_str(&open_editors_to_tool_text(&editors)).unwrap();
+        assert_eq!(text["tabs"][0], tab);
+        // Without them, the five are all that there is.
+        let plain = json!({"uri": "file:///b.lua", "isActive": false, "label": "b.lua", "languageId": "lua", "isDirty": true});
+        let editors = open_editors_from_adapter(&json!({ "tabs": [plain.clone()] })).unwrap();
+        let text: Value = serde_json::from_str(&open_editors_to_tool_text(&editors)).unwrap();
+        assert_eq!(text["tabs"][0], plain);
+        // A wrong type says where.
+        let mut wrong = plain;
+        wrong["isPinned"] = json!("yes");
+        assert_eq!(
+            open_editors_from_adapter(&json!({ "tabs": [wrong] }))
+                .unwrap_err()
+                .path,
+            "$.tabs[0].isPinned"
+        );
     }
 }

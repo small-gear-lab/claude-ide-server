@@ -505,7 +505,12 @@ async fn claude_code_can_ask_for_the_open_editors_and_the_selection() {
     // The selection is the cursor at the start of the file; the latest one is the same.
     for name in ["getCurrentSelection", "getLatestSelection"] {
         let selection = call(&mut claude, name).await;
-        assert_eq!(selection["success"], true, "{selection}");
+        // The current selection says `success`, and the latest one does not (as in the VS Code extension).
+        if name == "getCurrentSelection" {
+            assert_eq!(selection["success"], true, "{selection}");
+        } else {
+            assert!(selection.get("success").is_none(), "{selection}");
+        }
         assert_eq!(selection["filePath"], real_first.to_string_lossy().as_ref());
         assert_eq!(selection["selection"]["isEmpty"], true);
         assert_eq!(selection["selection"]["start"]["line"], 0);

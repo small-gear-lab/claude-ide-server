@@ -35,6 +35,8 @@ enum Answer {
     Raw,
     /// Checked and rewritten through the types of [`model`](crate::model), so that a malformed answer is a failed call.
     Selection,
+    /// As `Selection`, for `getLatestSelection`, whose result has no `success`.
+    LatestSelection,
     OpenEditors,
     Diagnostics,
     OpenFile,
@@ -168,7 +170,7 @@ const TOOLS: &[ToolSpec] = &[
     ToolSpec {
         name: "getLatestSelection",
         backing: Backing::Adapter("getLatestSelection"),
-        answer: Answer::Selection,
+        answer: Answer::LatestSelection,
         description: "Get the most recent selection, even if the editor has lost focus.",
         schema: no_arguments,
     },
@@ -355,6 +357,7 @@ fn answer_text(answer: Answer, result: &Value, arguments: &Value) -> Result<Stri
     Ok(match answer {
         Answer::Raw => result_text(result),
         Answer::Selection => SelectionAnswer::from_adapter(result)?.to_tool_text(),
+        Answer::LatestSelection => SelectionAnswer::from_adapter(result)?.to_latest_text(),
         Answer::OpenEditors => {
             open_editors_to_tool_text(&model::open_editors_from_adapter(result)?)
         }
@@ -421,11 +424,13 @@ fn error_text(error: &RequestError) -> String {
 fn workspace_folders_text(folders: &[String]) -> String {
     let entries: Vec<Value> = folders
         .iter()
-        .map(|path| {
+        .enumerate()
+        .map(|(index, path)| {
             json!({
                 "name": path.trim_end_matches('/').rsplit('/').next().unwrap_or(path),
                 "uri": file_uri(path),
                 "path": path,
+                "index": index,
             })
         })
         .collect();
@@ -433,6 +438,8 @@ fn workspace_folders_text(folders: &[String]) -> String {
         "success": true,
         "folders": entries,
         "rootPath": folders.first(),
+        // The file of a multi-root workspace: there is none to name.
+        "workspaceFile": Value::Null,
     })
     .to_string()
 }
@@ -440,6 +447,16 @@ fn workspace_folders_text(folders: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_folders_come_with_their_index_and_there_is_no_workspace_file() {
+        let text = workspace_folders_text(&["/a".to_owned(), "/b".to_owned()]);
+        let value: Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(value["folders"][0]["index"], 0);
+        assert_eq!(value["folders"][1]["index"], 1);
+        assert_eq!(value["workspaceFile"], Value::Null);
+        assert_eq!(value["rootPath"], "/a");
+    }
 
     #[test]
     fn the_folders_are_described_with_a_name_a_uri_and_a_path() {

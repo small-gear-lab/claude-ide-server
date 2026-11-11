@@ -75,7 +75,14 @@ async fn a_selection_is_answered_with_its_position_and_text() {
         .await;
         assert_eq!(method, tool);
         let result = result_json(&answer);
-        assert_shape(&result, "get_selection_result.shape.json");
+        // The VS Code extension writes `success` for the current selection, and not for the latest one.
+        if tool == "getCurrentSelection" {
+            assert_shape(&result, "get_selection_result.shape.json");
+        } else {
+            assert_shape(&result, "get_latest_selection_result.shape.json");
+            assert!(result.get("success").is_none(), "{result}");
+        }
+        assert_eq!(result["fileUrl"], "file:///home/user/project/a.lua");
         assert_eq!(result["text"], "日本語");
         assert_eq!(result["selection"]["end"]["character"], 3);
         assert_eq!(result["selection"]["isEmpty"], false);

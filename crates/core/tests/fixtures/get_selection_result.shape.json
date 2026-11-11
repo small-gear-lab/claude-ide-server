@@ -2,6 +2,7 @@
   "success": true,
   "text": "<string>",
   "filePath": "<string>",
+  "fileUrl": "<string>",
   "selection": {
     "start": { "line": "<number>", "character": "<number>" },
     "end": { "line": "<number>", "character": "<number>" },
