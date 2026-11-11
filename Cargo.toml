@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/core", "crates/server", "crates/launchd", "crates/windows", "crates/test-support"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
@@ -12,9 +12,9 @@ repository = "https://github.com/small-gear-lab/claude-ide-server"
 # The crates that depend on each other: a published crate needs the version of what it depends on, besides the path. It is the
 # version of the workspace, and has to be changed with it (see "Releasing" in CONTRIBUTING.md).
 [workspace.dependencies]
-claude-ide-core = { path = "crates/core", version = "0.1.0" }
-claude-ide-launchd = { path = "crates/launchd", version = "0.1.0" }
-claude-ide-windows = { path = "crates/windows", version = "0.1.0" }
+claude-ide-core = { path = "crates/core", version = "0.1.1" }
+claude-ide-launchd = { path = "crates/launchd", version = "0.1.1" }
+claude-ide-windows = { path = "crates/windows", version = "0.1.1" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
