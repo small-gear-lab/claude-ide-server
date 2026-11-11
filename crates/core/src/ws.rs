@@ -125,29 +125,36 @@ impl Default for Config {
 
 /// A listening WebSocket server. Dropping it stops listening.
 ///
-/// Connections that have passed the upgrade and the token check arrive on the receiver returned by [`start`].
+/// Connections that have passed the upgrade and the token check are handed out by [`accept`].
 ///
-/// [`start`]: WsServer::start
+/// [`accept`]: WsServer::accept
 #[derive(Debug)]
 pub struct WsServer {
     addr: SocketAddr,
     task: JoinHandle<()>,
+    connections: mpsc::Receiver<Connection>,
 }
 
 impl WsServer {
     /// Starts listening on `127.0.0.1`, on a free port that the operating system picks (the ephemeral range, which
-    /// lies inside 10000-65535 on Linux, macOS and Windows).
-    pub async fn start(
-        token: impl Into<String>,
-        config: Config,
-    ) -> io::Result<(Self, mpsc::Receiver<Connection>)> {
+    /// lies inside 10000-65535 on Linux, macOS and Windows). Must be called inside a tokio runtime.
+    pub async fn start(token: impl Into<String>, config: Config) -> io::Result<Self> {
         let listener =
             TcpListener::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0)).await?;
         let addr = listener.local_addr()?;
-        let (tx, rx) = mpsc::channel(16);
+        let (tx, connections) = mpsc::channel(16);
         let token: std::sync::Arc<str> = token.into().into();
         let task = tokio::spawn(accept_loop(listener, token, config, tx));
-        Ok((Self { addr, task }, rx))
+        Ok(Self {
+            addr,
+            task,
+            connections,
+        })
+    }
+
+    /// The next authenticated connection. Waits until one arrives; `None` only if the server has stopped.
+    pub async fn accept(&mut self) -> Option<Connection> {
+        self.connections.recv().await
     }
 
     /// The port that the server listens on.

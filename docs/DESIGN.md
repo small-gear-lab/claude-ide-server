@@ -174,6 +174,32 @@ Claude with the text `FILE_SAVED`; on `"rejected"`, `DIFF_REJECTED`.
 `register` carries `protocolVersion`. The server refuses an adapter whose major version it does not know.
 Methods can be added without a major bump; an adapter lists in `methods` what it implements.
 
+## Structure of the core crate
+
+The crate runs on tokio: its `async` functions must be called inside a tokio runtime, and tokio's I/O traits
+(`AsyncRead`, `AsyncWrite`) are the common currency between layers. Other tokio types (channels, tasks) and the
+types of the libraries below do not appear in the crate's public interface.
+
+Each outside library sits behind a type of the crate's own, and what lies inside knows only those types. There are
+three layers:
+
+- **The Claude side:** the WebSocket server (`ws`), the MCP handling, the lock files.
+- **The middle:** workspaces, the dispatch of tool calls, and the crate's own types for tools, selections and
+  diagnostics.
+- **The adapter side:** the adapter transport and the JSON-RPC framing.
+
+Three seams are drawn on purpose, where this design already says that something may change:
+
+1. **The adapter transport.** A Unix socket now, a named pipe later. Everything above it works with a duplex byte
+   stream that a listener accepts, not with a Unix socket type.
+2. **The MCP SDK.** If `rmcp` is used, its types stay inside the Claude side. The middle and the adapter side use
+   the crate's own types, so that a new version of the SDK, or a different SDK, touches one layer.
+3. **The file system and the environment.** The lock file directory, the runtime directory and the check that a
+   `pid` is alive are passed in as configuration. Tests pass temporary directories.
+
+Nothing else is put behind a trait in advance (TCP itself, the JSON shape of a lock file). A seam is added when
+something is known to change, not before.
+
 ## Lifecycle
 
 1. The server starts and listens on the adapter socket.

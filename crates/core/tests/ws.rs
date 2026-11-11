@@ -2,11 +2,10 @@
 
 use std::time::Duration;
 
-use claude_ide_core::ws::{AUTH_HEADER, Config, Connection, WsServer};
+use claude_ide_core::ws::{AUTH_HEADER, Config, Error as ConnectionError, WsServer};
 use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio::sync::mpsc;
 use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::{Error, Message};
@@ -14,7 +13,7 @@ use tokio_tungstenite::tungstenite::{Error, Message};
 const TOKEN: &str = "0123456789abcdef0123456789abcdef";
 const WAIT: Duration = Duration::from_secs(5);
 
-async fn start(config: Config) -> (WsServer, mpsc::Receiver<Connection>) {
+async fn start(config: Config) -> WsServer {
     WsServer::start(TOKEN, config)
         .await
         .expect("the server starts")
@@ -38,11 +37,11 @@ async fn connect(port: u16, token: Option<&str>) -> Result<Client, Error> {
 
 #[tokio::test]
 async fn a_client_with_the_right_token_connects_and_exchanges_messages() {
-    let (server, mut connections) = start(Config::default()).await;
+    let mut server = start(Config::default()).await;
     let mut client = connect(server.port(), Some(TOKEN))
         .await
         .expect("the upgrade succeeds");
-    let mut accepted = timeout(WAIT, connections.recv())
+    let mut accepted = timeout(WAIT, server.accept())
         .await
         .unwrap()
         .expect("a connection arrives");
@@ -58,7 +57,7 @@ async fn a_client_with_the_right_token_connects_and_exchanges_messages() {
 
 #[tokio::test]
 async fn a_wrong_or_missing_token_is_refused_during_the_upgrade() {
-    let (server, mut connections) = start(Config::default()).await;
+    let mut server = start(Config::default()).await;
     for token in [
         Some("wrong"),
         Some(""),
@@ -73,7 +72,7 @@ async fn a_wrong_or_missing_token_is_refused_during_the_upgrade() {
     }
     // Nothing reached the caller.
     assert!(
-        timeout(Duration::from_millis(200), connections.recv())
+        timeout(Duration::from_millis(200), server.accept())
             .await
             .is_err()
     );
@@ -81,7 +80,7 @@ async fn a_wrong_or_missing_token_is_refused_during_the_upgrade() {
 
 #[tokio::test]
 async fn garbage_from_one_peer_does_not_affect_the_next() {
-    let (server, mut connections) = start(Config::default()).await;
+    let mut server = start(Config::default()).await;
 
     let mut raw = TcpStream::connect(server.local_addr()).await.unwrap();
     raw.write_all(b"\x00\xff not http at all \r\n\r\n")
@@ -96,7 +95,7 @@ async fn garbage_from_one_peer_does_not_affect_the_next() {
     let _client = connect(server.port(), Some(TOKEN))
         .await
         .expect("a good client still connects");
-    assert!(timeout(WAIT, connections.recv()).await.unwrap().is_some());
+    assert!(timeout(WAIT, server.accept()).await.unwrap().is_some());
 }
 
 #[tokio::test]
@@ -105,7 +104,7 @@ async fn a_silent_peer_does_not_hold_up_others_and_is_dropped_after_the_timeout(
         handshake_timeout: Duration::from_millis(300),
         ..Config::default()
     };
-    let (server, mut connections) = start(config).await;
+    let mut server = start(config).await;
 
     let mut silent = TcpStream::connect(server.local_addr()).await.unwrap();
 
@@ -113,7 +112,7 @@ async fn a_silent_peer_does_not_hold_up_others_and_is_dropped_after_the_timeout(
     let _client = connect(server.port(), Some(TOKEN))
         .await
         .expect("a good client connects");
-    assert!(timeout(WAIT, connections.recv()).await.unwrap().is_some());
+    assert!(timeout(WAIT, server.accept()).await.unwrap().is_some());
 
     // The silent peer is cut off once the handshake timeout has passed.
     let mut buffer = [0u8; 16];
@@ -130,10 +129,10 @@ async fn an_oversized_message_ends_that_connection_only() {
         max_frame_size: 1024,
         ..Config::default()
     };
-    let (server, mut connections) = start(config).await;
+    let mut server = start(config).await;
 
     let mut client = connect(server.port(), Some(TOKEN)).await.unwrap();
-    let mut accepted = timeout(WAIT, connections.recv()).await.unwrap().unwrap();
+    let mut accepted = timeout(WAIT, server.accept()).await.unwrap().unwrap();
     client.send(Message::binary(vec![0u8; 4096])).await.unwrap();
     let outcome = timeout(WAIT, accepted.recv()).await.unwrap();
     assert!(
@@ -144,22 +143,21 @@ async fn an_oversized_message_ends_that_connection_only() {
     let _next = connect(server.port(), Some(TOKEN))
         .await
         .expect("the server still accepts");
-    assert!(timeout(WAIT, connections.recv()).await.unwrap().is_some());
+    assert!(timeout(WAIT, server.accept()).await.unwrap().is_some());
 }
 
 #[tokio::test]
 async fn the_server_listens_on_the_loopback_interface_only() {
-    let (server, _connections) = start(Config::default()).await;
+    let server = start(Config::default()).await;
     assert!(server.local_addr().ip().is_loopback());
     assert_ne!(server.port(), 0);
 }
 
 #[tokio::test]
 async fn dropping_the_server_stops_it_listening() {
-    let (server, connections) = start(Config::default()).await;
+    let server = start(Config::default()).await;
     let addr = server.local_addr();
     drop(server);
-    drop(connections);
     // Give the aborted task a moment to release the port.
     tokio::time::sleep(Duration::from_millis(100)).await;
     assert!(TcpStream::connect(addr).await.is_err());
@@ -167,14 +165,14 @@ async fn dropping_the_server_stops_it_listening() {
 
 #[tokio::test]
 async fn binary_frames_are_reported_and_a_close_ends_the_stream() {
-    let (server, mut connections) = start(Config::default()).await;
+    let mut server = start(Config::default()).await;
     let mut client = connect(server.port(), Some(TOKEN)).await.unwrap();
-    let mut accepted = timeout(WAIT, connections.recv()).await.unwrap().unwrap();
+    let mut accepted = timeout(WAIT, server.accept()).await.unwrap().unwrap();
 
     client.send(Message::binary(vec![1, 2, 3])).await.unwrap();
     assert!(matches!(
         accepted.recv().await,
-        Some(Err(claude_ide_core::ws::Error::UnexpectedBinary))
+        Some(Err(ConnectionError::UnexpectedBinary))
     ));
 
     client.close(None).await.unwrap();
@@ -183,9 +181,9 @@ async fn binary_frames_are_reported_and_a_close_ends_the_stream() {
 
 #[tokio::test]
 async fn the_server_can_close_with_a_code_and_a_reason() {
-    let (server, mut connections) = start(Config::default()).await;
+    let mut server = start(Config::default()).await;
     let mut client = connect(server.port(), Some(TOKEN)).await.unwrap();
-    let mut accepted = timeout(WAIT, connections.recv()).await.unwrap().unwrap();
+    let mut accepted = timeout(WAIT, server.accept()).await.unwrap().unwrap();
 
     accepted.close(1008, "policy violation").await;
     match timeout(WAIT, client.next()).await.unwrap() {
