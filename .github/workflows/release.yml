@@ -21,7 +21,8 @@ env:
 jobs:
   # The executable, built on a runner of its own system (except for macOS on Intel, see below), and started once to see that
   # it runs at all. Linux is built for musl, so that it is one file with no libc of the system to match: it runs on any
-  # distribution of that CPU. The target's own runtime (`rustup target add`) is all that it needs: there is no C code in the
+  # distribution of that CPU. The glibc builds are for those who want a dynamic one (and for `cargo binstall`, which looks
+  # for them). The target's own runtime (`rustup target add`) is all that it needs: there is no C code in the
   # dependencies of the executable, so no `musl-tools` is installed (which would also make a build wait for the mirrors of
   # the distribution).
   build:
@@ -32,6 +33,11 @@ jobs:
         include:
           - { target: x86_64-unknown-linux-musl, os: ubuntu-latest, musl: true }
           - { target: aarch64-unknown-linux-musl, os: ubuntu-24.04-arm, musl: true }
+          # The glibc builds are made on the oldest image there is (Ubuntu 22.04, glibc 2.35): an executable needs the glibc that
+          # it was built against, or a newer one, so what is built on a new image runs on the new systems only. What these ask
+          # for is glibc 2.34 (see "Does it run?"), which is what RHEL 9 has.
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04, glibc: true }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04-arm, glibc: true }
           - { target: aarch64-apple-darwin, os: macos-latest }
           # Built on the Arm runner (there is no cross toolchain to install: Xcode has both), and run through Rosetta.
           - { target: x86_64-apple-darwin, os: macos-latest, rosetta: true }
@@ -57,6 +63,14 @@ jobs:
             # Static: no libc of the system to match.
             file "$exe"
             ! ldd "$exe" 2>&1 | grep -q 'libc\.so'
+          fi
+          if [ "${{ matrix.glibc }}" = true ]; then
+            # The newest version of glibc that the executable asks for: it is what the system that runs it must have.
+            need=$(objdump -T "$exe" | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -n 1)
+            echo "needs $need"
+            # What the release notes say: asking for more would mean that the image or the toolchain has moved on, and the
+            # claim in the notes is wrong.
+            [ "$(printf '%s\n' "$need" GLIBC_2.34 | sort -V | tail -n 1)" = GLIBC_2.34 ]
           fi
       - uses: actions/upload-artifact@v7
         with:
