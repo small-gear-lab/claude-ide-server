@@ -1,6 +1,6 @@
 # claude-ide-server
 
-[日本語](README.ja.md)
+<a href="README.ja.md">日本語</a>
 
 An **unofficial** IDE integration server for [Claude Code](https://code.claude.com/docs/en/overview)'s `/ide`
 protocol. It is not affiliated with or endorsed by Anthropic.

@@ -1,6 +1,6 @@
 # claude-ide-server
 
-[English](README.md)
+<a href="README.md">English</a>
 
 [Claude Code](https://code.claude.com/docs/en/overview) の `/ide` プロトコルのための、**非公式の** IDE 連携サーバーです。Anthropic とは無関係で、Anthropic が認めたものでもありません。
 

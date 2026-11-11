@@ -25,8 +25,8 @@ msgid "claude-ide-server"
 msgstr "claude-ide-server"
 
 #: ../../../README.md:3
-msgid "[日本語](README.ja.md)"
-msgstr "[English](README.md)"
+msgid "<a href=\"README.ja.md\">日本語</a>"
+msgstr "<a href=\"README.md\">English</a>"
 
 #: ../../../README.md:5
 msgid ""
