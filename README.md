@@ -11,8 +11,9 @@ integrations behave (the VS Code extension and the JetBrains plugin), and from t
 Code changes.
 
 > **Status: early development.** The core library talks to a real Claude Code (the handshake, the list of tools, tool
-> calls, notifications), and is tested with stand-ins for Claude Code and for an editor. There is no executable yet
-> (#17) and no editor adapter yet (#10).
+> calls, notifications), and is tested with stand-ins for Claude Code and for an editor. The server runs as an
+> executable (`claude-ide-server`, with an example systemd socket unit under `contrib/`). There is no editor adapter yet
+> (#10).
 
 ## What it will be
 

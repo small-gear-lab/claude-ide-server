@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-ide-server\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-11 15:35+0900\n"
+"POT-Creation-Date: 2026-11-11 16:29+0900\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: Small Gear Lab\n"
 "Language-Team: ja <LL@li.org>\n"
@@ -54,17 +54,20 @@ msgstr ""
 msgid ""
 "**Status: early development.** The core library talks to a real Claude Code "
 "(the handshake, the list of tools, tool calls, notifications), and is tested"
-" with stand-ins for Claude Code and for an editor. There is no executable "
-"yet (#17) and no editor adapter yet (#10)."
+" with stand-ins for Claude Code and for an editor. The server runs as an "
+"executable (`claude-ide-server`, with an example systemd socket unit under "
+"`contrib/`). There is no editor adapter yet (#10)."
 msgstr ""
-"**状態: 開発の初期。** コアのライブラリは、本物の Claude Code と話せます（握手、ツールの一覧、ツールの呼び出し、通知）。Claude"
-" Code とエディタの偽物を使って、テストされています。実行ファイル（#17）と、エディタのアダプター（#10）は、まだありません。"
+"**状況: 開発初期。** コアライブラリは本物の Claude Code "
+"と通信できます（ハンドシェイク、ツール一覧、ツール呼び出し、通知）。テストは、Claude Code "
+"とエディタの代役を使って行っています。サーバーは実行ファイル（`claude-ide-server`。`contrib/` に systemd "
+"のソケットユニットの例があります）として動きます。エディタアダプタはまだありません（#10）。"
 
-#: ../../../README.md:17
+#: ../../../README.md:18
 msgid "What it will be"
 msgstr "何になるか"
 
-#: ../../../README.md:19
+#: ../../../README.md:20
 msgid ""
 "Claude Code connects to an IDE over a WebSocket speaking a variant of MCP "
 "(JSON-RPC 2.0). The IDE writes a lock file under `~/.claude/ide/`, and "
@@ -75,7 +78,7 @@ msgstr ""
 "`~/.claude/ide/` にロックファイルを書き、Claude Code が、それを見つけてつなぎます。このプロジェクトは、その接続の IDE "
 "側で、2 つの部分に分かれます。"
 
-#: ../../../README.md:27
+#: ../../../README.md:28
 msgid ""
 "**The server** speaks the Claude Code protocol: the WebSocket, the lock file"
 " and its token, and the MCP tools and notifications. It knows nothing about "
@@ -84,7 +87,7 @@ msgstr ""
 "**サーバー** は、Claude Code のプロトコルを話します。WebSocket、ロックファイルとそのトークン、MCP "
 "のツールと通知です。特定のエディタについては、何も知りません。"
 
-#: ../../../README.md:29
+#: ../../../README.md:30
 msgid ""
 "**An editor adapter** connects to the server, says which workspace it has, "
 "and answers the server's requests (open a file, report the selection, show a"
@@ -95,21 +98,21 @@ msgstr ""
 "は、サーバーにつないで、自分がどのワークスペースを持っているかを伝え、サーバーの要求（ファイルを開く、選択範囲を返す、差分を出す）に、JSON-RPC "
 "で答えます。アダプターが切れると、サーバーは、そのワークスペースとロックファイルを手放すので、エディタが落ちても、何も残りません。"
 
-#: ../../../README.md:33
+#: ../../../README.md:34
 msgid "The first adapter will be for Neovim, written in Lua."
 msgstr "最初のアダプターは、Neovim 用で、Lua で書きます。"
 
-#: ../../../README.md:35
+#: ../../../README.md:36
 msgid "Documentation"
 msgstr "ドキュメント"
 
-#: ../../../README.md:37
+#: ../../../README.md:38
 msgid ""
 "[docs/DESIGN.md](docs/DESIGN.md): the design, the protocol between the "
 "server and an editor adapter, and the milestones."
 msgstr "[docs/DESIGN.md](docs/DESIGN.md): 設計、サーバーとエディタのアダプターの間のプロトコル、マイルストーン。"
 
-#: ../../../README.md:39
+#: ../../../README.md:40
 msgid ""
 "The documents are written in English and have a Japanese version "
 "(`README.ja.md`, `docs/ja/`), built from the gettext catalogs in "
@@ -118,59 +121,59 @@ msgstr ""
 "ドキュメントは英語で書いてあり、日本語版（`README.ja.md`、`docs/ja/`）があります。日本語版は、`docs/locale/ja/`"
 " の gettext のカタログから、`tools/build-docs.sh` で作ります。"
 
-#: ../../../README.md:42
+#: ../../../README.md:43
 msgid "Layout (planned)"
 msgstr "構成（予定）"
 
-#: ../../readme.md:44
+#: ../../readme.md:45
 msgid "Where"
 msgstr "場所"
 
-#: ../../readme.md:44
+#: ../../readme.md:45
 msgid "What"
 msgstr "内容"
 
-#: ../../readme.md:44
+#: ../../readme.md:45
 msgid "`crates/core/`"
 msgstr "`crates/core/`"
 
-#: ../../readme.md:46
+#: ../../readme.md:47
 msgid "the server: WebSocket, lock files, authentication, MCP handling"
 msgstr "サーバー: WebSocket、ロックファイル、認証、MCP の処理"
 
-#: ../../readme.md:46
+#: ../../readme.md:47
 msgid "`editors/nvim/`"
 msgstr "`editors/nvim/`"
 
-#: ../../readme.md:47
+#: ../../readme.md:48
 msgid "the Neovim adapter"
 msgstr "Neovim のアダプター"
 
-#: ../../readme.md:47
+#: ../../readme.md:48
 msgid "`docs/`"
 msgstr "`docs/`"
 
-#: ../../readme.md:48
+#: ../../readme.md:49
 msgid "the protocol notes and the design"
 msgstr "プロトコルのメモと、設計"
 
-#: ../../../README.md:50
+#: ../../../README.md:51
 msgid "License"
 msgstr "ライセンス"
 
-#: ../../../README.md:52
+#: ../../../README.md:53
 msgid "Licensed under either of"
 msgstr "次のどちらかのライセンスで使えます。"
 
-#: ../../../README.md:54
+#: ../../../README.md:55
 msgid "Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))"
 msgstr "Apache License, Version 2.0（[LICENSE-APACHE](LICENSE-APACHE)）"
 
-#: ../../../README.md:55
+#: ../../../README.md:56
 msgid "MIT license ([LICENSE-MIT](LICENSE-MIT))"
 msgstr "MIT ライセンス（[LICENSE-MIT](LICENSE-MIT)）"
 
-#: ../../../README.md:57
+#: ../../../README.md:58
 msgid "at your option."
 msgstr "どちらにするかは、使う人が選べます。"
 

@@ -321,6 +321,46 @@ that a caller can change. Tests can replace it (to try the failing case, or to k
 If the server itself is killed, its lock files are left behind. The server records the lock files it wrote
 under its runtime directory and removes the ones that are still there on the next start.
 
+## Running the server
+
+`claude-ide-server` (the `crates/server` crate) is one executable for every editor. `claude-ide-server --help` lists
+its switches: `--socket` (where the adapters connect), `--idle-timeout` (exit when the last adapter has been gone for
+that many seconds), `-v` / `-q` (the log). The log goes to standard error, through `tracing`; `CLAUDE_IDE_SERVER_LOG`
+or `RUST_LOG` replace what the switches say. It runs until `SIGINT` or `SIGTERM`, then tells every adapter `shutdown`
+and removes the lock files and ports, and the socket if it made it. Exit codes: 0 stopped as asked, 1 could not start
+(or the socket closed), 2 wrong command line, 3 the workspaces were not closed in time.
+
+### Where the adapter socket comes from
+
+The server does not care how it was started: by hand, by a supervisor that listens for it and starts it at the first
+connection (socket activation), or by an adapter that found no server. The one thing that differs is how the listening
+socket is obtained, and that is hidden behind a small trait, `SocketSource` (`crates/server/src/activation.rs`). The
+first source that applies is used:
+
+| source | for | how |
+|---|---|---|
+| handed over | systemd, and other supervisors and container runtimes that follow the same convention | the socket is already listening on an inherited file descriptor (`LISTEN_PID`, `LISTEN_FDS`) |
+| bound | everything else, and the default | the server makes the socket itself, mode 0600 in a 0700 directory |
+
+A handed-over socket is not the server's to delete: it stays when the server exits, and the supervisor starts the
+server again at the next connection. With `--idle-timeout` an on-demand server does not stay for ever. `contrib/` has
+the files for each system, and `contrib/systemd` was tried with a real systemd (the service stays inactive until an
+adapter connects, and ends after the idle time while the socket stays).
+
+What a system does differently is absorbed in a source of its own, selected by `cfg` where the system decides it:
+
+- **systemd** (Linux): the handed-over source.
+- **launchd** (macOS): launchd can start the server at log-in (`contrib/launchd`, not tried yet: the macOS runner of
+  CI is where it will be tried, issue #18), and the server makes its own socket. launchd's socket activation hands the
+  socket over by name through its own interface, which is not implemented.
+- **Task Scheduler** (Windows): there is no socket activation, and the adapter socket is a Unix domain socket in this
+  version, so the server does not run on Windows yet. It needs a named-pipe `Listener` in the core crate (the
+  `Listener` trait is what the rest of the server depends on, so that is the only place that changes) and a source for
+  it; Task Scheduler would then start the server at log-in, or on demand through a task that the adapter triggers.
+
+Whether an adapter starts the server itself when it finds no socket is up to the adapter (issue #10); it starts this
+same executable.
+
 ## Security
 
 - Every listener is on `127.0.0.1`. The adapter socket is in a 0700 directory and is itself 0600.
@@ -350,13 +390,14 @@ under its runtime directory and removes the ones that are still there on the nex
 1. **M0, server skeleton.** WebSocket server, lock file, token, `initialize`, `tools/list`. A mock adapter.
 2. **M1, read-only tools.** `getOpenEditors`, `getWorkspaceFolders`, `getCurrentSelection`,
    `getLatestSelection`, `getDiagnostics`; `selection_changed`, `at_mentioned`.
-3. **M2, Neovim adapter.** Lua, over `vim.lsp.rpc`. Registers the main windows only.
+3. **M2, Neovim adapter.** The server executable (`crates/server`), and a Lua adapter, over `vim.lsp.rpc`. Registers the main windows only.
 4. **M3, actions.** `openFile`, `checkDocumentDirty`, `saveDocument`, `diagnostics_changed`.
 5. **M4, diffs.** `openDiff`, `close_tab`, `closeAllDiffTabs`, and an accept/reject flow in the Neovim adapter.
 
 ## Open questions
 
-- Whether to start the server on demand (systemd socket activation) or keep it running (issue #17).
+- launchd's socket activation, and the Windows endpoint (a named-pipe `Listener`) with a Task Scheduler definition: see
+  "Running the server".
 - What an adapter should do when the server is not there: retry, and for how long (issue #10).
 - Whether to write both a path and its symlink-resolved form into `workspaceFolders`, since the CLI compares text.
 - A process id can be reused: if an unrelated process takes the id that a dead server recorded, its leftover lock
