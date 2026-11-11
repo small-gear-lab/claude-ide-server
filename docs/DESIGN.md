@@ -47,8 +47,24 @@ What is observed of the existing integrations:
   The file is mode 0600 and the directory 0700.
 - The CLI connects over WebSocket with the header `x-claude-code-ide-authorization: <authToken>`. A mismatch is
   closed (code 1008).
-- Messages are JSON-RPC 2.0, based on MCP 2025-03-26.
+- Messages are JSON-RPC 2.0, based on MCP. (The protocol notes of other implementations say 2025-03-26; the CLI
+  below asked for a newer version.)
 - The CLI sends `initialize`, then the notification `ide_connected` with its pid.
+
+### What a real CLI sends
+
+Observed by connecting Claude Code 2.1.322 to a probe that answers minimally (`crates/core/examples/mcp_probe.rs`):
+
+- **The WebSocket upgrade offers the subprotocol `mcp`, and the CLI gives up if the server does not pick one.** The
+  first connection attempts failed for exactly this reason: the CLI connected and dropped the connection at once,
+  without sending a message. The server therefore answers with the first subprotocol that the client offered.
+- Then, in this order: the request `initialize`, the notification `notifications/initialized`, the notification
+  `ide_connected` (`{ "pid": ... }`), and the request `tools/list`.
+- `initialize` asks for `protocolVersion` `2025-11-25`, with `capabilities` of `roots` (`listChanged`), `elicitation`
+  and an `extensions` entry for tasks, and `clientInfo` (`name` `claude-code`, `title`, `version`, `description`,
+  `websiteUrl`). Answering with the same `protocolVersion`, `capabilities: { "tools": {} }` and a `serverInfo` was
+  enough: the CLI went on to `tools/list`.
+- With that, `/ide` lists the probe by its `ideName` and shows it as connected.
 
 ### How the CLI picks a lock file
 

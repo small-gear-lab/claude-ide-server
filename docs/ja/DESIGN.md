@@ -35,8 +35,17 @@ Claude Code ──WebSocket (MCP)──▶ claude-ide-server ◀──JSON-RPC (
 - IDE は、10000〜65535 の乱数のポートで待ち受けます。バインドするのは `127.0.0.1` だけです。
 - `~/.claude/ide/`（か `$CLAUDE_CONFIG_DIR/ide/`）に `<port>.lock` を書きます。中身は `pid`、`workspaceFolders`、`ideName`、`transport`（`"ws"`）、`authToken`、（JetBrains では）`runningInWindows` です。ファイルのモードは 0600、ディレクトリは 0700 です。
 - CLI は、ヘッダー `x-claude-code-ide-authorization: <authToken>` を付けて、WebSocket でつなぎます。一致しなければ、閉じます（コード 1008）。
-- メッセージは JSON-RPC 2.0 で、MCP 2025-03-26 に基づいています。
+- メッセージは、MCP に基づく JSON-RPC 2.0 です。（ほかの実装のプロトコルのメモは、2025-03-26 としていますが、下で観察した CLI は、もっと新しい版を求めました。）
 - CLI は、`initialize` を送り、続けて、自分の pid を付けた通知 `ide_connected` を送ります。
+
+### 本物の CLI が送るもの
+
+Claude Code 2.1.322 を、最小限だけ答える観察用のプログラム（`crates/core/examples/mcp_probe.rs`）につないで、分かったことです。
+
+- **WebSocket のアップグレードは、サブプロトコル `mcp` を提示して、サーバーが 1 つも選ばないと、CLI は諦めます。** 最初の接続の試みが失敗したのは、まさにこの理由でした。CLI は、つないだ直後に、メッセージを 1 つも送らずに、接続を切りました。そのため、サーバーは、クライアントが最初に提示したサブプロトコルを返します。
+- そのあと、この順に送ります。要求 `initialize`、通知 `notifications/initialized`、通知 `ide_connected`（`{ "pid": ... }`）、要求 `tools/list` です。
+- `initialize` は、`protocolVersion` に `2025-11-25` を求め、`capabilities` には `roots`（`listChanged`）、`elicitation`、タスクの `extensions` を持ち、`clientInfo`（`name` は `claude-code`、`title`、`version`、`description`、`websiteUrl`）を付けます。同じ `protocolVersion`、`capabilities: { "tools": {} }`、`serverInfo` で答えるだけで足りて、CLI は `tools/list` に進みました。
+- これで、`/ide` は、観察用のプログラムを `ideName` で一覧に出し、接続済みとして示しました。
 
 ### CLI が、ロックファイルを選ぶしくみ
 
