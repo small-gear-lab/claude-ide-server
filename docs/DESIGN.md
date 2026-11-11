@@ -117,6 +117,21 @@ smaller set than the VS Code extension.
 
 `executeCode` (Jupyter only) is out of scope.
 
+How a call turns out:
+
+- The answer to a tool call is one text content. If the adapter answers with a string, that string is the text as it
+  is (for example `FILE_SAVED`); anything else is written as JSON.
+- A call that fails (the adapter answers with an error, does not answer in time, or is gone) is still an answer: the
+  result carries `isError: true` and the reason as its text. Claude gets to see why.
+- A call for a tool that is not available (unknown, or not declared by the adapter) is an error of the protocol, with
+  code `-32602`, and nothing is sent to the adapter.
+- `getWorkspaceFolders` is answered by the server from the registration, so it follows `workspaceFoldersChanged`.
+
+The MCP protocol itself (the handshake, version negotiation, `tools/list`, `tools/call`, errors) is handled by the
+`rmcp` crate, the official Rust SDK of MCP, behind the crate's own types in the `mcp` module. The least supported
+Rust is 1.88 because `rmcp` needs it. The messages that MCP does not define (`ide_connected`, `selection_changed`, ...)
+are custom notifications of the SDK.
+
 ### Notifications sent to Claude
 
 | Notification | When |

@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-ide-server\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-11 14:51+0900\n"
+"POT-Creation-Date: 2026-11-11 15:06+0900\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: Small Gear Lab\n"
 "Language-Team: ja <LL@li.org>\n"
@@ -351,7 +351,7 @@ msgstr "アダプターのメソッド"
 msgid "Notes"
 msgstr "備考"
 
-#: ../../DESIGN.md:104 ../../DESIGN.md:106 ../../DESIGN.md:166
+#: ../../DESIGN.md:104 ../../DESIGN.md:106 ../../DESIGN.md:181
 msgid "`openFile`"
 msgstr "`openFile`"
 
@@ -359,7 +359,7 @@ msgstr "`openFile`"
 msgid "optional selection by `startText` / `endText`"
 msgstr "`startText` / `endText` で、範囲を選ぶこともできます"
 
-#: ../../DESIGN.md:106 ../../DESIGN.md:107 ../../DESIGN.md:174
+#: ../../DESIGN.md:106 ../../DESIGN.md:107 ../../DESIGN.md:189
 msgid "`openDiff`"
 msgstr "`openDiff`"
 
@@ -371,7 +371,7 @@ msgstr "利用者が承認か拒否をするまで待ちます"
 msgid "`close_tab`"
 msgstr "`close_tab`"
 
-#: ../../DESIGN.md:108 ../../DESIGN.md:175
+#: ../../DESIGN.md:108 ../../DESIGN.md:190
 msgid "`closeDiff`"
 msgstr "`closeDiff`"
 
@@ -383,7 +383,7 @@ msgstr "`tab_name`（`openDiff` に渡したもの）で指定します"
 msgid "`closeAllDiffTabs`"
 msgstr "`closeAllDiffTabs`"
 
-#: ../../DESIGN.md:109 ../../DESIGN.md:176
+#: ../../DESIGN.md:109 ../../DESIGN.md:191
 msgid "`closeAllDiffs`"
 msgstr "`closeAllDiffs`"
 
@@ -391,15 +391,15 @@ msgstr "`closeAllDiffs`"
 msgid "answers `CLOSED_<n>_DIFF_TABS`"
 msgstr "`CLOSED_<n>_DIFF_TABS` と答えます"
 
-#: ../../DESIGN.md:109 ../../DESIGN.md:110 ../../DESIGN.md:168
+#: ../../DESIGN.md:109 ../../DESIGN.md:110 ../../DESIGN.md:183
 msgid "`getOpenEditors`"
 msgstr "`getOpenEditors`"
 
-#: ../../DESIGN.md:110 ../../DESIGN.md:111 ../../DESIGN.md:169
+#: ../../DESIGN.md:110 ../../DESIGN.md:111 ../../DESIGN.md:184
 msgid "`getCurrentSelection`"
 msgstr "`getCurrentSelection`"
 
-#: ../../DESIGN.md:111 ../../DESIGN.md:112 ../../DESIGN.md:170
+#: ../../DESIGN.md:111 ../../DESIGN.md:112 ../../DESIGN.md:185
 msgid "`getLatestSelection`"
 msgstr "`getLatestSelection`"
 
@@ -419,7 +419,7 @@ msgstr "（サーバーが答えます）"
 msgid "from the registration"
 msgstr "登録の内容から返します"
 
-#: ../../DESIGN.md:113 ../../DESIGN.md:114 ../../DESIGN.md:171
+#: ../../DESIGN.md:113 ../../DESIGN.md:114 ../../DESIGN.md:186
 msgid "`getDiagnostics`"
 msgstr "`getDiagnostics`"
 
@@ -427,11 +427,11 @@ msgstr "`getDiagnostics`"
 msgid "one URI, or all"
 msgstr "1 つの URI か、すべて"
 
-#: ../../DESIGN.md:114 ../../DESIGN.md:115 ../../DESIGN.md:172
+#: ../../DESIGN.md:114 ../../DESIGN.md:115 ../../DESIGN.md:187
 msgid "`checkDocumentDirty`"
 msgstr "`checkDocumentDirty`"
 
-#: ../../DESIGN.md:115 ../../DESIGN.md:116 ../../DESIGN.md:173
+#: ../../DESIGN.md:115 ../../DESIGN.md:116 ../../DESIGN.md:188
 msgid "`saveDocument`"
 msgstr "`saveDocument`"
 
@@ -440,45 +440,97 @@ msgid "`executeCode` (Jupyter only) is out of scope."
 msgstr "`executeCode`（Jupyter だけ）は、対象外です。"
 
 #: ../../DESIGN.md:120
+msgid "How a call turns out:"
+msgstr "ツール呼び出しの結末は、次のとおりです。"
+
+#: ../../DESIGN.md:122
+msgid ""
+"The answer to a tool call is one text content. If the adapter answers with a"
+" string, that string is the text as it is (for example `FILE_SAVED`); "
+"anything else is written as JSON."
+msgstr ""
+"ツール呼び出しの答えは、1 つのテキストです。アダプターが文字列で答えたときは、その文字列が、そのままテキストになります（たとえば "
+"`FILE_SAVED`）。それ以外は、JSON として書きます。"
+
+#: ../../DESIGN.md:124
+msgid ""
+"A call that fails (the adapter answers with an error, does not answer in "
+"time, or is gone) is still an answer: the result carries `isError: true` and"
+" the reason as its text. Claude gets to see why."
+msgstr ""
+"失敗した呼び出し（アダプターがエラーで答える、時間内に答えない、いなくなった）も、答えのうちです。結果に `isError: true` "
+"と、理由のテキストが入ります。Claude は、理由を見られます。"
+
+#: ../../DESIGN.md:126
+msgid ""
+"A call for a tool that is not available (unknown, or not declared by the "
+"adapter) is an error of the protocol, with code `-32602`, and nothing is "
+"sent to the adapter."
+msgstr ""
+"使えないツール（知らないもの、アダプターが宣言していないもの）の呼び出しは、プロトコルのエラー（コード "
+"`-32602`）で、アダプターには何も送りません。"
+
+#: ../../DESIGN.md:128
+msgid ""
+"`getWorkspaceFolders` is answered by the server from the registration, so it"
+" follows `workspaceFoldersChanged`."
+msgstr ""
+"`getWorkspaceFolders` は、サーバーが登録の内容から答えるので、`workspaceFoldersChanged` に追従します。"
+
+#: ../../DESIGN.md:130
+msgid ""
+"The MCP protocol itself (the handshake, version negotiation, `tools/list`, "
+"`tools/call`, errors) is handled by the `rmcp` crate, the official Rust SDK "
+"of MCP, behind the crate's own types in the `mcp` module. The least "
+"supported Rust is 1.88 because `rmcp` needs it. The messages that MCP does "
+"not define (`ide_connected`, `selection_changed`, ...) are custom "
+"notifications of the SDK."
+msgstr ""
+"MCP のプロトコル自体（握手、版の交渉、`tools/list`、`tools/call`、エラー）は、MCP の公式の Rust SDK である "
+"`rmcp` クレートが処理します。`mcp` モジュールの中で、このクレート自身の型の後ろに置いています。サポートする最小の Rust が 1.88 "
+"なのは、`rmcp` が要求するからです。MCP が定めていないメッセージ（`ide_connected`、`selection_changed` "
+"など）は、SDK の独自の通知として扱います。"
+
+#: ../../DESIGN.md:135
 msgid "Notifications sent to Claude"
 msgstr "Claude に送る通知"
 
-#: ../../DESIGN.md:122
+#: ../../DESIGN.md:137
 msgid "Notification"
 msgstr "通知"
 
-#: ../../DESIGN.md:122
+#: ../../DESIGN.md:137
 msgid "When"
 msgstr "いつ"
 
-#: ../../DESIGN.md:122
+#: ../../DESIGN.md:137
 msgid "`selection_changed`"
 msgstr "`selection_changed`"
 
-#: ../../DESIGN.md:124
+#: ../../DESIGN.md:139
 msgid "the adapter reports a new selection"
 msgstr "アダプターが、新しい選択範囲を知らせたとき"
 
-#: ../../DESIGN.md:124
+#: ../../DESIGN.md:139
 msgid "`at_mentioned`"
 msgstr "`at_mentioned`"
 
-#: ../../DESIGN.md:125
+#: ../../DESIGN.md:140
 msgid ""
 "the user sends the selection or a file as a reference (`filePath`, "
 "`lineStart`, `lineEnd`)"
 msgstr "利用者が、選択範囲かファイルを、参照として送ったとき（`filePath`、`lineStart`、`lineEnd`）"
 
-#: ../../DESIGN.md:125
+#: ../../DESIGN.md:140
 msgid "`diagnostics_changed`"
 msgstr "`diagnostics_changed`"
 
-#: ../../DESIGN.md:126
+#: ../../DESIGN.md:141
 #, python-brace-format
 msgid "the adapter reports changed diagnostics (`{ \"uris\": [...] }`)"
 msgstr "アダプターが、診断の変更を知らせたとき（`{ \"uris\": [...] }`）"
 
-#: ../../DESIGN.md:128
+#: ../../DESIGN.md:143
 msgid ""
 "Several integrations send `diagnostics_changed`; some third-party "
 "implementations do not. It is the first feature this project adds beyond "
@@ -487,11 +539,11 @@ msgstr ""
 "`diagnostics_changed` "
 "を送る連携はいくつかありますが、送らない第三者の実装もあります。広く使えるものに、このプロジェクトが最初に足す機能です。"
 
-#: ../../DESIGN.md:131
+#: ../../DESIGN.md:146
 msgid "Several CLIs on one workspace"
 msgstr "1 つのワークスペースに、複数の CLI"
 
-#: ../../DESIGN.md:133
+#: ../../DESIGN.md:148
 msgid ""
 "Each WebSocket connection is a separate client. The server accepts more than"
 " one per workspace (the VS Code extension keeps only the latest). A diff "
@@ -501,15 +553,15 @@ msgstr ""
 "WebSocket の接続は、1 本ごとに別のクライアントです。サーバーは、1 つのワークスペースで、複数を受け付けます（VS Code "
 "の拡張は、最新の 1 本だけを残します）。差分は、それを開いた接続のものです。その接続が閉じたとき、または、いなくなったときに、閉じます。"
 
-#: ../../DESIGN.md:137
+#: ../../DESIGN.md:152
 msgid "The adapter side"
 msgstr "アダプター側"
 
-#: ../../DESIGN.md:139
+#: ../../DESIGN.md:154
 msgid "Transport"
 msgstr "通信の経路"
 
-#: ../../DESIGN.md:141
+#: ../../DESIGN.md:156
 msgid ""
 "A Unix domain socket at `$XDG_RUNTIME_DIR/claude-ide-server/adapter.sock`, "
 "in a directory of mode 0700. The socket file is mode 0600."
@@ -517,7 +569,7 @@ msgstr ""
 "`$XDG_RUNTIME_DIR/claude-ide-server/adapter.sock` の Unix "
 "ドメインソケットです。置き場所のディレクトリはモード 0700、ソケットのファイルはモード 0600 です。"
 
-#: ../../DESIGN.md:143
+#: ../../DESIGN.md:158
 msgid ""
 "JSON-RPC 2.0 with `Content-Length` framing, as in LSP. Editors that already "
 "have an LSP client can reuse its transport. Checked with Neovim 0.12: "
@@ -536,7 +588,7 @@ msgstr ""
 "になります。ソケットがないときは、エラーにならず、Neovim がメッセージを出すだけで、`on_exit` "
 "も来ません。そのため、アダプターは、つなぐ前に、ソケットがあるかを確かめます。"
 
-#: ../../DESIGN.md:149
+#: ../../DESIGN.md:164
 msgid ""
 "Both sides send requests and notifications. The connection is the workspace:"
 " when it closes, the server closes the workspace's WebSocket clients and "
@@ -545,38 +597,38 @@ msgstr ""
 "どちらの側からも、要求と通知を送ります。接続がそのままワークスペースです。接続が閉じたら、サーバーは、そのワークスペースの WebSocket "
 "のクライアントとポートを閉じて、ロックファイルを消します。"
 
-#: ../../DESIGN.md:152
+#: ../../DESIGN.md:167
 msgid "Messages"
 msgstr "メッセージ"
 
-#: ../../DESIGN.md:154
+#: ../../DESIGN.md:169
 msgid "Adapter → server:"
 msgstr "アダプター → サーバー:"
 
-#: ../../DESIGN.md:156 ../../DESIGN.md:166
+#: ../../DESIGN.md:171 ../../DESIGN.md:181
 msgid "Message"
 msgstr "メッセージ"
 
-#: ../../DESIGN.md:156 ../../DESIGN.md:166
+#: ../../DESIGN.md:171 ../../DESIGN.md:181
 msgid "Kind"
 msgstr "種類"
 
-#: ../../DESIGN.md:156
+#: ../../DESIGN.md:171
 msgid "Params"
 msgstr "引数"
 
-#: ../../DESIGN.md:156
+#: ../../DESIGN.md:171
 msgid "`register`"
 msgstr "`register`"
 
-#: ../../DESIGN.md:158 ../../DESIGN.md:168 ../../DESIGN.md:169
-#: ../../DESIGN.md:170 ../../DESIGN.md:171 ../../DESIGN.md:172
-#: ../../DESIGN.md:173 ../../DESIGN.md:174 ../../DESIGN.md:175
-#: ../../DESIGN.md:176 ../../DESIGN.md:177
+#: ../../DESIGN.md:173 ../../DESIGN.md:183 ../../DESIGN.md:184
+#: ../../DESIGN.md:185 ../../DESIGN.md:186 ../../DESIGN.md:187
+#: ../../DESIGN.md:188 ../../DESIGN.md:189 ../../DESIGN.md:190
+#: ../../DESIGN.md:191 ../../DESIGN.md:192
 msgid "request"
 msgstr "要求"
 
-#: ../../DESIGN.md:158
+#: ../../DESIGN.md:173
 #, python-brace-format
 msgid ""
 "`ideName`, `pid`, `workspaceFolders`, `methods` (the server→adapter methods "
@@ -585,52 +637,52 @@ msgstr ""
 "`ideName`、`pid`、`workspaceFolders`、`methods`（実装しているサーバー→アダプターのメソッド）→ `{ "
 "\"port\": n }`"
 
-#: ../../DESIGN.md:158
+#: ../../DESIGN.md:173
 msgid "`workspaceFoldersChanged`"
 msgstr "`workspaceFoldersChanged`"
 
-#: ../../DESIGN.md:159 ../../DESIGN.md:160 ../../DESIGN.md:161
-#: ../../DESIGN.md:162 ../../DESIGN.md:178
+#: ../../DESIGN.md:174 ../../DESIGN.md:175 ../../DESIGN.md:176
+#: ../../DESIGN.md:177 ../../DESIGN.md:193
 msgid "notification"
 msgstr "通知"
 
-#: ../../DESIGN.md:159
+#: ../../DESIGN.md:174
 msgid "`workspaceFolders` (the lock file is rewritten)"
 msgstr "`workspaceFolders`（ロックファイルを書き直します）"
 
-#: ../../DESIGN.md:159
+#: ../../DESIGN.md:174
 msgid "`selectionChanged`"
 msgstr "`selectionChanged`"
 
-#: ../../DESIGN.md:160
+#: ../../DESIGN.md:175
 msgid "`filePath`, `text`, `selection`"
 msgstr "`filePath`、`text`、`selection`"
 
-#: ../../DESIGN.md:160
+#: ../../DESIGN.md:175
 msgid "`diagnosticsChanged`"
 msgstr "`diagnosticsChanged`"
 
-#: ../../DESIGN.md:161
+#: ../../DESIGN.md:176
 msgid "`uris`"
 msgstr "`uris`"
 
-#: ../../DESIGN.md:161
+#: ../../DESIGN.md:176
 msgid "`atMention`"
 msgstr "`atMention`"
 
-#: ../../DESIGN.md:162
+#: ../../DESIGN.md:177
 msgid "`filePath`, `lineStart`, `lineEnd`"
 msgstr "`filePath`、`lineStart`、`lineEnd`"
 
-#: ../../DESIGN.md:164
+#: ../../DESIGN.md:179
 msgid "Server → adapter:"
 msgstr "サーバー → アダプター:"
 
-#: ../../DESIGN.md:166
+#: ../../DESIGN.md:181
 msgid "Params → result"
 msgstr "引数 → 結果"
 
-#: ../../DESIGN.md:168
+#: ../../DESIGN.md:183
 #, python-brace-format
 msgid ""
 "`filePath`, `preview`, `startText`, `endText`, `selectToEndOfLine`, "
@@ -639,34 +691,34 @@ msgstr ""
 "`filePath`、`preview`、`startText`、`endText`、`selectToEndOfLine`、`makeFrontmost`"
 " → `{ filePath, languageId, lineCount }`"
 
-#: ../../DESIGN.md:169
+#: ../../DESIGN.md:184
 #, python-brace-format
 msgid "→ `{ tabs: [{ uri, isActive, label, languageId, isDirty }] }`"
 msgstr "→ `{ tabs: [{ uri, isActive, label, languageId, isDirty }] }`"
 
-#: ../../DESIGN.md:170 ../../DESIGN.md:171
+#: ../../DESIGN.md:185 ../../DESIGN.md:186
 #, python-brace-format
 msgid "→ selection, or `{ success: false }`"
 msgstr "→ 選択範囲、または `{ success: false }`"
 
-#: ../../DESIGN.md:172
+#: ../../DESIGN.md:187
 #, python-brace-format
 msgid ""
 "`uri?` → `[{ uri, diagnostics: [{ message, severity, range, source }] }]`"
 msgstr ""
 "`uri?` → `[{ uri, diagnostics: [{ message, severity, range, source }] }]`"
 
-#: ../../DESIGN.md:173
+#: ../../DESIGN.md:188
 #, python-brace-format
 msgid "`filePath` → `{ isDirty, isUntitled }`"
 msgstr "`filePath` → `{ isDirty, isUntitled }`"
 
-#: ../../DESIGN.md:174
+#: ../../DESIGN.md:189
 #, python-brace-format
 msgid "`filePath` → `{ saved }`"
 msgstr "`filePath` → `{ saved }`"
 
-#: ../../DESIGN.md:175
+#: ../../DESIGN.md:190
 msgid ""
 "`oldFilePath`, `newFilePath`, `newFileContents`, `tabName` → `\"saved\"` or "
 "`\"rejected\"`, answered when the user decides"
@@ -674,24 +726,24 @@ msgstr ""
 "`oldFilePath`、`newFilePath`、`newFileContents`、`tabName` → `\"saved\"` か "
 "`\"rejected\"`。利用者が決めたときに答えます"
 
-#: ../../DESIGN.md:176
+#: ../../DESIGN.md:191
 msgid "`tabName`"
 msgstr "`tabName`"
 
-#: ../../DESIGN.md:177
+#: ../../DESIGN.md:192
 #, python-brace-format
 msgid "→ `{ closed: n }`"
 msgstr "→ `{ closed: n }`"
 
-#: ../../DESIGN.md:177
+#: ../../DESIGN.md:192
 msgid "`shutdown`"
 msgstr "`shutdown`"
 
-#: ../../DESIGN.md:178
+#: ../../DESIGN.md:193
 msgid "the server is stopping"
 msgstr "サーバーが止まるとき"
 
-#: ../../DESIGN.md:180
+#: ../../DESIGN.md:195
 #, python-brace-format
 msgid ""
 "A selection is `{ start: { line, character }, end: { line, character }, "
@@ -705,7 +757,7 @@ msgstr ""
 "は含みません。エディタ自身の単位からの変換は、アダプターが行います。**（仮定）** CLI "
 "は、この値から行数を数えるだけなので、`character` を間違えても、Claude に見えるものは変わりません。"
 
-#: ../../DESIGN.md:185
+#: ../../DESIGN.md:200
 msgid ""
 "On `\"saved\"` from `openDiff`, the adapter has written `newFileContents` to"
 " `newFilePath`. The server answers Claude with the text `FILE_SAVED`; on "
@@ -715,11 +767,11 @@ msgstr ""
 "に書き終えています。サーバーは、Claude に `FILE_SAVED` というテキストで答えます。`\"rejected\"` "
 "のときは、`DIFF_REJECTED` です。"
 
-#: ../../DESIGN.md:188
+#: ../../DESIGN.md:203
 msgid "Versioning"
 msgstr "バージョン"
 
-#: ../../DESIGN.md:190
+#: ../../DESIGN.md:205
 msgid ""
 "`register` carries `protocolVersion`, an integer; the version described here"
 " is `1`. The server refuses an adapter whose version it does not know. "
@@ -729,11 +781,11 @@ msgstr ""
 "`register` は、整数の `protocolVersion` を持ちます。ここに書いてある版は `1` "
 "です。サーバーは、知らない版のアダプターを断ります。メソッドは、版を上げずに足せます。アダプターは、実装しているものを `methods` に並べます。"
 
-#: ../../DESIGN.md:194
+#: ../../DESIGN.md:209
 msgid "`register` in detail"
 msgstr "`register` の詳細"
 
-#: ../../DESIGN.md:196
+#: ../../DESIGN.md:211
 msgid ""
 "It must be the first message, and it is a request. Anything else first is "
 "answered with an error (a request) or just closes the connection (a "
@@ -743,7 +795,7 @@ msgstr ""
 "は、最初のメッセージで、要求でなければなりません。ほかのものが最初に来たときは、要求ならエラーで答え、通知なら、接続を閉じるだけです。`register`"
 " を 2 回送るのも、エラーです。"
 
-#: ../../DESIGN.md:198
+#: ../../DESIGN.md:213
 msgid ""
 "Parameters: `protocolVersion` (integer), `ideName` (non-empty string), `pid`"
 " (positive integer), `workspaceFolders` (a non-empty array of strings), "
@@ -751,19 +803,19 @@ msgid ""
 msgstr ""
 "引数は、`protocolVersion`（整数）、`ideName`（空でない文字列）、`pid`（正の整数）、`workspaceFolders`（空でない文字列の配列）、`methods`（文字列の配列）です。足りない引数や、型が違う引数は、エラーです。"
 
-#: ../../DESIGN.md:200
+#: ../../DESIGN.md:215
 #, python-brace-format
 msgid ""
 "The result is `{ \"port\": <integer> }`. By then the port listens and the "
 "lock file exists."
 msgstr "結果は `{ \"port\": <整数> }` です。この時点で、そのポートは待ち受けていて、ロックファイルもあります。"
 
-#: ../../DESIGN.md:201
+#: ../../DESIGN.md:216
 msgid ""
 "An adapter has 10 seconds to send it; a connection that does not is closed."
 msgstr "アダプターは、10 秒以内に送らなければなりません。送らない接続は、閉じられます。"
 
-#: ../../DESIGN.md:202
+#: ../../DESIGN.md:217
 #, python-brace-format
 msgid ""
 "`workspaceFoldersChanged` takes `{ \"workspaceFolders\": [...] }` (non-"
@@ -772,7 +824,7 @@ msgstr ""
 "`workspaceFoldersChanged` の引数は、`{ \"workspaceFolders\": [...] "
 "}`（空でない）です。それ以外は、無視されます。"
 
-#: ../../DESIGN.md:203
+#: ../../DESIGN.md:218
 msgid ""
 "The server's methods that an adapter has not declared in `methods` are not "
 "called. A request that the server does not know, sent by a registered "
@@ -781,7 +833,7 @@ msgstr ""
 "アダプターが `methods` で宣言していないメソッドは、呼ばれません。登録したアダプターが、サーバーの知らない要求を送ると、`-32601` "
 "が返ります。"
 
-#: ../../DESIGN.md:206
+#: ../../DESIGN.md:221
 msgid ""
 "Error codes: the JSON-RPC ones (`-32602` for bad parameters, `-32601` for an"
 " unknown method) and three of this protocol: `-32000` the protocol version "
@@ -794,7 +846,7 @@ msgstr ""
 "は最初のメッセージが `register` ではなかった、または `register` が 2 回来た、です。`register` "
 "へのエラーのあと、サーバーは、接続を閉じます。"
 
-#: ../../DESIGN.md:211
+#: ../../DESIGN.md:226
 msgid ""
 "When the server drops a workspace it sends the notification `shutdown` and "
 "closes the connection. A request that is waiting for an answer when the "
@@ -802,11 +854,11 @@ msgid ""
 msgstr ""
 "サーバーがワークスペースを手放すときは、通知 `shutdown` を送って、接続を閉じます。接続が終わったときに、答えを待っている要求は、失敗します。"
 
-#: ../../DESIGN.md:214
+#: ../../DESIGN.md:229
 msgid "Structure of the core crate"
 msgstr "core クレートの構成"
 
-#: ../../DESIGN.md:216
+#: ../../DESIGN.md:231
 msgid ""
 "The crate runs on tokio: its `async` functions must be called inside a tokio"
 " runtime, and tokio's I/O traits (`AsyncRead`, `AsyncWrite`) are the common "
@@ -817,26 +869,26 @@ msgstr ""
 " の I/O のトレイト（`AsyncRead`、`AsyncWrite`）を使います。それ以外の tokio "
 "の型（チャネル、タスク）と、下の層のライブラリの型は、このクレートの公開されたインターフェースに出しません。"
 
-#: ../../DESIGN.md:220
+#: ../../DESIGN.md:235
 msgid ""
 "Each outside library sits behind a type of the crate's own, and what lies "
 "inside knows only those types. There are three layers:"
 msgstr "外のライブラリは、それぞれ、このクレート自身の型の後ろに置きます。内側は、その型だけを知っています。層は 3 つです。"
 
-#: ../../DESIGN.md:223
+#: ../../DESIGN.md:238
 msgid ""
 "**The Claude side:** the WebSocket server (`ws`), the MCP handling, the lock"
 " files (`lock`)."
 msgstr "**Claude 側:** WebSocket サーバー（`ws`）、MCP の処理、ロックファイル（`lock`）。"
 
-#: ../../DESIGN.md:224
+#: ../../DESIGN.md:239
 msgid ""
 "**The middle:** workspaces (`workspace`), the dispatch of tool calls, and "
 "the crate's own types for tools, selections and diagnostics."
 msgstr ""
 "**中間:** ワークスペース（`workspace`）、ツール呼び出しの振り分け、ツール・選択範囲・診断についての、このクレート自身の型。"
 
-#: ../../DESIGN.md:226
+#: ../../DESIGN.md:241
 msgid ""
 "**The adapter side:** the adapter transport, the `register` exchange and the"
 " requests (`adapter`), and the JSON-RPC framing (`jsonrpc`)."
@@ -844,7 +896,7 @@ msgstr ""
 "**アダプター側:** アダプターとの通信路、`register` のやりとり、要求（`adapter`）と、JSON-RPC "
 "の区切り（`jsonrpc`）。"
 
-#: ../../DESIGN.md:229
+#: ../../DESIGN.md:244
 msgid ""
 "The sides do not know each other. `adapter` has no port and no lock file in "
 "it: when an adapter registers, it hands the registration up (as a "
@@ -860,13 +912,13 @@ msgstr ""
 "サーバーを起動し、ロックファイルを書き、アダプターにポートを渡し、それぞれの寿命を結びつけます。`ws` と `lock` "
 "は、アダプターのことを何も知りません。"
 
-#: ../../DESIGN.md:235
+#: ../../DESIGN.md:250
 msgid ""
 "Three seams are drawn on purpose, where this design already says that "
 "something may change:"
 msgstr "この設計がすでに「変わるかもしれない」と言っている所に、3 つの境界を、わざと引いています。"
 
-#: ../../DESIGN.md:237
+#: ../../DESIGN.md:252
 msgid ""
 "**The adapter transport.** A Unix socket now, a named pipe later. Everything"
 " above it works with a duplex byte stream that a listener accepts, not with "
@@ -875,7 +927,7 @@ msgstr ""
 "**アダプターとの通信路。** 今は Unix ソケット、あとで名前付きパイプ。これより上は、Unix "
 "ソケットの型ではなく、待ち受けが受け付ける、双方向のバイトストリームを使います。"
 
-#: ../../DESIGN.md:239
+#: ../../DESIGN.md:254
 msgid ""
 "**The MCP SDK.** If `rmcp` is used, its types stay inside the Claude side. "
 "The middle and the adapter side use the crate's own types, so that a new "
@@ -884,7 +936,7 @@ msgstr ""
 "**MCP の SDK。** `rmcp` を使うなら、その型は、Claude "
 "側の中にとどめます。中間とアダプター側は、このクレート自身の型を使います。SDK の新しい版や、別の SDK に替えても、1 つの層だけで済みます。"
 
-#: ../../DESIGN.md:241
+#: ../../DESIGN.md:256
 msgid ""
 "**The file system and the environment.** The lock file directory, the "
 "runtime directory and the check that a `pid` is alive are passed in as "
@@ -893,7 +945,7 @@ msgstr ""
 "**ファイルシステムと環境。** ロックファイルのディレクトリ、実行時のディレクトリ、`pid` "
 "が生きているかの確認は、設定として外から渡します。テストでは、一時ディレクトリを渡します。"
 
-#: ../../DESIGN.md:244
+#: ../../DESIGN.md:259
 msgid ""
 "Nothing else is put behind a trait in advance (TCP itself, the JSON shape of"
 " a lock file). A seam is added when something is known to change, not "
@@ -902,7 +954,7 @@ msgstr ""
 "それ以外は、前もってトレイトの後ろには置きません（TCP そのもの、ロックファイルの JSON "
 "の形）。境界は、変わることが分かったときに足します。その前には足しません。"
 
-#: ../../DESIGN.md:247
+#: ../../DESIGN.md:262
 msgid ""
 "One thing is kept out of the seams on purpose: the source of the token. The "
 "token is the only thing that keeps the other processes of the machine away "
@@ -920,19 +972,19 @@ msgstr ""
 " `test-support` という feature を通して、差し替えられます。この feature "
 "は、このクレート自身のテストでだけ有効で、ふつうのビルドでは、有効になりません。"
 
-#: ../../DESIGN.md:253
+#: ../../DESIGN.md:268
 msgid "Lifecycle"
 msgstr "起動から終了までの流れ"
 
-#: ../../DESIGN.md:255
+#: ../../DESIGN.md:270
 msgid "The server starts and listens on the adapter socket."
 msgstr "サーバーが起動して、アダプターのソケットで待ち受けます。"
 
-#: ../../DESIGN.md:256
+#: ../../DESIGN.md:271
 msgid "An adapter connects and sends `register`."
 msgstr "アダプターが接続して、`register` を送ります。"
 
-#: ../../DESIGN.md:257
+#: ../../DESIGN.md:272
 msgid ""
 "The server picks a free port on `127.0.0.1`, generates a 128-bit token from "
 "the OS CSPRNG, writes the lock file atomically (write to a temporary name, "
@@ -941,7 +993,7 @@ msgstr ""
 "サーバーは、`127.0.0.1` の空いているポートを選び、OS の暗号論的乱数から 128 "
 "ビットのトークンを作り、ロックファイルを原子的に書き（一時的な名前で書いてから、名前を変える）、ポートを返します。"
 
-#: ../../DESIGN.md:259
+#: ../../DESIGN.md:274
 msgid ""
 "The CLI finds the lock file, connects, and authenticates. Selection and "
 "diagnostics flow to it; its tool calls become adapter requests."
@@ -949,19 +1001,19 @@ msgstr ""
 "CLI が、ロックファイルを見つけて、つないで、認証します。選択範囲と診断は、CLI へ流れます。CLI "
 "のツール呼び出しは、アダプターへの要求になります。"
 
-#: ../../DESIGN.md:261
+#: ../../DESIGN.md:276
 msgid ""
 "The adapter disconnects (or crashes): the server closes the workspace's "
 "connections, removes the lock file, and fails any pending requests."
 msgstr "アダプターが切れる（か、落ちる）と、サーバーは、そのワークスペースの接続を閉じ、ロックファイルを消し、保留中の要求を失敗にします。"
 
-#: ../../DESIGN.md:263
+#: ../../DESIGN.md:278
 msgid ""
 "On shutdown the server sends `shutdown` to adapters and removes every lock "
 "file it wrote."
 msgstr "終了するとき、サーバーは、アダプターに `shutdown` を送り、自分が書いたロックファイルをすべて消します。"
 
-#: ../../DESIGN.md:265
+#: ../../DESIGN.md:280
 msgid ""
 "If the server itself is killed, its lock files are left behind. The server "
 "records the lock files it wrote under its runtime directory and removes the "
@@ -969,18 +1021,18 @@ msgid ""
 msgstr ""
 "サーバー自身が強制終了されると、ロックファイルが残ります。サーバーは、自分が書いたロックファイルを、実行時のディレクトリに記録しておき、次の起動で、まだ残っているものを消します。"
 
-#: ../../DESIGN.md:268
+#: ../../DESIGN.md:283
 msgid "Security"
 msgstr "セキュリティ"
 
-#: ../../DESIGN.md:270
+#: ../../DESIGN.md:285
 msgid ""
 "Every listener is on `127.0.0.1`. The adapter socket is in a 0700 directory "
 "and is itself 0600."
 msgstr ""
 "待ち受けは、すべて `127.0.0.1` です。アダプターのソケットは、モード 0700 のディレクトリの中にあり、ソケット自身も 0600 です。"
 
-#: ../../DESIGN.md:271
+#: ../../DESIGN.md:286
 msgid ""
 "The token is checked on every WebSocket upgrade. A web page cannot set that "
 "header, so a browser cannot talk to the port."
@@ -988,13 +1040,13 @@ msgstr ""
 "トークンは、WebSocket へのアップグレードのたびに確かめます。Web "
 "ページは、そのヘッダーを付けられないので、ブラウザーは、そのポートと話せません。"
 
-#: ../../DESIGN.md:273
+#: ../../DESIGN.md:288
 msgid ""
 "Frame and message sizes are capped. A malformed message closes that "
 "connection and nothing else."
 msgstr "フレームとメッセージの大きさには、上限があります。壊れたメッセージは、その接続だけを閉じます。"
 
-#: ../../DESIGN.md:274
+#: ../../DESIGN.md:289
 msgid ""
 "Paths from Claude are used as given by the adapter; the server never reads "
 "or writes project files itself. Writing a file after an accepted diff is the"
@@ -1003,11 +1055,11 @@ msgstr ""
 "Claude "
 "からのパスは、アダプターが渡したとおりに使います。サーバー自身は、プロジェクトのファイルを読み書きしません。差分が承認されたあとの、ファイルの書き込みは、アダプターの仕事です。"
 
-#: ../../DESIGN.md:277
+#: ../../DESIGN.md:292
 msgid "Testing"
 msgstr "テスト"
 
-#: ../../DESIGN.md:279
+#: ../../DESIGN.md:294
 msgid ""
 "A mock Claude client (WebSocket) and a mock adapter (Unix socket) run in the"
 " same test process. Tests cover the handshake, authentication, every tool, "
@@ -1016,23 +1068,23 @@ msgstr ""
 "偽の Claude クライアント（WebSocket）と、偽のアダプター（Unix "
 "ソケット）を、同じテストのプロセスで動かします。テストは、握手、認証、すべてのツール、通知、差分、切断、後始末を扱います。"
 
-#: ../../DESIGN.md:281
+#: ../../DESIGN.md:296
 msgid ""
 "The expected shapes of tool results come from the observed behaviour above, "
 "written down as fixtures."
 msgstr "ツールの結果の期待する形は、上に書いた、観察した挙動から取り、フィクスチャとして書き残します。"
 
-#: ../../DESIGN.md:282
+#: ../../DESIGN.md:297
 msgid ""
 "Each adapter has its own tests; the Neovim one runs headless Neovim against "
 "a real server."
 msgstr "アダプターごとに、自分のテストを持ちます。Neovim のものは、ヘッドレスの Neovim を、本物のサーバーにつないで動かします。"
 
-#: ../../DESIGN.md:284
+#: ../../DESIGN.md:299
 msgid "Milestones"
 msgstr "マイルストーン"
 
-#: ../../DESIGN.md:286
+#: ../../DESIGN.md:301
 msgid ""
 "**M0, server skeleton.** WebSocket server, lock file, token, `initialize`, "
 "`tools/list`. A mock adapter."
@@ -1040,7 +1092,7 @@ msgstr ""
 "**M0、サーバーの骨組み。** WebSocket "
 "サーバー、ロックファイル、トークン、`initialize`、`tools/list`。偽のアダプター。"
 
-#: ../../DESIGN.md:287
+#: ../../DESIGN.md:302
 msgid ""
 "**M1, read-only tools.** `getOpenEditors`, `getWorkspaceFolders`, "
 "`getCurrentSelection`, `getLatestSelection`, `getDiagnostics`; "
@@ -1049,14 +1101,14 @@ msgstr ""
 "**M1、読み取りだけのツール。** "
 "`getOpenEditors`、`getWorkspaceFolders`、`getCurrentSelection`、`getLatestSelection`、`getDiagnostics`。`selection_changed`、`at_mentioned`。"
 
-#: ../../DESIGN.md:289
+#: ../../DESIGN.md:304
 msgid ""
 "**M2, Neovim adapter.** Lua, over `vim.lsp.rpc`. Registers the main windows "
 "only."
 msgstr ""
 "**M2、Neovim のアダプター。** Lua で、`vim.lsp.rpc` の上に作ります。登録するのは、メインのウィンドウだけです。"
 
-#: ../../DESIGN.md:290
+#: ../../DESIGN.md:305
 msgid ""
 "**M3, actions.** `openFile`, `checkDocumentDirty`, `saveDocument`, "
 "`diagnostics_changed`."
@@ -1064,7 +1116,7 @@ msgstr ""
 "**M3、操作。** "
 "`openFile`、`checkDocumentDirty`、`saveDocument`、`diagnostics_changed`。"
 
-#: ../../DESIGN.md:291
+#: ../../DESIGN.md:306
 msgid ""
 "**M4, diffs.** `openDiff`, `close_tab`, `closeAllDiffTabs`, and an "
 "accept/reject flow in the Neovim adapter."
@@ -1072,29 +1124,29 @@ msgstr ""
 "**M4、差分。** `openDiff`、`close_tab`、`closeAllDiffTabs`。それと、Neovim "
 "のアダプターの、承認と拒否の流れ。"
 
-#: ../../DESIGN.md:293
+#: ../../DESIGN.md:308
 msgid "Open questions"
 msgstr "未解決の問い"
 
-#: ../../DESIGN.md:295
+#: ../../DESIGN.md:310
 msgid ""
 "Whether to start the server on demand (systemd socket activation) or keep it"
 " running."
 msgstr "サーバーを、必要になったときに起動するか（systemd のソケットアクティベーション）、動かしたままにするか。"
 
-#: ../../DESIGN.md:296
+#: ../../DESIGN.md:311
 msgid ""
 "What an adapter should do when the server is not there: retry, and for how "
 "long."
 msgstr "サーバーがいないときに、アダプターがどうするか。再試行するか、どのくらいの間か。"
 
-#: ../../DESIGN.md:297
+#: ../../DESIGN.md:312
 msgid ""
 "Whether to write both a path and its symlink-resolved form into "
 "`workspaceFolders`, since the CLI compares text."
 msgstr "CLI は文字列で比べるので、`workspaceFolders` に、パスと、シンボリックリンクを解決した形の両方を書くか。"
 
-#: ../../DESIGN.md:298
+#: ../../DESIGN.md:313
 msgid "A named-pipe transport for Windows."
 msgstr "Windows 向けの、名前付きパイプの経路。"
 
