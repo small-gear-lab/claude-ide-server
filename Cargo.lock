@@ -109,10 +109,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "claude-ide-launchd"
+version = "0.0.0"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "claude-ide-server"
 version = "0.0.0"
 dependencies = [
  "claude-ide-core",
+ "claude-ide-launchd",
  "futures-util",
  "listenfd",
  "rustix",

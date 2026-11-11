@@ -8,12 +8,16 @@
 //! | source | for | how |
 //! |---|---|---|
 //! | [`Handed`] | systemd, and other supervisors and container runtimes that follow the same convention | the socket is already listening on a file descriptor that the process inherits (`LISTEN_FDS`) |
+//! | `Launchd` (macOS) | launchd | the socket is asked for by name, from the property list of the job (`launch_activate_socket`) |
 //! | [`Bind`] | everything else, and the default | the server makes the socket itself |
 //!
 //! What a system does differently is added here, in a source of its own and selected by `cfg` where the system decides
 //! it (launchd on macOS, which hands a socket over by name through its own interface; Task Scheduler on Windows, which
 //! has no socket activation and needs a different kind of endpoint). Until a system has its own source it uses
 //! [`Bind`], with the supervisor of the system starting the executable at log-in.
+//!
+//! The call that launchd's source needs is C, and is wrapped in a crate of its own (`claude-ide-launchd`), so that this
+//! crate stays free of `unsafe`.
 
 use std::io;
 use std::path::PathBuf;
@@ -44,9 +48,20 @@ pub fn open_first(sources: &[Box<dyn SocketSource>]) -> io::Result<(UnixListener
     ))
 }
 
-/// The sources for this system, in the order they are tried: a socket that was handed over, then making our own.
+/// The name of the socket in the `Sockets` dictionary of the property list for launchd (`contrib/launchd`).
+#[cfg(target_os = "macos")]
+pub const LAUNCHD_SOCKET_NAME: &str = "adapter";
+
+/// The sources for this system, in the order they are tried: a socket that was handed over (by the convention of
+/// systemd, and, on macOS, by launchd), then making our own.
 pub fn default_sources(path: PathBuf) -> Vec<Box<dyn SocketSource>> {
-    vec![Box::new(Handed), Box::new(Bind { path })]
+    let mut sources: Vec<Box<dyn SocketSource>> = vec![Box::new(Handed)];
+    #[cfg(target_os = "macos")]
+    sources.push(Box::new(Launchd {
+        name: LAUNCHD_SOCKET_NAME,
+    }));
+    sources.push(Box::new(Bind { path }));
+    sources
 }
 
 /// A socket that is already listening, inherited from the process that started the server (`LISTEN_PID` is this
@@ -63,6 +78,41 @@ impl SocketSource for Handed {
         match fds.take_unix_listener(0)? {
             Some(socket) => UnixListener::from_listening(socket).map(Some),
             None => Ok(None),
+        }
+    }
+}
+
+/// A socket that launchd listens on, asked for by the name that it has in the `Sockets` dictionary of the property list of
+/// the job. It does not apply when launchd did not start this process (the server was run by hand, say), or started it
+/// from a property list that has no such socket (the one that only runs the server at log-in): the server then makes its own.
+/// Like a handed-over socket it is not removed when the server exits, and launchd starts the server again at the next
+/// connection.
+#[cfg(target_os = "macos")]
+pub struct Launchd {
+    pub name: &'static str,
+}
+
+#[cfg(target_os = "macos")]
+impl SocketSource for Launchd {
+    fn name(&self) -> &'static str {
+        "handed over by launchd"
+    }
+
+    fn open(&self) -> io::Result<Option<UnixListener>> {
+        use claude_ide_launchd::{Error, activate_socket};
+        match activate_socket(self.name) {
+            Ok(fds) => {
+                // One socket: the first is used, and the others (there are none for a socket of one path) are closed.
+                let Some(fd) = fds.into_iter().next() else {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "launchd handed over no socket",
+                    ));
+                };
+                UnixListener::from_listening(std::os::unix::net::UnixListener::from(fd)).map(Some)
+            }
+            Err(Error::NotManaged | Error::NotInPlist) => Ok(None),
+            Err(Error::Failed(error)) => Err(error),
         }
     }
 }
@@ -104,6 +154,16 @@ mod tests {
         fn open(&self) -> io::Result<Option<UnixListener>> {
             Err(io::Error::other("it applies, and fails"))
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_launchd_source_does_not_apply_to_a_process_that_launchd_did_not_start() {
+        // `Launchd` asks for a name that no property list has: it says that it does not apply, and does not fail.
+        let source = Launchd {
+            name: "claude-ide-server-test",
+        };
+        assert!(matches!(source.open(), Ok(None)));
     }
 
     #[tokio::test]

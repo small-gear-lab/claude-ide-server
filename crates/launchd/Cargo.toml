@@ -1,0 +1,19 @@
+[package]
+name = "claude-ide-launchd"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The one call of launchd's socket activation, wrapped so that nothing else needs unsafe"
+publish = false
+
+# Not `workspace = true`: the workspace forbids unsafe code, and this crate is the one place that has a reason for it
+# (calling `launch_activate_socket`, and taking the file descriptors that it hands over). It is denied, and allowed in
+# the three places in `src/lib.rs` where it is needed (the declaration of the C function and the two blocks that use
+# it), each with the reason written down.
+[lints.rust]
+unsafe_code = "deny"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2.191"
