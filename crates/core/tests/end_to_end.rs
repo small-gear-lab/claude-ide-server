@@ -26,6 +26,7 @@ async fn register_connect_list_call_disconnect_and_clean_up() {
         claude_config_dir: Some(root.path().join("claude")),
         home: None,
         xdg_runtime_dir: Some(root.path().join("run")),
+        socket: None,
         user: "1000".into(),
     };
     let dirs = LockDirs::from_env(&env).unwrap();

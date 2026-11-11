@@ -63,9 +63,22 @@ function Session:stop()
   self.started_server = false
 end
 
----@return string
+--- Where the server listens: what `opts.socket` says, or the default of this system (which a system may have to ask the
+--- server executable for: that is done once, and not again).
+---@return string? path
+---@return string? why Why there is none yet.
 function Session:socket()
-  return self.opts.socket or transport.socket_path()
+  if self.opts.socket then
+    return self.opts.socket
+  end
+  if not self.default_socket then
+    local path, why = transport.socket_path(self.opts.server.command)
+    if not path then
+      return nil, why
+    end
+    self.default_socket = path
+  end
+  return self.default_socket
 end
 
 --- Sends a notification to the server, if there is a registered connection. Returns whether it was sent.
@@ -81,7 +94,15 @@ end
 
 function Session:_attempt()
   local generation = self.generation
-  transport.probe(self:socket(), function(ok, err)
+  local socket, why = self:socket()
+  if not socket then
+    -- It is not known where to connect (the executable that says so is not there): say it once, and try again later, as for
+    -- a server that is not there.
+    self:_warn(why)
+    self:_lost(generation, why)
+    return
+  end
+  transport.probe(socket, function(ok, err)
     if generation ~= self.generation then
       return
     end
@@ -125,7 +146,12 @@ function Session:_open(generation)
       end)
     end,
   }
-  local ok, client = pcall(vim.lsp.rpc.connect(self:socket()), dispatchers)
+  local socket, why = self:socket()
+  if not socket then
+    self:_lost(generation, why)
+    return
+  end
+  local ok, client = pcall(vim.lsp.rpc.connect(socket), dispatchers)
   if not ok then
     self:_lost(generation, tostring(client))
     return

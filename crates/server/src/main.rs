@@ -26,6 +26,15 @@ fn main() -> ExitCode {
             return ExitCode::from(serve::exit::USAGE);
         }
     };
+    if options.print_socket {
+        // Where the adapters connect, for an adapter that cannot work it out as the server does (on Windows the name of the
+        // pipe has the security identifier of the user in it, which a Lua program does not have).
+        let path = options.socket.clone().unwrap_or_else(|| {
+            claude_ide_core::workspace::socket_path(&claude_ide_core::lock::EnvVars::from_process())
+        });
+        println!("{}", path.display());
+        return ExitCode::SUCCESS;
+    }
     logging::init(options.verbosity);
     let runtime = match tokio::runtime::Runtime::new() {
         Ok(runtime) => runtime,

@@ -380,6 +380,7 @@ fn the_adapter_pipe_has_the_user_in_its_name() {
         claude_config_dir: None,
         home: Some(r"C:\Users\u".into()),
         xdg_runtime_dir: xdg.map(Into::into),
+        socket: None,
         user: "S-1-5-21-1-2-3-1001".into(),
     };
     let expected = std::path::PathBuf::from(r"\\.\pipe\claude-ide-server-S-1-5-21-1-2-3-1001");
@@ -395,6 +396,7 @@ fn the_adapter_socket_goes_into_the_runtime_directory() {
         claude_config_dir: None,
         home: Some("/home/u".into()),
         xdg_runtime_dir: xdg.map(Into::into),
+        socket: None,
         user: "1000".into(),
     };
     assert_eq!(
@@ -406,6 +408,22 @@ fn the_adapter_socket_goes_into_the_runtime_directory() {
         std::env::temp_dir()
             .join("claude-ide-server-1000")
             .join("adapter.sock")
+    );
+}
+
+/// One place for the server and for the adapters that read the variable, whatever the system's default is.
+#[test]
+fn the_socket_can_be_set_by_the_environment() {
+    let env = EnvVars {
+        claude_config_dir: None,
+        home: None,
+        xdg_runtime_dir: Some("/run/user/1000".into()),
+        socket: Some("/somewhere/else".into()),
+        user: "1000".into(),
+    };
+    assert_eq!(
+        socket_path(&env),
+        std::path::PathBuf::from("/somewhere/else")
     );
 }
 

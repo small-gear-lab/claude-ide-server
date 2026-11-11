@@ -12,7 +12,10 @@ Runs the server that connects editors to Claude Code (/ide).
 Options:
   --socket <path>        Where the adapters connect. Default: adapter.sock in the runtime directory
                          (on Windows, the named pipe \\\\.\\pipe\\claude-ide-server-<sid>, and a path is a pipe name).
-                         Ignored when the socket is handed over by whatever started the server.
+                         CLAUDE_IDE_SERVER_SOCKET sets it for the server and the adapters that read it, and --socket
+                         wins over it. Ignored when the socket is handed over by whatever started the server.
+  --print-socket         Print where the adapters connect (the --socket, or the default) and exit: for an
+                         adapter that has to know it, and cannot work it out as the server does.
   --idle-timeout <secs>  Exit when the last adapter has been gone for this long. Default: never.
   -v, --verbose          More detail in the log; twice for the most.
   -q, --quiet            Log only warnings and errors.
@@ -33,6 +36,8 @@ pub enum Command {
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Options {
     pub socket: Option<PathBuf>,
+    /// Only say where the adapters connect, and end.
+    pub print_socket: bool,
     pub idle_timeout: Option<Duration>,
     /// 0 is the usual level; each `-v` is one more, each `-q` one less.
     pub verbosity: i8,
@@ -72,6 +77,7 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Command, String
             "-v" | "--verbose" => options.verbosity = options.verbosity.saturating_add(1),
             "-q" | "--quiet" => options.verbosity = options.verbosity.saturating_sub(1),
             "--socket" => options.socket = Some(PathBuf::from(value("--socket")?)),
+            "--print-socket" => options.print_socket = true,
             "--idle-timeout" => {
                 let text = value("--idle-timeout")?;
                 let seconds: u64 = text.parse().map_err(|_| {
@@ -109,6 +115,14 @@ mod tests {
                 socket: Some("/run/a.sock".into()),
                 idle_timeout: Some(Duration::from_secs(30)),
                 verbosity: 2,
+                ..Options::default()
+            }))
+        );
+        assert_eq!(
+            parse_strs(&["--print-socket"]),
+            Ok(Command::Run(Options {
+                print_socket: true,
+                ..Options::default()
             }))
         );
         assert_eq!(

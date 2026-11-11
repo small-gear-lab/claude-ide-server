@@ -38,14 +38,35 @@ impl Home {
         }
     }
 
-    /// Where a server that is not given `--socket` puts the socket, with the environment of `command`.
-    #[cfg(unix)]
+    /// Where a server that is not given `--socket` puts the socket, with the environment of `command`: under the
+    /// runtime directory on Unix, which tests the default; on Windows the pipe of this test, which the environment says
+    /// (`CLAUDE_IDE_SERVER_SOCKET`; the default there is the pipe of the user, which every test would share).
     pub fn default_socket(&self) -> PathBuf {
-        self.dir
-            .path()
-            .join("xdg")
-            .join("claude-ide-server")
-            .join("adapter.sock")
+        #[cfg(unix)]
+        {
+            self.dir
+                .path()
+                .join("xdg")
+                .join("claude-ide-server")
+                .join("adapter.sock")
+        }
+        #[cfg(windows)]
+        {
+            self.socket()
+        }
+    }
+
+    /// What a test that talks to a Neovim listens on: a socket file in the directory, or a pipe of this test's own.
+    pub fn nvim_listen(&self) -> PathBuf {
+        #[cfg(unix)]
+        {
+            self.dir.path().join("nvim.sock")
+        }
+        #[cfg(windows)]
+        {
+            let unique = self.dir.path().file_name().unwrap().to_string_lossy();
+            PathBuf::from(format!(r"\\.\pipe\claude-ide-nvim-test-{unique}"))
+        }
     }
 
     pub fn lock_dir(&self) -> PathBuf {
@@ -60,12 +81,15 @@ impl Home {
             .env("XDG_RUNTIME_DIR", self.dir.path().join("xdg"))
             .env("HOME", self.dir.path())
             .env("USERPROFILE", self.dir.path())
+            .env_remove("CLAUDE_IDE_SERVER_SOCKET")
             .env_remove("LISTEN_FDS")
             .env_remove("LISTEN_PID")
             .env_remove("RUST_LOG")
             .env_remove("CLAUDE_IDE_SERVER_LOG")
             .stdin(Stdio::null())
             .stderr(Stdio::from(std::fs::File::create(self.log_path()).unwrap()));
+        #[cfg(windows)]
+        command.env("CLAUDE_IDE_SERVER_SOCKET", self.socket());
         command
     }
 
@@ -106,6 +130,15 @@ impl Server {
     /// Ends the server at once, with no chance to clean up (what a process gets when Windows ends a task, or `kill -9`).
     pub fn kill(&mut self) {
         self.0.kill().unwrap();
+    }
+
+    /// Tells the server to stop, as whoever runs it would: `SIGTERM` on Unix, and on Windows, which has no such signal for
+    /// a program with no window, the end that a task gets (the lock file goes all the same, with the process).
+    pub fn stop(&mut self) {
+        #[cfg(unix)]
+        self.terminate();
+        #[cfg(windows)]
+        self.kill();
     }
 
     pub async fn wait(&mut self) -> ExitStatus {

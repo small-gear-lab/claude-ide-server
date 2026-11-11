@@ -207,6 +207,7 @@ fn directories_follow_the_environment() {
         claude_config_dir: config.map(PathBuf::from),
         home: home.map(PathBuf::from),
         xdg_runtime_dir: xdg.map(PathBuf::from),
+        socket: None,
         user: "1000".into(),
     };
 

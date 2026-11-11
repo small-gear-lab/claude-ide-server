@@ -31,6 +31,29 @@ check(
   '/tmp/claude-ide-server-501/adapter.sock'
 )
 
+check(
+  'the environment says where the server listens, for it and for the adapter',
+  transport.default_socket_path({ socket = '/somewhere/else', xdg_runtime_dir = '/run/user/1000', uid = 1000 }),
+  '/somewhere/else'
+)
+check(
+  'an empty value of the variable counts as unset',
+  transport.default_socket_path({ socket = '', xdg_runtime_dir = '/run/user/1000', uid = 1000 }),
+  '/run/user/1000/claude-ide-server/adapter.sock'
+)
+
+-- Where the server listens, when only the server can say (Windows): what its `--print-socket` prints. A program that prints
+-- one line stands for it (`echo` prints its arguments, `--print-socket` among them); these need a shell, so not on Windows.
+if vim.fn.has('win32') == 0 then
+  check('the server says where it listens', { transport.ask_server('echo') }, { '--print-socket' })
+  local missing, why = transport.ask_server('claude-ide-no-such-program')
+  check('a server that is not there is said so', { missing, why ~= nil and why:find('was not found', 1, true) ~= nil }, { nil, true })
+  local refused, failed = transport.ask_server('false')
+  check('a server that fails is said so', { refused, failed ~= nil and failed:find('ended with code 1', 1, true) ~= nil }, { nil, true })
+  local silent, nothing = transport.ask_server('true')
+  check('a server that says nothing is said so', { silent, nothing ~= nil and nothing:find('printed nothing', 1, true) ~= nil }, { nil, true })
+end
+
 -- The wait before the next attempt doubles, up to a maximum.
 local reconnect = { initial_ms = 500, max_ms = 10000 }
 local delays = {}

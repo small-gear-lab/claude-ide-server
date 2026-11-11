@@ -25,17 +25,25 @@ use crate::notifications::{Forward, forward};
 use crate::tools::WorkspaceTools;
 use crate::ws::{self, WsServer};
 
-/// Where the adapter socket goes by default: `adapter.sock` in the runtime directory (see [`lock::runtime_dir`]).
+/// Where the adapter socket goes by default: what `CLAUDE_IDE_SERVER_SOCKET` says, or else `adapter.sock` in the runtime
+/// directory (see [`lock::runtime_dir`]).
 #[cfg(unix)]
 pub fn socket_path(env: &EnvVars) -> PathBuf {
-    lock::runtime_dir(env).join("adapter.sock")
+    match &env.socket {
+        Some(socket) => socket.clone(),
+        None => lock::runtime_dir(env).join("adapter.sock"),
+    }
 }
 
-/// Where the adapters connect by default: the named pipe `\\.\pipe\claude-ide-server-<sid>`, with the security identifier of
-/// the user in its name, so that two users of one machine do not meet (a pipe has no directory to keep them apart).
+/// Where the adapters connect by default: what `CLAUDE_IDE_SERVER_SOCKET` says, or else the named pipe
+/// `\\.\pipe\claude-ide-server-<sid>`, with the security identifier of the user in its name, so that two users of one
+/// machine do not meet (a pipe has no directory to keep them apart).
 #[cfg(windows)]
 pub fn socket_path(env: &EnvVars) -> PathBuf {
-    PathBuf::from(claude_ide_windows::default_pipe_name(&env.user))
+    match &env.socket {
+        Some(socket) => socket.clone(),
+        None => PathBuf::from(claude_ide_windows::default_pipe_name(&env.user)),
+    }
 }
 
 /// See [`Config::claude_observer`].

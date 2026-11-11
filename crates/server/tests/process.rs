@@ -199,6 +199,65 @@ async fn it_ends_by_itself_when_no_adapter_ever_comes_if_told_to() {
     assert!(!home.socket().exists());
 }
 
+/// For an adapter that cannot work out the default as the server does (see `--help`).
+#[test]
+fn the_socket_is_printed_for_an_adapter_that_has_to_know_it() {
+    let home = Home::new();
+    let print = |extra: &[&str]| {
+        let output = home
+            .command()
+            .arg("--print-socket")
+            .args(extra)
+            .stderr(Stdio::piped())
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(0));
+        String::from_utf8(output.stdout).unwrap().trim().to_owned()
+    };
+    // What was asked for, as it was asked for.
+    assert_eq!(
+        print(&["--socket", &home.socket().to_string_lossy()]),
+        home.socket().to_string_lossy()
+    );
+    // The environment, when it says (a test on Windows has it set, for the pipe of the test).
+    assert_eq!(
+        home.command()
+            .env("CLAUDE_IDE_SERVER_SOCKET", "from-the-environment")
+            .arg("--print-socket")
+            .output()
+            .map(|output| String::from_utf8(output.stdout).unwrap().trim().to_owned())
+            .unwrap(),
+        "from-the-environment"
+    );
+    // And the switch wins over it.
+    assert_eq!(
+        home.command()
+            .env("CLAUDE_IDE_SERVER_SOCKET", "from-the-environment")
+            .args(["--print-socket", "--socket", "from-the-switch"])
+            .output()
+            .map(|output| String::from_utf8(output.stdout).unwrap().trim().to_owned())
+            .unwrap(),
+        "from-the-switch"
+    );
+    // Otherwise the default of this system.
+    let default = home
+        .command()
+        .env_remove("CLAUDE_IDE_SERVER_SOCKET")
+        .arg("--print-socket")
+        .output()
+        .map(|output| String::from_utf8(output.stdout).unwrap().trim().to_owned())
+        .unwrap();
+    #[cfg(unix)]
+    assert_eq!(default, home.default_socket().to_string_lossy());
+    #[cfg(windows)]
+    assert!(
+        default.starts_with(r"\\.\pipe\claude-ide-server-S-1-"),
+        "{default}"
+    );
+    // And the server is not started: nothing listens on what was printed.
+    assert!(home.lock_files().is_empty());
+}
+
 #[test]
 fn a_wrong_command_line_is_told_and_exits_with_2() {
     let home = Home::new();

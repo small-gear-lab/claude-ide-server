@@ -25,6 +25,9 @@ pub struct EnvVars {
     pub home: Option<PathBuf>,
     /// `XDG_RUNTIME_DIR`.
     pub xdg_runtime_dir: Option<PathBuf>,
+    /// `CLAUDE_IDE_SERVER_SOCKET`: where the adapters connect, in place of the default. The server and the adapters that
+    /// read it agree on one place without being told twice (a supervisor, or a test, sets it once).
+    pub socket: Option<PathBuf>,
     /// Who the user is, for the names that two users of one machine must not share (the fallback runtime directory, the
     /// pipe on Windows): the numeric id on Unix, the security identifier (SID) on Windows.
     pub user: String,
@@ -51,6 +54,7 @@ impl EnvVars {
             claude_config_dir: var("CLAUDE_CONFIG_DIR"),
             home,
             xdg_runtime_dir: var("XDG_RUNTIME_DIR"),
+            socket: var("CLAUDE_IDE_SERVER_SOCKET"),
             user,
         }
     }
