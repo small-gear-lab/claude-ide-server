@@ -42,6 +42,9 @@ pub struct ToolDefinition {
 pub struct ToolResult {
     /// The text that Claude gets.
     pub text: String,
+    /// More texts, after the first: a result may have several (the answer to `openDiff` has two, `FILE_SAVED` and then
+    /// the contents).
+    pub more: Vec<String>,
     /// Whether the call failed (the text then says why). A failed call is still an answer to the request.
     pub is_error: bool,
 }
@@ -429,14 +432,16 @@ impl<B: ToolBackend> ServerHandler for IdeHandler<B> {
     ) -> Result<CallToolResponse, McpError> {
         let arguments = Value::Object(request.arguments.unwrap_or_default());
         match self.hub.backend.call(&request.name, arguments).await {
-            Ok(ToolResult {
-                text,
-                is_error: false,
-            }) => Ok(CallToolResult::success(vec![ContentBlock::text(text)]).into()),
-            Ok(ToolResult {
-                text,
-                is_error: true,
-            }) => Ok(CallToolResult::error(vec![ContentBlock::text(text)]).into()),
+            Ok(result) => {
+                let mut texts = vec![ContentBlock::text(result.text)];
+                texts.extend(result.more.into_iter().map(ContentBlock::text));
+                Ok(if result.is_error {
+                    CallToolResult::error(texts)
+                } else {
+                    CallToolResult::success(texts)
+                }
+                .into())
+            }
             Err(ToolError::UnknownTool(name)) => Err(McpError::invalid_params(
                 format!("unknown tool: {name}"),
                 None,

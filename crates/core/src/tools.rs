@@ -266,6 +266,7 @@ impl ToolBackend for WorkspaceTools {
         if let Err(reason) = check_arguments(&(spec.schema)(), &arguments) {
             return Ok(ToolResult {
                 text: format!("invalid arguments for {name}: {reason}"),
+                more: Vec::new(),
                 is_error: true,
             });
         }
@@ -277,6 +278,7 @@ impl ToolBackend for WorkspaceTools {
             Backing::Server => {
                 return Ok(ToolResult {
                     text: workspace_folders_text(&(self.folders)()),
+                    more: Vec::new(),
                     is_error: false,
                 });
             }
@@ -285,6 +287,7 @@ impl ToolBackend for WorkspaceTools {
                 if !self.declared(method) {
                     return Ok(ToolResult {
                         text: otherwise.to_owned(),
+                        more: Vec::new(),
                         is_error: false,
                     });
                 }
@@ -296,15 +299,18 @@ impl ToolBackend for WorkspaceTools {
                 Ok(result) => match answer_text(spec.answer, &result, &arguments) {
                     Ok(text) => ToolResult {
                         text,
+                        more: Vec::new(),
                         is_error: false,
                     },
                     Err(error) => ToolResult {
                         text: format!("the editor's answer to {name} is not valid: {error}"),
+                        more: Vec::new(),
                         is_error: true,
                     },
                 },
                 Err(error) => ToolResult {
                     text: error_text(&error),
+                    more: Vec::new(),
                     is_error: true,
                 },
             },
