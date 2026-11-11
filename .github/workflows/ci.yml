@@ -89,3 +89,6 @@ jobs:
           # The test of the server under launchd needs a domain of launchd that a user agent can be loaded into: the macOS
           # runner has one (gui/<uid>), and a runner that stops having it must be noticed, not skipped.
           CLAUDE_IDE_REQUIRE_LAUNCHD: "1"
+          # The test of the server under Task Scheduler uses the paths of the user, which a task cannot be told otherwise, so
+          # it runs only where it is asked to: here, on a runner that has nothing of the user's.
+          CLAUDE_IDE_TRY_TASK_SCHEDULER: "1"

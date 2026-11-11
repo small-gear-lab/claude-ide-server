@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<!--
+  Task Scheduler: starts claude-ide-server when you log on, and keeps it for the session. Task Scheduler has no socket
+  activation (it cannot start a program when something connects to a pipe), so the server runs from log-on on, and an
+  adapter that finds nobody there may start the server itself. A comment of this kind cannot have two hyphens in a row in
+  it, so the switch of the command line is not spelt out here.
+
+  Change the path of the executable below to where it is, then, in PowerShell (your own, not an administrator's):
+
+    Register-ScheduledTask -TaskName claude-ide-server -Xml (Get-Content -Raw claude-ide-server.xml)
+    Start-ScheduledTask -TaskName claude-ide-server
+
+  Stop it with Stop-ScheduledTask, and take it out with Unregister-ScheduledTask, both with -TaskName claude-ide-server.
+  (The declaration says UTF-16, as Task Scheduler writes it, because the schtasks program reads a file of that kind only;
+  PowerShell is given the text, and does not mind how the file is stored.)
+-->
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>claude-ide-server: connects editors to Claude Code (the /ide protocol)</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Hidden>true</Hidden>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>C:\Program Files\claude-ide-server\claude-ide-server.exe</Command>
+      <Arguments>--idle-timeout 0</Arguments>
+    </Exec>
+  </Actions>
+</Task>
