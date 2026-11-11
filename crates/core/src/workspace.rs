@@ -35,6 +35,10 @@ pub struct Config {
     pub ws: ws::Config,
     /// Whether a process is alive; decides which leftovers of an earlier server are cleaned up at start.
     pub is_alive: Arc<dyn Fn(u32) -> bool + Send + Sync>,
+    // Where the token of each workspace comes from. The operating system's random source, and nothing else in a normal
+    // build: the token is the only thing that keeps other processes of the machine out, so it is not for callers to
+    // replace. Tests can, through the `test-support` feature.
+    token_source: Arc<dyn Fn() -> io::Result<String> + Send + Sync>,
 }
 
 impl Config {
@@ -45,7 +49,20 @@ impl Config {
             server_pid,
             ws: ws::Config::default(),
             is_alive: Arc::new(lock::process_is_alive),
+            token_source: Arc::new(lock::generate_token),
         }
+    }
+
+    /// The same, with another source of tokens (to test a failing source, or to know the token in advance).
+    ///
+    /// Only with the `test-support` feature, which is on only for the tests of this crate.
+    #[cfg(feature = "test-support")]
+    pub fn with_token_source(
+        mut self,
+        source: impl Fn() -> io::Result<String> + Send + Sync + 'static,
+    ) -> Self {
+        self.token_source = Arc::new(source);
+        self
     }
 
     /// The same, with another check of whether a process is alive (for tests).
@@ -271,7 +288,7 @@ async fn provision(
 }
 
 async fn set_up(config: &Config, registration: &Registration) -> io::Result<(WsServer, LockFile)> {
-    let token = lock::generate_token()?;
+    let token = (config.token_source)()?;
     let ws_server = WsServer::start(token.clone(), config.ws.clone()).await?;
     let contents = LockContents {
         pid: registration.pid,

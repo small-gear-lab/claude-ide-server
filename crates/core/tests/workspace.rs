@@ -473,3 +473,59 @@ fn the_adapter_socket_goes_into_the_runtime_directory() {
             .join("adapter.sock")
     );
 }
+
+#[tokio::test]
+async fn a_source_of_tokens_that_fails_gives_a_refusal_and_leaves_nothing_behind() {
+    let root = TempDir::new().unwrap();
+    let dirs = LockDirs {
+        lock_dir: root.path().join("ide"),
+        record_dir: root.path().join("run"),
+    };
+    let (listener, connector) = listener();
+    let mut server = WorkspaceServer::start(
+        listener,
+        adapter::Config::default(),
+        Config::new(dirs.clone(), std::process::id())
+            .with_token_source(|| Err(std::io::Error::other("no random numbers today"))),
+    );
+
+    let mut client = Client::new(connector.connect().await.unwrap());
+    let error = client.register(registration()).await.unwrap_err();
+    assert_eq!(error.code, error_code::SETUP_FAILED);
+    assert!(error.message.contains("no random numbers today"), "{error}");
+    assert!(client.recv().await.is_none());
+    assert!(lock_files_in(&dirs).is_empty());
+    assert!(
+        timeout(Duration::from_millis(200), server.accept())
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn a_token_that_is_known_in_advance_ends_up_in_the_lock_file_and_works() {
+    let root = TempDir::new().unwrap();
+    let dirs = LockDirs {
+        lock_dir: root.path().join("ide"),
+        record_dir: root.path().join("run"),
+    };
+    let (listener, connector) = listener();
+    let mut server = WorkspaceServer::start(
+        listener,
+        adapter::Config::default(),
+        Config::new(dirs.clone(), std::process::id())
+            .with_token_source(|| Ok("0123456789abcdef0123456789abcdef".to_owned())),
+    );
+
+    let mut client = Client::new(connector.connect().await.unwrap());
+    let port = client.register(registration()).await.unwrap();
+    let _workspace = timeout(WAIT, server.accept()).await.unwrap().unwrap();
+
+    let lock: LockContents =
+        serde_json::from_slice(&fs::read(dirs.lock_dir.join(format!("{port}.lock"))).unwrap())
+            .unwrap();
+    assert_eq!(lock.auth_token, "0123456789abcdef0123456789abcdef");
+    claude_connect(port, "0123456789abcdef0123456789abcdef")
+        .await
+        .unwrap();
+}

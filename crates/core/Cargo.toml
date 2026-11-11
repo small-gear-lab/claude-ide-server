@@ -11,6 +11,10 @@ publish = false
 [lints]
 workspace = true
 
+[features]
+# Lets tests replace what is fixed in production, such as the source of the token. Never on in a normal build.
+test-support = []
+
 [dependencies]
 futures-util = "0.3.34"
 getrandom = "0.4.3"
@@ -21,5 +25,7 @@ tokio = { version = "1.54.1", features = ["rt-multi-thread", "net", "macros", "s
 tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }
 
 [dev-dependencies]
+# The tests of this crate use its own `test-support` feature.
+claude-ide-core = { path = ".", features = ["test-support"] }
 tempfile = "3.27.0"
 tokio-tungstenite = { version = "0.30.0", features = ["connect"] }
