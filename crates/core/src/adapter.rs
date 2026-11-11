@@ -61,7 +61,9 @@ mod unix {
     #[derive(Debug)]
     pub struct UnixListener {
         inner: tokio::net::UnixListener,
-        path: PathBuf,
+        path: Option<PathBuf>,
+        /// Whether this listener made the socket file, and so removes it when it is dropped.
+        owns_file: bool,
     }
 
     impl UnixListener {
@@ -95,12 +97,34 @@ mod unix {
             }
             let inner = tokio::net::UnixListener::bind(&path)?;
             std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
-            Ok(Self { inner, path })
+            Ok(Self {
+                inner,
+                path: Some(path),
+                owns_file: true,
+            })
         }
 
-        /// Where the socket is.
-        pub fn path(&self) -> &Path {
-            &self.path
+        /// Takes a socket that is already listening, which something else made: a supervisor that starts the server
+        /// when the first connection comes (socket activation), for one. Must be called inside a tokio runtime.
+        ///
+        /// The socket is not this listener's to remove: its file stays when the listener is dropped, so that whatever
+        /// made it can hand it to the next server.
+        pub fn from_listening(socket: std::os::unix::net::UnixListener) -> io::Result<Self> {
+            socket.set_nonblocking(true)?;
+            let path = socket
+                .local_addr()?
+                .as_pathname()
+                .map(std::path::Path::to_path_buf);
+            Ok(Self {
+                inner: tokio::net::UnixListener::from_std(socket)?,
+                path,
+                owns_file: false,
+            })
+        }
+
+        /// Where the socket is, if it has a path (a socket that was handed over may not).
+        pub fn path(&self) -> Option<&Path> {
+            self.path.as_deref()
         }
     }
 
@@ -114,7 +138,9 @@ mod unix {
 
     impl Drop for UnixListener {
         fn drop(&mut self) {
-            let _ = std::fs::remove_file(&self.path);
+            if let (true, Some(path)) = (self.owns_file, &self.path) {
+                let _ = std::fs::remove_file(path);
+            }
         }
     }
 }

@@ -441,8 +441,31 @@ async fn a_socket_file_left_by_a_dead_server_is_replaced() {
     assert!(socket.exists());
 
     let listener = UnixListener::bind(&socket).unwrap();
-    assert_eq!(listener.path(), socket);
+    assert_eq!(listener.path(), Some(socket.as_path()));
     assert!(tokio::net::UnixStream::connect(&socket).await.is_ok());
+}
+
+#[tokio::test]
+async fn a_socket_that_is_handed_over_is_served_and_is_not_removed() {
+    let root = TempDir::new().unwrap();
+    let socket = root.path().join("adapter.sock");
+    // What a supervisor does: makes the socket, listens, and hands it to the server when it starts.
+    let handed = std::os::unix::net::UnixListener::bind(&socket).unwrap();
+    // A connection that comes before the server is there waits in the socket's queue.
+    let mut early = Client::new(tokio::net::UnixStream::connect(&socket).await.unwrap());
+    early.request(1, "register", registration()).await;
+
+    let listener = UnixListener::from_listening(handed).unwrap();
+    assert_eq!(listener.path(), Some(socket.as_path()));
+    let mut server = AdapterServer::start(listener, Config::default());
+    let registering = timeout(WAIT, server.accept()).await.unwrap().unwrap();
+    let _session = registering.accept(PORT);
+    assert_eq!(early.registered().await.unwrap(), PORT);
+
+    // The server goes, and the file stays: it is the supervisor's, for the next server.
+    drop(server);
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(socket.exists());
 }
 
 fn mode(path: &Path) -> u32 {
