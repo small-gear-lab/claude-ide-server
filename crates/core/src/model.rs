@@ -543,6 +543,45 @@ pub(crate) fn file_uri(path: &str) -> String {
     uri
 }
 
+/// What came of an `openDiff`: the user accepted the change, with the contents of the file as they are now (the user may
+/// have edited them in the diff), or rejected it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DiffOutcome {
+    Accepted(String),
+    Rejected,
+}
+
+impl DiffOutcome {
+    /// From the answer of an adapter to `openDiff`: `{ accepted: true, contents }` or `{ accepted: false }`.
+    pub fn from_adapter(value: &Value) -> Result<Self, ModelError> {
+        if boolean(value, "accepted", "$")? {
+            Ok(Self::Accepted(string(value, "contents", "$")?))
+        } else {
+            Ok(Self::Rejected)
+        }
+    }
+
+    /// The texts of the result of `openDiff`, as the VS Code extension writes them, and as Claude Code reads them: for an
+    /// accepted change `FILE_SAVED` and the contents of the file, for a rejected one `DIFF_REJECTED` and the name of the
+    /// tab. (Claude Code writes the file, with these contents; it is not the editor that does.)
+    pub fn to_tool_texts(&self, tab_name: &str) -> (String, Vec<String>) {
+        match self {
+            Self::Accepted(contents) => ("FILE_SAVED".to_owned(), vec![contents.clone()]),
+            Self::Rejected => ("DIFF_REJECTED".to_owned(), vec![tab_name.to_owned()]),
+        }
+    }
+}
+
+/// From the answer of an adapter to `closeAllDiffs`: `{ closed: n }`, how many diffs it closed.
+pub fn closed_diffs_from_adapter(value: &Value) -> Result<u32, ModelError> {
+    count(value, "closed", "$")
+}
+
+/// The text of the result of `closeAllDiffTabs`.
+pub fn closed_diffs_to_tool_text(closed: u32) -> String {
+    format!("CLOSED_{closed}_DIFF_TABS")
+}
+
 /// What came of looking for the text that `openFile` was given (`startText`, `endText`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextMatch {
@@ -1091,6 +1130,42 @@ mod tests {
                 .unwrap_err()
                 .path,
             "$.uris[1]"
+        );
+    }
+
+    #[test]
+    fn a_diff_is_accepted_with_contents_or_rejected() {
+        let accepted =
+            DiffOutcome::from_adapter(&json!({"accepted": true, "contents": "a\nb\n"})).unwrap();
+        assert_eq!(
+            accepted.to_tool_texts("tab"),
+            ("FILE_SAVED".to_owned(), vec!["a\nb\n".to_owned()])
+        );
+        let rejected = DiffOutcome::from_adapter(&json!({"accepted": false})).unwrap();
+        assert_eq!(
+            rejected.to_tool_texts("tab"),
+            ("DIFF_REJECTED".to_owned(), vec!["tab".to_owned()])
+        );
+        // Accepted without the contents is not an answer that Claude Code could use.
+        assert_eq!(
+            DiffOutcome::from_adapter(&json!({"accepted": true}))
+                .unwrap_err()
+                .path,
+            "$.contents"
+        );
+        assert_eq!(
+            DiffOutcome::from_adapter(&json!({})).unwrap_err().path,
+            "$.accepted"
+        );
+    }
+
+    #[test]
+    fn the_diffs_that_were_closed_are_counted_in_the_text() {
+        assert_eq!(closed_diffs_from_adapter(&json!({"closed": 3})), Ok(3));
+        assert_eq!(closed_diffs_to_tool_text(3), "CLOSED_3_DIFF_TABS");
+        assert_eq!(
+            closed_diffs_from_adapter(&json!({})).unwrap_err().path,
+            "$.closed"
         );
     }
 }

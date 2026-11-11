@@ -5,13 +5,15 @@
 //! existing IDE integrations offer, which is what Claude Code expects.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::{Value, json};
 
 use crate::adapter::{AdapterHandle, RequestError};
 use crate::mcp::{ToolBackend, ToolDefinition, ToolError, ToolResult};
 use crate::model::{
-    self, ModelError, OpenFileRequest, OpenedFile, SelectionAnswer, diagnostics_to_tool_text,
+    self, DiffOutcome, ModelError, OpenFileRequest, OpenedFile, SelectionAnswer,
+    closed_diffs_from_adapter, closed_diffs_to_tool_text, diagnostics_to_tool_text,
     document_state_from_adapter, document_state_to_tool_text, file_uri, open_editors_to_tool_text,
     save_from_adapter, save_to_tool_text,
 };
@@ -42,6 +44,9 @@ enum Answer {
     OpenFile,
     DocumentDirty,
     SaveDocument,
+    /// `close_tab` says `TAB_CLOSED` whatever the adapter answers (the extension does too, even if there was no such tab).
+    TabClosed,
+    ClosedDiffs,
 }
 
 struct ToolSpec {
@@ -132,15 +137,15 @@ const TOOLS: &[ToolSpec] = &[
     },
     ToolSpec {
         name: "close_tab",
-        backing: Backing::Adapter("closeDiff"),
-        answer: Answer::Raw,
+        backing: Backing::AdapterOrElse("closeDiff", "TAB_CLOSED"),
+        answer: Answer::TabClosed,
         description: "Close a diff that openDiff opened, by its tab_name.",
         schema: close_tab_schema,
     },
     ToolSpec {
         name: "closeAllDiffTabs",
         backing: Backing::AdapterOrElse("closeAllDiffs", "CLOSED_0_DIFF_TABS"),
-        answer: Answer::Raw,
+        answer: Answer::ClosedDiffs,
         description: "Close all the diffs that openDiff opened.",
         schema: no_arguments,
     },
@@ -211,6 +216,8 @@ pub(crate) struct WorkspaceTools {
     adapter: AdapterHandle,
     /// The folders of the workspace as they are now.
     folders: Arc<dyn Fn() -> Vec<String> + Send + Sync>,
+    /// The number of the next diff that is opened: it tells apart two diffs of the same name.
+    next_diff: AtomicU64,
 }
 
 impl WorkspaceTools {
@@ -223,6 +230,7 @@ impl WorkspaceTools {
             methods,
             adapter,
             folders,
+            next_diff: AtomicU64::new(1),
         }
     }
 
@@ -241,6 +249,91 @@ impl WorkspaceTools {
     /// Whether the tool may be called. Some are called although they were not listed.
     fn callable(&self, spec: &ToolSpec) -> bool {
         matches!(spec.backing, Backing::AdapterOrElse(..)) || self.listed(spec)
+    }
+}
+
+/// Closes a diff that was opened for a call that did not end with an answer (Claude Code cancelled it, or went away),
+/// so that it does not stay on the screen of the editor with nobody to ask. It names the diff by its number, so that it
+/// cannot close a newer diff of the same name.
+struct CloseOnDrop {
+    adapter: AdapterHandle,
+    tab_name: String,
+    id: u64,
+    armed: bool,
+}
+
+impl CloseOnDrop {
+    fn defuse(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for CloseOnDrop {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        let (adapter, tab_name, id) = (self.adapter.clone(), self.tab_name.clone(), self.id);
+        runtime.spawn(async move {
+            // The adapter may not have `closeDiff`, or be gone: nothing is left to do then.
+            let _ = adapter
+                .request("closeDiff", json!({ "tabName": tab_name, "diffId": id }))
+                .await;
+        });
+    }
+}
+
+impl WorkspaceTools {
+    /// `openDiff`: the adapter shows the diff and answers when the user has decided, which may be a long time, so it is
+    /// not asked with a time limit (it ends if the adapter goes away). Nothing else waits for it: other calls go on.
+    async fn open_diff(&self, arguments: &Value) -> ToolResult {
+        let text = |key: &str| {
+            arguments
+                .get(key)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+        };
+        let tab_name = text("tab_name").to_owned();
+        let id = self.next_diff.fetch_add(1, Ordering::Relaxed);
+        let params = json!({
+            "oldFilePath": text("old_file_path"),
+            "newFilePath": text("new_file_path"),
+            "newFileContents": text("new_file_contents"),
+            "tabName": tab_name,
+            "diffId": id,
+        });
+        let mut closing = CloseOnDrop {
+            adapter: self.adapter.clone(),
+            tab_name: tab_name.clone(),
+            id,
+            armed: true,
+        };
+        let answer = self.adapter.request_with("openDiff", params, None).await;
+        closing.defuse();
+        let failed = |text: String| ToolResult {
+            text,
+            more: Vec::new(),
+            is_error: true,
+        };
+        match answer {
+            Ok(result) => match DiffOutcome::from_adapter(&result) {
+                Ok(outcome) => {
+                    let (first, more) = outcome.to_tool_texts(&tab_name);
+                    ToolResult {
+                        text: first,
+                        more,
+                        is_error: false,
+                    }
+                }
+                Err(error) => failed(format!(
+                    "the editor's answer to openDiff is not valid: {error}"
+                )),
+            },
+            Err(error) => failed(error_text(&error)),
+        }
     }
 }
 
@@ -274,6 +367,9 @@ impl ToolBackend for WorkspaceTools {
         // that the adapter always gets an absolute one.
         let mut arguments = arguments;
         absolute_file_path(&mut arguments, &(self.folders)());
+        if spec.name == "openDiff" {
+            return Ok(self.open_diff(&arguments).await);
+        }
         let method = match spec.backing {
             Backing::Server => {
                 return Ok(ToolResult {
@@ -295,7 +391,11 @@ impl ToolBackend for WorkspaceTools {
             }
         };
         Ok(
-            match self.adapter.request(method, arguments.clone()).await {
+            match self
+                .adapter
+                .request(method, adapter_arguments(spec.name, &arguments))
+                .await
+            {
                 Ok(result) => match answer_text(spec.answer, &result, &arguments) {
                     Ok(text) => ToolResult {
                         text,
@@ -376,7 +476,19 @@ fn answer_text(answer: Answer, result: &Value, arguments: &Value) -> Result<Stri
             document_state_to_tool_text(file_path(), document_state_from_adapter(result)?)
         }
         Answer::SaveDocument => save_to_tool_text(file_path(), save_from_adapter(result)?),
+        Answer::TabClosed => "TAB_CLOSED".to_owned(),
+        Answer::ClosedDiffs => closed_diffs_to_tool_text(closed_diffs_from_adapter(result)?),
     })
+}
+
+/// The parameters that the adapter is given for a tool: the arguments of the call, except where the adapter's name for
+/// a parameter is not the tool's (`close_tab` takes `tab_name`, as the extension does; the adapter is told `tabName`,
+/// as with `openDiff`).
+fn adapter_arguments(tool: &str, arguments: &Value) -> Value {
+    if tool == "close_tab" {
+        return json!({ "tabName": arguments.get("tab_name") });
+    }
+    arguments.clone()
 }
 
 /// Makes `filePath` of the arguments absolute, if it is not, from the first folder of the workspace (and `.` and `..`

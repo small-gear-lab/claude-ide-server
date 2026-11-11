@@ -359,6 +359,18 @@ impl AdapterHandle {
     /// Sends a request and waits for the answer (at most the request timeout). Only methods that the adapter
     /// declared in `register` are called.
     pub async fn request(&self, method: &str, params: Value) -> Result<Value, RequestError> {
+        self.request_with(method, params, Some(self.request_timeout))
+            .await
+    }
+
+    /// As [`request`](Self::request), with another time to wait: `None` waits until the adapter answers or is gone
+    /// (for a request that waits for the user, such as `openDiff`).
+    pub async fn request_with(
+        &self,
+        method: &str,
+        params: Value,
+        timeout: Option<Duration>,
+    ) -> Result<Value, RequestError> {
         if !self.methods.iter().any(|declared| declared == method) {
             return Err(RequestError::NotDeclared(method.to_owned()));
         }
@@ -377,11 +389,17 @@ impl AdapterHandle {
             })
             .await
             .map_err(|_| RequestError::Disconnected)?;
-        match tokio::time::timeout(self.request_timeout, answer).await {
-            Err(_) => Err(RequestError::Timeout),
-            Ok(Err(_)) => Err(RequestError::Disconnected),
-            Ok(Ok(Ok(result))) => Ok(result),
-            Ok(Ok(Err(error))) => Err(RequestError::Rpc(error)),
+        let answer = match timeout {
+            Some(limit) => match tokio::time::timeout(limit, answer).await {
+                Ok(answer) => answer,
+                Err(_) => return Err(RequestError::Timeout),
+            },
+            None => answer.await,
+        };
+        match answer {
+            Err(_) => Err(RequestError::Disconnected),
+            Ok(Ok(result)) => Ok(result),
+            Ok(Err(error)) => Err(RequestError::Rpc(error)),
         }
     }
 

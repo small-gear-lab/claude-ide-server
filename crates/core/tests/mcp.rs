@@ -52,39 +52,39 @@ async fn only_the_tools_that_can_be_run_are_listed() {
 
 #[tokio::test]
 async fn a_tool_call_goes_to_the_adapter_and_its_answer_comes_back_as_text() {
-    // close_tab: one of the tools whose answer is passed on as it is.
-    let mut scene = scene_declaring(&["closeDiff"]).await;
+    // set_permission_mode: a tool whose answer is passed on as it is, when the adapter has a method for it.
+    let mut scene = scene_declaring(&["setPermissionMode"]).await;
     let (answer, (method, params)) = call_tool(
         &mut scene,
-        "close_tab",
-        json!({"tab_name": "diff-1"}),
-        Ok(json!({"closed": 1})),
+        "set_permission_mode",
+        json!({"mode": "ask"}),
+        Ok(json!({"applied": true})),
     )
     .await;
 
-    assert_eq!(method, "closeDiff");
-    assert_eq!(params, json!({"tab_name": "diff-1"}));
+    assert_eq!(method, "setPermissionMode");
+    assert_eq!(params, json!({"mode": "ask"}));
     assert_shape(&answer["result"], "tool_call_result.shape.json");
     assert_eq!(answer["result"]["isError"], false);
     assert_eq!(answer["result"]["content"][0]["type"], "text");
     let text = answer["result"]["content"][0]["text"].as_str().unwrap();
     assert_eq!(
         serde_json::from_str::<Value>(text).unwrap(),
-        json!({"closed": 1})
+        json!({"applied": true})
     );
 }
 
 #[tokio::test]
 async fn an_answer_that_is_a_string_is_the_text_as_it_is() {
-    let mut scene = scene_declaring(&["closeDiff"]).await;
+    let mut scene = scene_declaring(&["setPermissionMode"]).await;
     let (answer, _) = call_tool(
         &mut scene,
-        "close_tab",
-        json!({"tab_name": "diff-1"}),
-        Ok(json!("TAB_CLOSED")),
+        "set_permission_mode",
+        json!({"mode": "ask"}),
+        Ok(json!("APPLIED")),
     )
     .await;
-    assert_eq!(answer["result"]["content"][0]["text"], "TAB_CLOSED");
+    assert_eq!(answer["result"]["content"][0]["text"], "APPLIED");
     assert_eq!(answer["result"]["isError"], false);
 }
 

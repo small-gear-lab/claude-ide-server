@@ -252,14 +252,18 @@ impl<B: ToolBackend> McpHub<B> {
         let hub = self.inner.clone();
         tokio::spawn(async move {
             let pid = Arc::new(Mutex::new(None));
+            let (ended, gone) = tokio::sync::watch::channel(false);
             let handler = IdeHandler {
                 hub: hub.clone(),
                 pid: pid.clone(),
+                gone,
             };
             // A client that has the token but never speaks would otherwise hold a task and a connection for ever.
-            let served =
-                tokio::time::timeout(hub.handshake_timeout, handler.serve(bridge(connection)))
-                    .await;
+            let served = tokio::time::timeout(
+                hub.handshake_timeout,
+                handler.serve(bridge(connection, ended)),
+            )
+            .await;
             let Ok(Ok(running)) = served else {
                 return;
             };
@@ -395,6 +399,9 @@ impl<B: ToolBackend> McpHub<B> {
 struct IdeHandler<B> {
     hub: Arc<HubInner<B>>,
     pid: Arc<Mutex<Option<u32>>>,
+    /// Becomes true when the connection has ended. `rmcp` lets the handlers that are running finish for up to five seconds
+    /// after that, and then cancels them; a call that holds something (a diff on the screen) should not wait for that.
+    gone: tokio::sync::watch::Receiver<bool>,
 }
 
 impl<B: ToolBackend> ServerHandler for IdeHandler<B> {
@@ -428,10 +435,22 @@ impl<B: ToolBackend> ServerHandler for IdeHandler<B> {
     async fn call_tool(
         &self,
         request: CallToolRequestParams,
-        _context: RequestContext<RoleServer>,
+        context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, McpError> {
         let arguments = Value::Object(request.arguments.unwrap_or_default());
-        match self.hub.backend.call(&request.name, arguments).await {
+        // A call that waits for the user (`openDiff`) outlives its client unless it is dropped when the client cancels it or
+        // goes away: what the call holds (a diff on the screen) is released when the call is dropped.
+        let mut gone = self.gone.clone();
+        let called = tokio::select! {
+            called = self.hub.backend.call(&request.name, arguments) => called,
+            () = context.ct.cancelled() => {
+                return Err(McpError::internal_error("the call was cancelled", None));
+            }
+            _ = gone.wait_for(|gone| *gone) => {
+                return Err(McpError::internal_error("the connection has ended", None));
+            }
+        };
+        match called {
             Ok(result) => {
                 let mut texts = vec![ContentBlock::text(result.text)];
                 texts.extend(result.more.into_iter().map(ContentBlock::text));
@@ -474,7 +493,7 @@ struct WsTransport {
     incoming: mpsc::Receiver<String>,
 }
 
-fn bridge(mut connection: Connection) -> WsTransport {
+fn bridge(mut connection: Connection, ended: tokio::sync::watch::Sender<bool>) -> WsTransport {
     let (outgoing, mut to_send) = mpsc::channel::<String>(64);
     let (received, incoming) = mpsc::channel::<String>(64);
     tokio::spawn(async move {
@@ -499,7 +518,8 @@ fn bridge(mut connection: Connection) -> WsTransport {
                 }
             }
         }
-        // However it ended, say so to the peer (a no-op if the connection is already closed).
+        // However it ended, say so to the calls that wait, and to the peer (a no-op if the connection is already closed).
+        let _ = ended.send(true);
         connection.close(1000, "").await;
     });
     WsTransport { outgoing, incoming }
