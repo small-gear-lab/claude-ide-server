@@ -123,6 +123,9 @@ How a call turns out:
   is (for example `FILE_SAVED`); anything else is written as JSON.
 - A call that fails (the adapter answers with an error, does not answer in time, or is gone) is still an answer: the
   result carries `isError: true` and the reason as its text. Claude gets to see why.
+- The arguments are checked against the schema of the tool before the adapter is asked: a required argument that is
+  missing, or one of the wrong type, fails the call (`invalid arguments for openFile: filePath is required`), and
+  the adapter is not asked. What the model sends is not trusted to match the schema that it was given.
 - A call for a tool that is not available (unknown, or not declared by the adapter) is an error of the protocol, with
   code `-32602`, and nothing is sent to the adapter.
 - `getWorkspaceFolders` is answered by the server from the registration, so it follows `workspaceFoldersChanged`.
@@ -142,6 +145,19 @@ are custom notifications of the SDK.
 
 Several integrations send `diagnostics_changed`; some third-party implementations do not. It is the first
 feature this project adds beyond what is commonly available.
+
+### Slow readers
+
+A client that does not read what it is sent must not hold up the other clients, or the workspace. Notifications to
+Claude Code are put in a queue of the client's own and sent from it by a task of its own; sending never waits.
+
+- A notification that is a **state** (the selection) replaces the notification of the same method that is still
+  waiting, so that a slow client is given the current state, not the history of it, and the latest one is never the one
+  that is lost.
+- The others (a mentioned file) are kept in order. If more than 64 are waiting for a client, the oldest is dropped.
+- The events that the owner of a workspace reads (`Workspace::next_event`) are information, and are handed over the
+  same way: past 256 waiting, the newest are dropped and counted (`dropped_events`). Passing the selection on to Claude
+  Code does not depend on anyone reading them.
 
 ### Several CLIs on one workspace
 
@@ -192,10 +208,35 @@ Server → adapter:
 | `closeAllDiffs` | request | → `{ closed: n }` |
 | `shutdown` | notification | the server is stopping |
 
-A selection is `{ start: { line, character }, end: { line, character }, isEmpty }`, with `line` 0-based and
-`character` in UTF-16 code units (the LSP convention), `end` exclusive. The adapter converts from the editor's
-own unit. **(assumption)** The CLI only counts lines from this value, so a mistake in `character` does not
-change what Claude sees.
+A position is `{ line, character }`, with `line` 0-based and `character` in UTF-16 code units (the LSP convention),
+and the end of a range is exclusive. The adapter converts from the editor's own unit. **(assumption)** The CLI only
+counts lines from a selection, so a mistake in `character` does not change what Claude sees.
+
+### What an adapter reports of the editor
+
+What an adapter sends is checked by the server. A missing field or a wrong type is not guessed at: in the answer to a
+request it makes the tool call fail, with the place of the fault in the text (for example
+`the editor's answer to getOpenEditors is not valid: $.tabs[1].isDirty: expected a boolean`), and in a notification
+it means that the notification is not passed on and the owner of the workspace is told (`MalformedNotification`).
+
+- A **selection** is `{ filePath, text, selection: { start, end } }`, where `start` and `end` are positions. It is the
+  parameters of `selectionChanged`, and the answer to `getCurrentSelection` and `getLatestSelection` when there is
+  one; when there is none, the answer is `{ "success": false, "message": ... }` (the message is optional). A cursor
+  without a selection is a selection with an empty `text` and `start` equal to `end`. The server works out `isEmpty`
+  from the range.
+- **`atMention`** is `{ filePath, lineStart, lineEnd }`, 0-based, `lineEnd` being the last line.
+- A **`filePath`** is an absolute path (it starts with `/`). Claude Code works out what to show from it, and a relative
+  one would be taken relative to the directory that Claude Code runs in, which is not that of the editor.
+- **The answer to `getOpenEditors`** is `{ tabs: [ { uri, isActive, label, languageId, isDirty } ] }`; all five are
+  required.
+- **The answer to `getDiagnostics`** (with `{ uri }` as the parameters, or none for all files) is
+  `[ { uri, diagnostics: [ { message, severity, range: { start, end }, source? } ] } ]`. `severity` is one of
+  `"Error"`, `"Warning"`, `"Information"` and `"Hint"`; an empty list is an answer.
+
+The server passes these on to Claude Code in the shapes that it expects (see the notifications above): `selectionChanged`
+becomes `selection_changed` (with a `fileUrl` added, and `isEmpty`), `atMention` becomes `at_mentioned`, and the answers
+become the text of the tool results. A Claude Code that connects later is sent the `selection_changed` that is current
+(the last one), so that it starts from the selection that the user has now.
 
 On `"saved"` from `openDiff`, the adapter has written `newFileContents` to `newFilePath`. The server answers
 Claude with the text `FILE_SAVED`; on `"rejected"`, `DIFF_REJECTED`.

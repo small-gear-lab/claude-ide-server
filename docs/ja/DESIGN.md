@@ -85,6 +85,7 @@ Claude Code 2.1.322 で、インストールされた CLI を読んで分かっ�
 
 - ツール呼び出しの答えは、1 つのテキストです。アダプターが文字列で答えたときは、その文字列が、そのままテキストになります（たとえば `FILE_SAVED`）。それ以外は、JSON として書きます。
 - 失敗した呼び出し（アダプターがエラーで答える、時間内に答えない、いなくなった）も、答えのうちです。結果に `isError: true` と、理由のテキストが入ります。Claude は、理由を見られます。
+- ツールの引数は、アダプターに聞く前に、そのツールのスキーマで検査します。必須の引数がない、または型が違うと、呼び出しは失敗し（`invalid arguments for openFile: filePath is required`）、アダプターには聞きません。モデルが送るものが、渡したスキーマに合っているとは、信用しません。
 - 使えないツール（知らないもの、アダプターが宣言していないもの）の呼び出しは、プロトコルのエラー（コード `-32602`）で、アダプターには何も送りません。
 - `getWorkspaceFolders` は、サーバーが登録の内容から答えるので、`workspaceFoldersChanged` に追従します。
 
@@ -99,6 +100,14 @@ MCP のプロトコル自体（握手、版の交渉、`tools/list`、`tools/cal
 | `diagnostics_changed` | アダプターが、診断の変更を知らせたとき（`{ "uris": [...] }`）                     |
 
 `diagnostics_changed` を送る連携はいくつかありますが、送らない第三者の実装もあります。広く使えるものに、このプロジェクトが最初に足す機能です。
+
+### 遅い読み手
+
+送られたものを読まないクライアントが、ほかのクライアントや、ワークスペースを止めてはいけません。Claude Code への通知は、クライアントごとの待ち行列に入れ、そのクライアントの専用のタスクが送ります。送るときに、待つことはありません。
+
+- **状態** の通知（選択範囲）は、まだ待っている、同じメソッドの通知を置き換えます。だから、遅いクライアントには、状態の履歴ではなく、いまの状態が届き、最新のものが失われることはありません。
+- それ以外（メンションされたファイル）は、順番を保ちます。1 つのクライアントに 64 件より多くが待っているときは、いちばん古いものを捨てます。
+- ワークスペースの持ち主が読むイベント（`Workspace::next_event`）は、情報で、同じように渡します。256 件より多くが待つと、新しいものを捨てて、数えます（`dropped_events`）。選択範囲を Claude Code に渡すことは、だれかがそれを読むことに、依存しません。
 
 ### 1 つのワークスペースに、複数の CLI
 
@@ -140,7 +149,19 @@ WebSocket の接続は、1 本ごとに別のクライアントです。サー�
 | `closeAllDiffs`       | 要求   | → `{ closed: n }`                                                                                                      |
 | `shutdown`            | 通知   | サーバーが止まるとき                                                                                                             |
 
-選択範囲は `{ start: { line, character }, end: { line, character }, isEmpty }` です。`line` は 0 始まり、`character` は UTF-16 のコード単位（LSP の決まり）、`end` は含みません。エディタ自身の単位からの変換は、アダプターが行います。**（仮定）** CLI は、この値から行数を数えるだけなので、`character` を間違えても、Claude に見えるものは変わりません。
+位置は `{ line, character }` です。`line` は 0 始まり、`character` は UTF-16 のコード単位（LSP の決まり）で、範囲の終わりは含みません。エディタ自身の単位からの変換は、アダプターが行います。**（仮定）** CLI は、選択範囲から行数を数えるだけなので、`character` を間違えても、Claude に見えるものは変わりません。
+
+### アダプターが報告する、エディタの状態
+
+アダプターが送るものは、サーバーが検査します。足りない項目や、型の違いを、推測で補いません。要求への答えなら、ツール呼び出しを失敗にして、誤りの場所をテキストに入れます（たとえば `the editor's answer to getOpenEditors is not valid: $.tabs[1].isDirty: expected a boolean`）。通知なら、その通知は転送せず、ワークスペースの持ち主に知らせます（`MalformedNotification`）。
+
+- **選択範囲** は `{ filePath, text, selection: { start, end } }` です。`start` と `end` は位置です。これが `selectionChanged` の引数で、選択範囲があるときの `getCurrentSelection` と `getLatestSelection` の答えです。ないときの答えは `{ "success": false, "message": ... }` です（`message` は省略できます）。選択のないカーソルは、`text` が空で、`start` と `end` が等しい選択範囲です。`isEmpty` は、サーバーが範囲から求めます。
+- **`atMention`** は `{ filePath, lineStart, lineEnd }` で、0 始まり、`lineEnd` は最後の行です。
+- **`filePath`** は、絶対パス（`/` で始まる）です。Claude Code は、これから、見せるものを決めます。相対パスだと、Claude Code が動いているディレクトリが基準になりますが、それはエディタのものではありません。
+- **`getOpenEditors` の答え** は `{ tabs: [ { uri, isActive, label, languageId, isDirty } ] }` で、5 つとも必須です。
+- **`getDiagnostics` の答え**（引数は `{ uri }`、すべてのファイルなら引数なし）は `[ { uri, diagnostics: [ { message, severity, range: { start, end }, source? } ] } ]` です。`severity` は、`"Error"`、`"Warning"`、`"Information"`、`"Hint"` のどれかです。空の一覧も、答えです。
+
+サーバーは、これらを、Claude Code が期待する形で渡します（上の通知を参照）。`selectionChanged` は `selection_changed` になり（`fileUrl` と `isEmpty` が付きます）、`atMention` は `at_mentioned` になり、答えは、ツール結果のテキストになります。あとから接続した Claude Code には、そのときの（最後の）`selection_changed` を送るので、利用者がいま見ている選択範囲から始まります。
 
 `openDiff` が `"saved"` を返したとき、アダプターは、`newFileContents` を `newFilePath` に書き終えています。サーバーは、Claude に `FILE_SAVED` というテキストで答えます。`"rejected"` のときは、`DIFF_REJECTED` です。
 
