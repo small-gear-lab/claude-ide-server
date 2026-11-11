@@ -162,4 +162,10 @@ for _, name in ipairs({ 'openFile', 'checkDocumentDirty', 'saveDocument' }) do
   handlers[name] = actions[name]
 end
 
+-- What shows the changes that Claude Code proposes: `openDiff`, `closeDiff`, `closeAllDiffs`.
+local diff = require('claude_ide.diff')
+handlers.openDiff = diff.openDiff
+handlers.closeDiff = diff.closeDiff
+handlers.closeAllDiffs = diff.closeAllDiffs
+
 return M

@@ -1,6 +1,7 @@
 --- Connects Neovim to Claude Code's `/ide` through `claude-ide-server`.
 local Session = require('claude_ide.session')
 local diagnostics = require('claude_ide.diagnostics')
+local diff = require('claude_ide.diff')
 local methods = require('claude_ide.methods')
 local selection = require('claude_ide.selection')
 
@@ -16,7 +17,9 @@ local M = {}
 ---@field register_timeout_ms integer How long the server has to answer `register`.
 ---@field selection_debounce_ms integer How long the cursor must stay still before the selection is sent.
 ---@field diagnostics_debounce_ms integer How long diagnostics are collected before the files that changed are reported.
+---@field diff false|{ provider: ('tab'|claude_ide.DiffProvider)?, keys: { accept: string?, reject: string? }? } How the changes that Claude Code proposes are shown (`false`: not at all: Claude Code then shows them itself).
 ---@field methods table<string, fun(params: any): any, table?> What the server may ask of this Neovim.
+---@field on_gone fun()? Called when the connection to the server has ended.
 ---@field on_registered fun(session: claude_ide.Session)? Called each time the registration has been accepted.
 local defaults = {
   ide_name = 'Neovim',
@@ -36,6 +39,7 @@ local defaults = {
   register_timeout_ms = 5000,
   selection_debounce_ms = 100,
   diagnostics_debounce_ms = 100,
+  diff = { provider = 'tab', keys = {} },
   methods = methods.handlers,
 }
 
@@ -76,6 +80,23 @@ function M.setup(opts)
     diagnosing.detach()
   end
   vim.api.nvim_clear_autocmds({ group = group })
+  -- The methods are this Neovim's own copy, so that leaving some out does not change the module's.
+  opts.methods = vim.tbl_extend('force', {}, opts.methods)
+  if opts.diff == false then
+    for _, name in ipairs({ 'openDiff', 'closeDiff', 'closeAllDiffs' }) do
+      opts.methods[name] = nil
+    end
+  else
+    diff.configure(opts.diff)
+  end
+  -- Diffs that wait for a server that is gone are over.
+  local on_gone = opts.on_gone
+  opts.on_gone = function()
+    diff.cancel_all()
+    if on_gone then
+      on_gone()
+    end
+  end
   local on_registered = opts.on_registered
   opts.on_registered = function(registered)
     -- A server that has just been connected to knows no selection: tell it the one that there is.

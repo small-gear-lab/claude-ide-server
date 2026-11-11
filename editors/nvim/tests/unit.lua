@@ -117,10 +117,13 @@ local declared = vim.tbl_keys(methods.handlers)
 table.sort(declared)
 check('the requests that are answered', declared, {
   'checkDocumentDirty',
+  'closeAllDiffs',
+  'closeDiff',
   'getCurrentSelection',
   'getDiagnostics',
   'getLatestSelection',
   'getOpenEditors',
+  'openDiff',
   'openFile',
   'saveDocument',
 })
@@ -223,6 +226,157 @@ actions.openFile({ filePath = second })
 check('a window was added for the file', #vim.api.nvim_tabpage_list_wins(0), before + 1)
 check('and the terminal is still shown', vim.fn.bufwinid(terminal_buf) ~= -1, true)
 check('saving a file that is not open', actions.saveDocument({ filePath = dir .. '/other.lua' }), { success = false })
+
+-- Diffs. A request waits (a coroutine, as the requests of the server are), and the user decides in the tab that is shown.
+local diff = require('claude_ide.diff')
+local function open_diff(name, contents, id)
+  local box = {}
+  local co = coroutine.create(function()
+    box.result = diff.openDiff({
+      tabName = name,
+      oldFilePath = file,
+      newFilePath = file,
+      newFileContents = contents,
+      diffId = id,
+    })
+  end)
+  assert(coroutine.resume(co))
+  return box
+end
+local function wait_for(box)
+  vim.wait(2000, function()
+    return box.result ~= nil
+  end, 10)
+  return box.result
+end
+local function tabs()
+  return #vim.api.nvim_list_tabpages()
+end
+local function buffer_named(name)
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_get_name(buf):find('[claude] ' .. name, 1, true) and vim.bo[buf].buftype == 'acwrite' then
+      return buf
+    end
+  end
+end
+
+diff.configure({})
+vim.cmd('only')
+local tabs_before = tabs()
+
+-- The left side is the file as it is on the disk, unless the buffer has changes that were not written: a buffer that is
+-- older than the file (written by someone else since) is not what the user has.
+local on_disk = vim.fn.resolve(dir) .. '/on_disk.lua'
+vim.fn.writefile({ 'old' }, on_disk)
+vim.cmd.edit(on_disk)
+vim.fn.writefile({ 'new, written by someone else' }, on_disk)
+local function left_of(name)
+  local box = {}
+  local co = coroutine.create(function()
+    box.result = diff.openDiff({ tabName = name, oldFilePath = on_disk, newFilePath = on_disk, newFileContents = 'x\n', diffId = 99 })
+  end)
+  assert(coroutine.resume(co))
+  local lines
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_get_name(buf):find('[claude] ' .. name .. ' (now)', 1, true) then
+      lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    end
+  end
+  diff.reject(name)
+  wait_for(box)
+  return lines
+end
+check('a buffer without changes is not used: the file is', left_of('disk'), { 'new, written by someone else' })
+vim.api.nvim_buf_set_lines(vim.fn.bufnr(on_disk), 0, -1, false, { 'typed by the user, not written' })
+check('a buffer with changes is what the user has', left_of('typed'), { 'typed by the user, not written' })
+vim.cmd('bwipeout! ' .. vim.fn.bufnr(on_disk))
+
+-- Accepted by writing the right side, after it was edited: what is given back is what the right side holds then.
+local box = open_diff('edit-1', 'TWO\nthree\n', 7)
+check('a diff is shown in a tab page of its own', tabs(), tabs_before + 1)
+check('and it waits', box.result, nil)
+check('one diff waits', diff.count(), 1)
+local right = buffer_named('edit-1')
+check('the right side holds what is proposed', vim.api.nvim_buf_get_lines(right, 0, -1, false), { 'TWO', 'three' })
+check('and ends with a newline', vim.bo[right].eol, true)
+vim.api.nvim_buf_set_lines(right, 0, 1, false, { 'TWO (edited)' })
+vim.cmd('write')
+check('writing accepts it, with the contents as they are', wait_for(box), { accepted = true, contents = 'TWO (edited)\nthree\n' })
+check('and the tab page is closed', tabs(), tabs_before)
+check('nothing waits any more', diff.count(), 0)
+
+-- Rejected by a command.
+box = open_diff('edit-2', 'x\n', 8)
+check('a command rejects it', { diff.reject() }, { true })
+check('rejected', wait_for(box), { accepted = false })
+check('and the tab page is closed again', tabs(), tabs_before)
+
+-- Rejected by closing the tab page.
+box = open_diff('edit-3', 'x\n', 9)
+vim.cmd('tabclose')
+check('closing the tab page rejects it', wait_for(box), { accepted = false })
+
+-- A diff of the same name replaces the one before it, which is rejected; the new one is shown.
+local first = open_diff('same', 'one\n', 10)
+local second = open_diff('same', 'two\n', 11)
+check('the older diff is rejected', wait_for(first), { accepted = false })
+check('the newer one waits', second.result, nil)
+check('and is the only one', diff.count(), 1)
+
+-- Closed from Claude Code: with the number of a diff that is gone, a newer diff of the same name is left alone.
+check('another number leaves it', diff.closeDiff({ tabName = 'same', diffId = 10 }), { closed = false })
+check('still waiting', second.result, nil)
+check('its own number closes it', diff.closeDiff({ tabName = 'same', diffId = 11 }), { closed = true })
+check('closed means rejected', wait_for(second), { accepted = false })
+check('a name that is not there', diff.closeDiff({ tabName = 'nothing' }), { closed = false })
+
+-- All of them.
+local a, b = open_diff('a', 'a\n', 12), open_diff('b', 'b\n', 13)
+check('how many were closed', diff.closeAllDiffs(), { closed = 2 })
+check('both are rejected', { wait_for(a).accepted, wait_for(b).accepted }, { false, false })
+check('no tab page is left over', tabs(), tabs_before)
+
+-- A provider of the configuration's own: it is asked to show and to close, and decides when it wants.
+local calls = {}
+diff.configure({
+  provider = {
+    open = function(spec, finish)
+      table.insert(calls, 'open ' .. spec.tab_name .. ' ' .. spec.new_contents)
+      vim.schedule(function()
+        finish(true, 'by the provider')
+      end)
+      return { name = spec.tab_name }
+    end,
+    close = function(handle)
+      table.insert(calls, 'close ' .. handle.name)
+    end,
+  },
+})
+box = open_diff('own', 'proposed', 14)
+check('the provider decides', wait_for(box), { accepted = true, contents = 'by the provider' })
+check('and is asked to close', calls, { 'open own proposed', 'close own' })
+check('without a tab page of this adapter', tabs(), tabs_before)
+-- A provider that gives nothing back is still asked to close.
+local closed_without_handle = 0
+diff.configure({
+  provider = {
+    open = function(_, finish)
+      vim.schedule(function()
+        finish(false)
+      end)
+    end,
+    close = function()
+      closed_without_handle = closed_without_handle + 1
+    end,
+  },
+})
+box = open_diff('no handle', 'x', 15)
+check('a provider that returns no handle', wait_for(box), { accepted = false })
+vim.wait(100, function()
+  return false
+end, 10)
+check('is still asked to close', closed_without_handle, 1)
+diff.configure({})
 
 if failures > 0 then
   io.stderr:write(('%d checks failed\n'):format(failures))

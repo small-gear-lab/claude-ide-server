@@ -42,3 +42,14 @@ end, {
   range = true,
   desc = 'Mention the file, or the lines, to Claude Code',
 })
+
+-- `:ClaudeIdeDiffAccept` and `:ClaudeIdeDiffReject` decide the diff that Claude Code proposes: the one of the current
+-- buffer, or the only one that waits, or the one that is named.
+for name, action in pairs({ ClaudeIdeDiffAccept = 'accept', ClaudeIdeDiffReject = 'reject' }) do
+  vim.api.nvim_create_user_command(name, function(command)
+    local ok, why = require('claude_ide.diff')[action](command.fargs[1])
+    if not ok then
+      vim.notify('claude-ide: ' .. why, vim.log.levels.WARN)
+    end
+  end, { nargs = '?', desc = action:sub(1, 1):upper() .. action:sub(2) .. ' the change that Claude Code proposes' })
+end

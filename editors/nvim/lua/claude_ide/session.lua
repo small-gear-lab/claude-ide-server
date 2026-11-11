@@ -47,6 +47,7 @@ end
 
 function Session:stop()
   self.generation = self.generation + 1
+  self:_gone()
   self:_drop_connection()
   self.state = 'stopped'
   self.port = nil
@@ -219,12 +220,20 @@ function Session:_warn(reason)
   end
 end
 
+--- What was started for a server that is not there any more is of no use to anyone: told to `opts.on_gone`.
+function Session:_gone()
+  if self.opts.on_gone then
+    pcall(self.opts.on_gone)
+  end
+end
+
 --- The connection is gone, or never was: schedule the next attempt.
 function Session:_lost(generation, reason)
   if generation ~= self.generation or self.state == 'stopped' then
     return
   end
   self.generation = self.generation + 1
+  self:_gone()
   self:_drop_connection()
   self.port = nil
   self.last_error = reason

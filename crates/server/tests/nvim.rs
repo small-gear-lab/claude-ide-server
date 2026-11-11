@@ -871,3 +871,150 @@ async fn changed_diagnostics_reach_claude_code_once_for_a_burst_of_changes() {
     let changed = next_notification(&mut claude, "diagnostics_changed").await;
     assert_eq!(changed["uris"], serde_json::json!([uri(&second)]));
 }
+
+/// The number of tab pages that a Neovim has.
+fn tab_pages(listen: &Path) -> u32 {
+    let output = Command::new("nvim")
+        .arg("--server")
+        .arg(listen)
+        .args(["--remote-expr", "tabpagenr('$')"])
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .parse()
+        .unwrap_or_else(|_| panic!("{}", String::from_utf8_lossy(&output.stderr)))
+}
+
+async fn wait_for_tab_pages(listen: &Path, expected: u32) {
+    let mut seen = 0;
+    for _ in 0..150 {
+        seen = tab_pages(listen);
+        if seen == expected {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    panic!("{expected} tab pages expected, {seen} seen");
+}
+
+/// `tools/call` that does not end until the user has decided: in a task of its own, which gives the Claude Code back.
+fn call_in_task(
+    mut claude: MockClaude,
+    name: &str,
+    arguments: Value,
+) -> tokio::task::JoinHandle<(MockClaude, Value)> {
+    let name = name.to_owned();
+    tokio::spawn(async move {
+        let answer = claude
+            .request(
+                "tools/call",
+                serde_json::json!({ "name": name, "arguments": arguments }),
+            )
+            .await;
+        (claude, answer)
+    })
+}
+
+fn texts(answer: &Value) -> Vec<String> {
+    answer["result"]["content"]
+        .as_array()
+        .unwrap_or_else(|| panic!("no content in {answer}"))
+        .iter()
+        .map(|item| item["text"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+#[tokio::test]
+async fn claude_code_can_propose_a_change_that_the_user_accepts_edits_or_rejects() {
+    if !nvim_available() {
+        return;
+    }
+    let home = Home::new();
+    let _server = start_server(&home);
+    let _ = connect_when_ready(&home.default_socket()).await;
+
+    let file = home.dir.path().join("a.lua");
+    std::fs::write(&file, "return 1\n").unwrap();
+    let listen = home.dir.path().join("nvim.sock");
+    let _nvim = start_nvim_listening(
+        &home,
+        &format!(
+            "vim.cmd('edit {}'); require('claude_ide').setup({{ server = {{ autostart = false }} }})",
+            file.display()
+        ),
+        Some(&listen),
+    );
+    wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
+    let claude = claude_for(&home).await;
+    wait_until("nvim listens", || listen.exists()).await;
+    let arguments = |tab_name: &str| {
+        serde_json::json!({
+            "old_file_path": file.to_string_lossy(),
+            "new_file_path": file.to_string_lossy(),
+            "new_file_contents": "return 2\n",
+            "tab_name": tab_name,
+        })
+    };
+    assert_eq!(tab_pages(&listen), 1);
+
+    // The diff is shown in a tab page of its own and waits; the user edits the proposal and writes it: accepted, with
+    // the contents as they are then. (Nothing is written to the file: Claude Code does that.)
+    let call = call_in_task(claude, "openDiff", arguments("edit-1"));
+    wait_for_tab_pages(&listen, 2).await;
+    // The user edits the proposal: the whole first line is replaced.
+    send_keys(&listen, "<Esc>ggcc-- edited<Esc>:write<CR>");
+    let (claude, result) = timeout(WAIT, call).await.unwrap().unwrap();
+    assert_eq!(result["result"]["isError"], false, "{result}");
+    assert_eq!(texts(&result), ["FILE_SAVED", "-- edited\n"]);
+    wait_for_tab_pages(&listen, 1).await;
+    assert_eq!(
+        std::fs::read_to_string(&file).unwrap(),
+        "return 1\n",
+        "the file is Claude Code's to write"
+    );
+
+    // Rejected by the command.
+    let call = call_in_task(claude, "openDiff", arguments("edit-2"));
+    wait_for_tab_pages(&listen, 2).await;
+    send_keys(&listen, "<Esc>:ClaudeIdeDiffReject<CR>");
+    let (claude, result) = timeout(WAIT, call).await.unwrap().unwrap();
+    assert_eq!(texts(&result), ["DIFF_REJECTED", "edit-2"]);
+    wait_for_tab_pages(&listen, 1).await;
+
+    // Rejected by closing the tab page.
+    let call = call_in_task(claude, "openDiff", arguments("edit-3"));
+    wait_for_tab_pages(&listen, 2).await;
+    send_keys(&listen, "<Esc>:tabclose<CR>");
+    let (mut claude, result) = timeout(WAIT, call).await.unwrap().unwrap();
+    assert_eq!(texts(&result), ["DIFF_REJECTED", "edit-3"]);
+    assert_eq!(tab_pages(&listen), 1);
+
+    // Closed from Claude Code: the call that waits ends rejected, and `closeAllDiffTabs` counts what it closed.
+    let other = another_claude_for(&home).await;
+    let call = call_in_task(other, "openDiff", arguments("edit-4"));
+    wait_for_tab_pages(&listen, 2).await;
+    let closed = call_text(
+        &mut claude,
+        "close_tab",
+        serde_json::json!({ "tab_name": "edit-4" }),
+    )
+    .await;
+    assert_eq!(closed, "TAB_CLOSED");
+    let (other, result) = timeout(WAIT, call).await.unwrap().unwrap();
+    assert_eq!(texts(&result), ["DIFF_REJECTED", "edit-4"]);
+    wait_for_tab_pages(&listen, 1).await;
+
+    let call_a = call_in_task(other, "openDiff", arguments("a"));
+    wait_for_tab_pages(&listen, 2).await;
+    let all = call_text(&mut claude, "closeAllDiffTabs", serde_json::json!({})).await;
+    assert_eq!(all, "CLOSED_1_DIFF_TABS");
+    let (_other, result) = timeout(WAIT, call_a).await.unwrap().unwrap();
+    assert_eq!(texts(&result), ["DIFF_REJECTED", "a"]);
+    wait_for_tab_pages(&listen, 1).await;
+}
+
+/// Another Claude Code, connected to the workspace that there is.
+async fn another_claude_for(home: &Home) -> MockClaude {
+    claude_for(home).await
+}
