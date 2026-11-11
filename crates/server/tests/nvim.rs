@@ -340,6 +340,20 @@ fn starts_the_server() -> String {
     )
 }
 
+/// Waits until the server that an adapter started has ended: it ends by itself, when no adapter has been there for the idle
+/// time, so that nothing of the test is left running (or doing something with a directory that is about to be removed).
+async fn wait_for_the_server_to_end(home: &Home) {
+    let mut ended = false;
+    for _ in 0..250 {
+        if nobody_listens(home).await {
+            ended = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(ended, "the server ends once it has been idle");
+}
+
 async fn nobody_listens(home: &Home) -> bool {
     tokio::net::UnixStream::connect(home.default_socket())
         .await
@@ -364,15 +378,7 @@ async fn a_neovim_starts_the_server_when_nobody_is_listening_and_it_ends_when_th
 
     // The server was not a child of Neovim and does not end with it: it ends by itself, when it has been idle.
     nvim.kill();
-    let mut ended = false;
-    for _ in 0..250 {
-        if nobody_listens(&home).await {
-            ended = true;
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    assert!(ended, "the server ends once it has been idle");
+    wait_for_the_server_to_end(&home).await;
     assert!(home.lock_files().is_empty());
 }
 
@@ -395,6 +401,9 @@ async fn neovims_that_start_together_share_one_server() {
         })
         .collect();
     assert!(pids.contains(&first.pid()) && pids.contains(&second.pid()));
+    // One server was started, and nothing is left of it when the test is over.
+    drop((first, second));
+    wait_for_the_server_to_end(&home).await;
 }
 
 #[tokio::test]
