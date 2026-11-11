@@ -11,43 +11,12 @@ local M = {}
 local handlers = {}
 M.handlers = handlers
 
---- The ids that Claude Code gives to languages, where they differ from the names of Neovim's filetypes. **(assumption)**
---- Claude Code does not need them to be right (it shows them); only the ones that are known to differ are listed.
-local language_ids = {
-  sh = 'shellscript',
-  bash = 'shellscript',
-  zsh = 'shellscript',
-  text = 'plaintext',
-  cs = 'csharp',
-  tex = 'latex',
-  make = 'makefile',
-  dosbatch = 'bat',
-  objc = 'objective-c',
-  objcpp = 'objective-cpp',
-}
+local files = require('claude_ide.files')
+local file_of = files.file_of
 
----@param filetype string
----@return string
-function M.language_id(filetype)
-  if filetype == '' then
-    return 'plaintext'
-  end
-  return language_ids[filetype] or filetype
-end
-
---- Whether a buffer is a file that Claude can be told about: it has a name and is a normal buffer. (A buffer without
---- a name has no path to name it by; a terminal or the help are not files.)
----@param buf integer
----@return string? path The absolute path, or nil.
-local function file_of(buf)
-  local name = vim.api.nvim_buf_get_name(buf)
-  if name == '' or vim.bo[buf].buftype ~= '' then
-    return nil
-  end
-  return vim.fn.fnamemodify(name, ':p')
-end
-
+M.language_id = files.language_id
 M.file_of = file_of
+
 
 --- The open files: every listed buffer that is a file. The active one is the buffer of the current window, or, if that
 --- is not a file, the file that the last selection was in.
@@ -62,16 +31,11 @@ function handlers.getOpenEditors()
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
     local path = vim.bo[buf].buflisted and file_of(buf)
     if path then
-      -- A buffer that is not loaded yet (one that was only added to the list) has no filetype: go by the name.
-      local filetype = vim.bo[buf].filetype
-      if filetype == '' then
-        filetype = vim.filetype.match({ filename = path }) or ''
-      end
       table.insert(tabs, {
         uri = vim.uri_from_fname(path),
         isActive = path == active,
         label = vim.fn.fnamemodify(path, ':t'),
-        languageId = M.language_id(filetype),
+        languageId = files.language_of(buf, path),
         isDirty = vim.bo[buf].modified,
       })
     end
@@ -157,6 +121,12 @@ function handlers.getDiagnostics(params)
     end
   end
   return result
+end
+
+-- What acts on a file: `openFile`, `checkDocumentDirty`, `saveDocument`.
+local actions = require('claude_ide.actions')
+for _, name in ipairs({ 'openFile', 'checkDocumentDirty', 'saveDocument' }) do
+  handlers[name] = actions[name]
 end
 
 return M

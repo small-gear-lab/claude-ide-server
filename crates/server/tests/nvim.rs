@@ -67,6 +67,11 @@ fn start_nvim(home: &Home, lua: &str) -> Nvim {
 
 /// As [`start_nvim`], and listening on `listen`, so that keys can be sent to it (`nvim --server <listen> --remote-send`).
 fn start_nvim_listening(home: &Home, lua: &str, listen: Option<&Path>) -> Nvim {
+    start_nvim_in(home, home.dir.path(), lua, listen)
+}
+
+/// As [`start_nvim_listening`], with `cwd` as its working directory (so its workspace).
+fn start_nvim_in(home: &Home, cwd: &Path, lua: &str, listen: Option<&Path>) -> Nvim {
     let root = home.dir.path();
     let mut command = Command::new("nvim");
     // `-u NORC` and not `-u NONE`: no configuration is read, but the plugins on the runtime path are loaded, as they
@@ -87,6 +92,7 @@ fn start_nvim_listening(home: &Home, lua: &str, listen: Option<&Path>) -> Nvim {
         .env("XDG_DATA_HOME", root.join("data"))
         .env("XDG_STATE_HOME", root.join("state"))
         .env("HOME", root)
+        .current_dir(cwd)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -438,6 +444,21 @@ async fn call(claude: &mut MockClaude, name: &str) -> Value {
     call_with(claude, name, serde_json::json!({})).await
 }
 
+/// `tools/call`, and the text of the result as it is (for the results that are a message and not JSON).
+async fn call_text(claude: &mut MockClaude, name: &str, arguments: Value) -> String {
+    let answer = claude
+        .request(
+            "tools/call",
+            serde_json::json!({ "name": name, "arguments": arguments }),
+        )
+        .await;
+    assert_ne!(answer["result"]["isError"], true, "{name}: {answer}");
+    answer["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_else(|| panic!("no text in {answer}"))
+        .to_owned()
+}
+
 async fn call_with(claude: &mut MockClaude, name: &str, arguments: Value) -> Value {
     let answer = claude
         .request(
@@ -499,6 +520,7 @@ async fn claude_code_can_ask_for_the_open_editors_and_the_selection() {
     assert_eq!(active[0]["languageId"], "plaintext");
     assert_eq!(active[0]["isDirty"], false);
     let other = tabs.iter().find(|tab| tab["isActive"] == false).unwrap();
+
     assert_eq!(other["label"], "b.lua");
     assert_eq!(other["languageId"], "lua");
 
@@ -632,4 +654,145 @@ async fn a_file_or_some_of_its_lines_can_be_mentioned_to_claude_code() {
     let lines = next_notification(&mut claude, "at_mentioned").await;
     assert_eq!(lines["lineStart"], 1);
     assert_eq!(lines["lineEnd"], 2);
+}
+
+#[tokio::test]
+async fn claude_code_can_open_a_file_check_whether_it_has_changes_and_save_it() {
+    if !nvim_available() {
+        return;
+    }
+    let home = Home::new();
+    let _server = start_server(&home);
+    let _ = connect_when_ready(&home.default_socket()).await;
+
+    let project = home.dir.path().join("project");
+    std::fs::create_dir_all(project.join("lib")).unwrap();
+    std::fs::write(project.join("lib/a.lua"), "one\ntwo\nthree\n").unwrap();
+    std::fs::write(project.join("b.txt"), "other\n").unwrap();
+    // The workspace of the adapter is the project: it starts there, and a relative path is taken from it.
+    let listen = home.dir.path().join("nvim.sock");
+    let _nvim = start_nvim_in(
+        &home,
+        &project,
+        "require('claude_ide').setup({ selection_debounce_ms = 20, server = { autostart = false } })",
+        Some(&listen),
+    );
+    wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
+    let mut claude = claude_for(&home).await;
+    let real = std::fs::canonicalize(&project).unwrap();
+    let a = real.join("lib/a.lua");
+
+    // Not open yet.
+    let state = call_with(
+        &mut claude,
+        "checkDocumentDirty",
+        serde_json::json!({ "filePath": "lib/a.lua" }),
+    )
+    .await;
+    assert_eq!(state["success"], false, "{state}");
+    assert_eq!(
+        state["message"],
+        format!("Document not open: {}", a.display()).as_str()
+    );
+
+    // Opened by a relative path, with a text to select: the text is found and the file is the frontmost one.
+    let opened = call_text(
+        &mut claude,
+        "openFile",
+        serde_json::json!({ "filePath": "lib/a.lua", "startText": "two" }),
+    )
+    .await;
+    assert_eq!(opened, "Opened file and selected text \"two\"");
+    // The text is really selected (visual mode is entered as the keys that were typed are processed, a moment later).
+    let mut selected = Value::Null;
+    for _ in 0..100 {
+        selected = call(&mut claude, "getCurrentSelection").await;
+        if selected["text"] == "two" {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(selected["text"], "two", "{selected}");
+    assert_eq!(selected["selection"]["start"]["line"], 1);
+    assert_eq!(selected["selection"]["end"]["character"], 3);
+    let state = call_with(
+        &mut claude,
+        "checkDocumentDirty",
+        serde_json::json!({ "filePath": a.to_string_lossy() }),
+    )
+    .await;
+    assert_eq!(state["success"], true, "{state}");
+    assert_eq!(state["isDirty"], false);
+    assert_eq!(state["isUntitled"], false);
+
+    // A text that is not there, and a file that is not.
+    let missing = call_text(
+        &mut claude,
+        "openFile",
+        serde_json::json!({ "filePath": "lib/a.lua", "startText": "nowhere" }),
+    )
+    .await;
+    assert_eq!(missing, "Opened file, but text \"nowhere\" not found");
+    let gone = claude
+        .request(
+            "tools/call",
+            serde_json::json!({ "name": "openFile", "arguments": { "filePath": "nothing.lua" } }),
+        )
+        .await;
+    assert_eq!(gone["result"]["isError"], true, "{gone}");
+    assert!(
+        gone["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("File not found"),
+        "{gone}"
+    );
+
+    // Not made the frontmost one: the details, as JSON.
+    let details = call_with(
+        &mut claude,
+        "openFile",
+        serde_json::json!({ "filePath": "b.txt", "makeFrontmost": false }),
+    )
+    .await;
+    assert_eq!(details["success"], true, "{details}");
+    assert_eq!(details["languageId"], "plaintext");
+    assert_eq!(details["lineCount"], 2);
+
+    // A change that is not written is told, and is written by saveDocument.
+    wait_until("nvim listens", || listen.exists()).await;
+    send_keys(&listen, "<Esc>ggdd");
+    let mut dirty = Value::Null;
+    for _ in 0..100 {
+        dirty = call_with(
+            &mut claude,
+            "checkDocumentDirty",
+            serde_json::json!({ "filePath": a.to_string_lossy() }),
+        )
+        .await;
+        if dirty["isDirty"] == true {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(dirty["isDirty"], true, "{dirty}");
+    let saved = call_with(
+        &mut claude,
+        "saveDocument",
+        serde_json::json!({ "filePath": "lib/a.lua" }),
+    )
+    .await;
+    assert_eq!(saved["saved"], true, "{saved}");
+    assert_eq!(saved["message"], "Document saved successfully");
+    assert_eq!(
+        std::fs::read_to_string(project.join("lib/a.lua")).unwrap(),
+        "two\nthree\n"
+    );
+    let again = call_with(
+        &mut claude,
+        "saveDocument",
+        serde_json::json!({ "filePath": "lib/a.lua" }),
+    )
+    .await;
+    assert_eq!(again["saved"], false, "nothing to write the second time");
 }
