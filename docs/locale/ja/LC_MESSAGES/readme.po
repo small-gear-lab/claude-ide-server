@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-ide-server\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-11 18:39+0900\n"
+"POT-Creation-Date: 2026-11-11 22:14+0900\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: Small Gear Lab\n"
 "Language-Team: ja <LL@li.org>\n"
@@ -165,22 +165,35 @@ msgid "the protocol notes and the design"
 msgstr "プロトコルのメモと、設計"
 
 #: ../../../README.md:52
+msgid "Contributing"
+msgstr "コントリビュート"
+
+#: ../../../README.md:54
+msgid ""
+"See [CONTRIBUTING.md](CONTRIBUTING.md): how commits and the Japanese "
+"documents are handled, how to run the checks, and why statements about "
+"Claude Code come with where they were learned."
+msgstr ""
+"[CONTRIBUTING.md](CONTRIBUTING.md) を見てください。コミットと日本語版ドキュメントの扱い、チェックの走らせ方、そして "
+"Claude Code についての記述に「どこで知ったか」が添えられている理由が書いてあります。"
+
+#: ../../../README.md:57
 msgid "License"
 msgstr "ライセンス"
 
-#: ../../../README.md:54
+#: ../../../README.md:59
 msgid "Licensed under either of"
 msgstr "次のどちらかのライセンスで使えます。"
 
-#: ../../../README.md:56
+#: ../../../README.md:61
 msgid "Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))"
 msgstr "Apache License, Version 2.0（[LICENSE-APACHE](LICENSE-APACHE)）"
 
-#: ../../../README.md:57
+#: ../../../README.md:62
 msgid "MIT license ([LICENSE-MIT](LICENSE-MIT))"
 msgstr "MIT ライセンス（[LICENSE-MIT](LICENSE-MIT)）"
 
-#: ../../../README.md:59
+#: ../../../README.md:64
 msgid "at your option."
 msgstr "どちらにするかは、使う人が選べます。"
 

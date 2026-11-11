@@ -49,6 +49,11 @@ gettext catalogs in `docs/locale/ja/` by `tools/build-docs.sh`.
 | `editors/nvim/` | the Neovim adapter |
 | `docs/` | the protocol notes and the design |
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md): how commits and the Japanese documents are handled, how to run the checks, and
+why statements about Claude Code come with where they were learned.
+
 ## License
 
 Licensed under either of

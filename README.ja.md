@@ -36,6 +36,10 @@ Claude Code ──WebSocket (MCP)──▶ claude-ide-server ◀──JSON-RPC (
 | `editors/nvim/` | Neovim のアダプター                      |
 | `docs/`         | プロトコルのメモと、設計                       |
 
+## コントリビュート
+
+[CONTRIBUTING.md](CONTRIBUTING.md) を見てください。コミットと日本語版ドキュメントの扱い、チェックの走らせ方、そして Claude Code についての記述に「どこで知ったか」が添えられている理由が書いてあります。
+
 ## ライセンス
 
 次のどちらかのライセンスで使えます。
