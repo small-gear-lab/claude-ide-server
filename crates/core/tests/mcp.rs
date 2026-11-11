@@ -287,3 +287,23 @@ fn the_protocol_version_of_the_adapter_side_is_unrelated_to_the_one_of_mcp() {
     // Two different things that are both called a version: the adapter protocol's is a small integer.
     assert_eq!(PROTOCOL_VERSION, 1);
 }
+
+#[tokio::test]
+async fn a_client_that_has_the_token_but_never_speaks_is_disconnected() {
+    let mut fixture = Fixture::with_claude_handshake_timeout(Duration::from_millis(300));
+    let (_adapter, workspace, port) = registered(&mut fixture).await;
+    let token = fixture.read_lock(port).auth_token;
+
+    let mut silent = MockClaude::connect(port, &token).await;
+    // The server closes the connection once the time for the handshake has passed, and says so.
+    assert_eq!(silent.close_code().await, Some(1000));
+    assert!(workspace.claude_clients().is_empty());
+
+    // A client that does the handshake is not affected, and is served as usual.
+    let mut claude = MockClaude::connect(port, &token).await;
+    claude.handshake(4321).await;
+    assert_eq!(
+        claude.tool_names().await,
+        ["openFile", "getOpenEditors", "getWorkspaceFolders"]
+    );
+}

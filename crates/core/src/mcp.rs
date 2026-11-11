@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use rmcp::model::{
     CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, CustomNotification,
@@ -89,6 +90,7 @@ struct HubInner<B> {
     backend: B,
     server_name: String,
     server_version: String,
+    handshake_timeout: Duration,
     clients: Mutex<HashMap<u64, ClientEntry>>,
     next_id: AtomicU64,
 }
@@ -113,17 +115,20 @@ impl<B> std::fmt::Debug for McpHub<B> {
 }
 
 impl<B: ToolBackend> McpHub<B> {
-    /// A hub whose clients are told that the server is `server_name` / `server_version`.
+    /// A hub whose clients are told that the server is `server_name` / `server_version`. A client that has not
+    /// completed the MCP handshake within `handshake_timeout` is disconnected.
     pub fn new(
         backend: B,
         server_name: impl Into<String>,
         server_version: impl Into<String>,
+        handshake_timeout: Duration,
     ) -> Self {
         Self {
             inner: Arc::new(HubInner {
                 backend,
                 server_name: server_name.into(),
                 server_version: server_version.into(),
+                handshake_timeout,
                 clients: Mutex::new(HashMap::new()),
                 next_id: AtomicU64::new(1),
             }),
@@ -140,7 +145,11 @@ impl<B: ToolBackend> McpHub<B> {
                 hub: hub.clone(),
                 pid: pid.clone(),
             };
-            let Ok(running) = handler.serve(bridge(connection)).await else {
+            // A client that has the token but never speaks would otherwise hold a task and a connection for ever.
+            let served =
+                tokio::time::timeout(hub.handshake_timeout, handler.serve(bridge(connection)))
+                    .await;
+            let Ok(Ok(running)) = served else {
                 return;
             };
             let (name, version) = running
@@ -314,6 +323,8 @@ fn bridge(mut connection: Connection) -> WsTransport {
                 }
             }
         }
+        // However it ended, say so to the peer (a no-op if the connection is already closed).
+        connection.close(1000, "").await;
     });
     WsTransport { outgoing, incoming }
 }

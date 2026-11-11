@@ -7,6 +7,7 @@
 use std::io;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot, watch};
@@ -35,6 +36,8 @@ pub struct Config {
     pub server_pid: u32,
     /// Limits of the WebSocket servers that are started for the workspaces.
     pub ws: ws::Config,
+    /// How long a Claude Code that has connected may take to complete the MCP handshake.
+    pub claude_handshake_timeout: Duration,
     /// Whether a process is alive; decides which leftovers of an earlier server are cleaned up at start.
     pub is_alive: Arc<dyn Fn(u32) -> bool + Send + Sync>,
     // Where the token of each workspace comes from. The operating system's random source, and nothing else in a normal
@@ -50,6 +53,7 @@ impl Config {
             lock_dirs,
             server_pid,
             ws: ws::Config::default(),
+            claude_handshake_timeout: Duration::from_secs(10),
             is_alive: Arc::new(lock::process_is_alive),
             token_source: Arc::new(lock::generate_token),
         }
@@ -80,6 +84,7 @@ impl std::fmt::Debug for Config {
             .field("lock_dirs", &self.lock_dirs)
             .field("server_pid", &self.server_pid)
             .field("ws", &self.ws)
+            .field("claude_handshake_timeout", &self.claude_handshake_timeout)
             .finish_non_exhaustive()
     }
 }
@@ -285,6 +290,7 @@ async fn provision(
         }),
         "claude-ide-server",
         env!("CARGO_PKG_VERSION"),
+        config.claude_handshake_timeout,
     );
     let workspace = Workspace {
         registration,

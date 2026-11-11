@@ -52,13 +52,31 @@ impl Fixture {
         Self::with_adapter_config(root, dirs, config)
     }
 
+    /// Like [`new`](Self::new), with another time that Claude Code may take to complete the MCP handshake.
+    pub fn with_claude_handshake_timeout(timeout: std::time::Duration) -> Self {
+        let root = TempDir::new().unwrap();
+        let dirs = LockDirs {
+            lock_dir: root.path().join("ide"),
+            record_dir: root.path().join("run"),
+        };
+        let mut config = Config::new(dirs.clone(), std::process::id());
+        config.claude_handshake_timeout = timeout;
+        Self::started(root, dirs, adapter::Config::default(), config)
+    }
+
     fn with_adapter_config(root: TempDir, dirs: LockDirs, adapter_config: adapter::Config) -> Self {
+        let config = Config::new(dirs.clone(), std::process::id());
+        Self::started(root, dirs, adapter_config, config)
+    }
+
+    fn started(
+        root: TempDir,
+        dirs: LockDirs,
+        adapter_config: adapter::Config,
+        config: Config,
+    ) -> Self {
         let (listener, connector) = listener();
-        let server = WorkspaceServer::start(
-            listener,
-            adapter_config,
-            Config::new(dirs.clone(), std::process::id()),
-        );
+        let server = WorkspaceServer::start(listener, adapter_config, config);
         Self {
             _root: root,
             dirs,
