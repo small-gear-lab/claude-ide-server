@@ -101,8 +101,9 @@ cargo +1.88 test --workspace --locked                           # the least vers
 
 A release is made by a tag, and a person publishes it.
 
-1. The version is the one of `[workspace.package]` in `Cargo.toml`, the same for every crate. Change it there, run
-   `cargo update --workspace` (so that `Cargo.lock` follows), and commit.
+1. The version is the one of `[workspace.package]` in `Cargo.toml`, the same for every crate; the three crates that ask for each
+   other's version in `[workspace.dependencies]` (the same file) say it too. Change all four, run `cargo update --workspace`
+   (so that `Cargo.lock` follows), and commit. The workflow stops if they differ.
 2. Read `.github/release-notes.md`, which is the head of the notes of every release: what was tried, with which Claude Code,
    and what was not. Change it if that has changed. Write each paragraph and each item on one line: the page of a release shows a line break of this file as a line break.
 3. Tag the commit `v<version>` and push the tag. The workflow refuses a tag that is not the version of `Cargo.toml`.
@@ -110,9 +111,17 @@ A release is made by a tag, and a person publishes it.
    adapter (`tools/package-release.sh`, which can be run by hand to see what a release holds), writes `SHA256SUMS`, makes a
    build provenance attestation of the files, and leaves a **draft** release (a prerelease only if the version has a suffix, as in `0.2.0-rc.1`).
 5. Look at the draft: download one file, check it against `SHA256SUMS`, run it. Then publish it.
+6. The same run waits for your approval (the environment `crates-io`), and then publishes the crates to crates.io with
+   `cargo publish --workspace`, by trusted publishing: there is no token to keep. A published version cannot be replaced or
+   taken back (it can only be yanked), so look at the packages before you approve (`cargo publish --workspace --dry-run`).
+   If a run stops half way, a crate that is already published stays, and the rest has to be published by hand.
 
-*Actions, release, Run workflow* does everything except the release, and the attestation, to see what a tag would make; the
-files are kept for a week as the artifact `dist`.
+*Actions, release, Run workflow* does everything except the release, the attestation and the publication, to see what a tag
+would make; the files are kept for a week as the artifact `dist`.
+
+The crates are `claude-ide-launchd`, `claude-ide-windows`, `claude-ide-core` and `claude-ide-server`, owned by the team
+`github:small-gear-lab:maintainers`. Trusted publishing is set for each of them on crates.io (this repository, the workflow
+`release.yml`, the environment `crates-io`); the first version (0.1.0) was published by hand.
 
 ## Reporting a problem
 
