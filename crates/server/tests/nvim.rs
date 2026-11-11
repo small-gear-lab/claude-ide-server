@@ -3,13 +3,18 @@
 //! These need `nvim` on the path. Without it they say so and pass, unless `CLAUDE_IDE_REQUIRE_NVIM` is set (CI sets it),
 //! so that a machine without Neovim can still run the other tests and a CI run cannot pass by skipping these.
 
+// The stand-in for Claude Code is the core's own.
+#[path = "../../core/tests/common/mod.rs"]
+mod common;
 mod support;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 
 use claude_ide_core::lock::LockContents;
+use common::claude::MockClaude;
+use serde_json::Value;
 use support::{Home, Server, WAIT, connect_when_ready};
 use tokio::time::timeout;
 
@@ -57,9 +62,18 @@ fn adapter_dir() -> PathBuf {
 /// Starts Neovim, which runs `lua` after the adapter is on its runtime path. Nothing of the user's own is read or
 /// written: no configuration, no shada, and the directories of the XDG variables are under the test's directory.
 fn start_nvim(home: &Home, lua: &str) -> Nvim {
+    start_nvim_listening(home, lua, None)
+}
+
+/// As [`start_nvim`], and listening on `listen`, so that keys can be sent to it (`nvim --server <listen> --remote-send`).
+fn start_nvim_listening(home: &Home, lua: &str, listen: Option<&Path>) -> Nvim {
     let root = home.dir.path();
-    let child = Command::new("nvim")
-        .args(["--headless", "-u", "NONE", "-i", "NONE"])
+    let mut command = Command::new("nvim");
+    command.args(["--headless", "-u", "NONE", "-i", "NONE"]);
+    if let Some(listen) = listen {
+        command.arg("--listen").arg(listen);
+    }
+    let child = command
         .arg("--cmd")
         .arg(format!("set runtimepath^={}", adapter_dir().display()))
         .arg("-c")
@@ -237,4 +251,70 @@ async fn the_workspace_follows_cd() {
             && read_lock(&home).workspace_folders == [folder.to_string_lossy()]
     })
     .await;
+}
+
+/// The next notification of `method` that Claude Code gets.
+async fn next_notification(claude: &mut MockClaude, method: &str) -> Value {
+    timeout(WAIT, async {
+        loop {
+            let message = claude.recv_json().await.expect("the connection stays open");
+            if message["method"] == method {
+                return message["params"].clone();
+            }
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("a {method} arrives"))
+}
+
+#[tokio::test]
+async fn the_selection_reaches_claude_code_when_it_connects_and_when_the_cursor_moves() {
+    if !nvim_available() {
+        return;
+    }
+    let home = Home::new();
+    let _server = start_server(&home);
+    let _ = connect_when_ready(&home.default_socket()).await;
+
+    let file = home.dir.path().join("a.txt");
+    std::fs::write(&file, "aé😀b\nsecond line\n").unwrap();
+    let listen = home.dir.path().join("nvim.sock");
+    let _nvim = start_nvim_listening(
+        &home,
+        &format!(
+            "vim.cmd('edit {}'); require('claude_ide').setup({{ selection_debounce_ms = 20 }})",
+            file.display()
+        ),
+        Some(&listen),
+    );
+    wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
+    let lock = read_lock(&home);
+    let port: u16 = home.lock_files()[0]
+        .file_stem()
+        .unwrap()
+        .to_string_lossy()
+        .parse()
+        .unwrap();
+
+    // A Claude Code that connects now starts from the selection that there is: the cursor, at the start of the file.
+    let mut claude = MockClaude::connect(port, &lock.auth_token).await;
+    claude.handshake(4242).await;
+    let first = next_notification(&mut claude, "selection_changed").await;
+    assert_eq!(first["filePath"], file.to_string_lossy().as_ref());
+    assert_eq!(first["selection"]["isEmpty"], true);
+    assert_eq!(first["selection"]["start"]["character"], 0);
+
+    // Two characters to the right: past `a` and `é`, onto the emoji. The column is counted in UTF-16 code units, not
+    // in bytes (the emoji starts at byte 3).
+    wait_until("nvim listens", || listen.exists()).await;
+    let sent = Command::new("nvim")
+        .arg("--server")
+        .arg(&listen)
+        .args(["--remote-send", "2l"])
+        .status()
+        .unwrap();
+    assert!(sent.success());
+    let moved = next_notification(&mut claude, "selection_changed").await;
+    assert_eq!(moved["selection"]["start"]["line"], 0);
+    assert_eq!(moved["selection"]["start"]["character"], 2);
 }

@@ -40,6 +40,55 @@ end
 check('backoff', delays, { 500, 1000, 2000, 4000, 8000, 10000, 10000 })
 check('backoff does not overflow', Session.delay(10000, reconnect), 10000)
 
+-- Columns are counted in UTF-16 code units, not bytes: `é` is two bytes and one unit, an emoji is four bytes and two.
+local selection = require('claude_ide.selection')
+check('utf16 of ascii', selection.utf16_col('abc', 2), 2)
+check('utf16 after a two byte character', selection.utf16_col('aéb', 3), 2)
+check('utf16 after an emoji', selection.utf16_col('a😀b', 5), 3)
+check('utf16 past the end counts the whole line', selection.utf16_col('a😀', 99), 3)
+
+local scratch = vim.fn.tempname() .. '.txt'
+vim.cmd.edit(scratch)
+vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'aé😀b', 'second line', '' })
+local buf = vim.api.nvim_get_current_buf()
+local path = vim.fn.fnamemodify(scratch, ':p')
+local function pos(lnum, col)
+  return { buf, lnum, col, 0 }
+end
+local function range(start_line, start_char, end_line, end_char)
+  return { start = { line = start_line, character = start_char }, ['end'] = { line = end_line, character = end_char } }
+end
+
+check(
+  'a cursor is an empty range',
+  selection.current(buf, { mode = 'n', visual = pos(1, 1), cursor = pos(1, 8) }),
+  { filePath = path, text = '', selection = range(0, 4, 0, 4) }
+)
+check(
+  'characterwise: from é to the end of the emoji',
+  selection.current(buf, { mode = 'v', visual = pos(1, 2), cursor = pos(1, 4) }),
+  { filePath = path, text = 'é😀', selection = range(0, 1, 0, 4) }
+)
+check(
+  'linewise: whole lines, to the end of the last',
+  selection.current(buf, { mode = 'V', visual = pos(1, 1), cursor = pos(2, 3) }),
+  { filePath = path, text = 'aé😀b\nsecond line', selection = range(0, 0, 1, 11) }
+)
+check(
+  'backwards is the same as forwards',
+  selection.current(buf, { mode = 'v', visual = pos(1, 4), cursor = pos(1, 2) }),
+  { filePath = path, text = 'é😀', selection = range(0, 1, 0, 4) }
+)
+check(
+  'an empty line',
+  selection.current(buf, { mode = 'n', visual = pos(3, 1), cursor = pos(3, 1) }),
+  { filePath = path, text = '', selection = range(2, 0, 2, 0) }
+)
+vim.cmd.enew()
+check('a buffer without a name is not a file', selection.current(vim.api.nvim_get_current_buf(), { mode = 'n', visual = pos(1, 1), cursor = pos(1, 1) }), nil)
+vim.cmd.terminal()
+check('a terminal is not a file', selection.current(vim.api.nvim_get_current_buf(), { mode = 'n', visual = pos(1, 1), cursor = pos(1, 1) }), nil)
+
 if failures > 0 then
   io.stderr:write(('%d checks failed\n'):format(failures))
   os.exit(1)
