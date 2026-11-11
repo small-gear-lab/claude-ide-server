@@ -85,7 +85,7 @@ problem. `:ClaudeIde start` and `:ClaudeIde stop` start and stop the connection.
 Nobody has to start the server by hand. The adapter connects to the socket of the server, and what happens when
 nobody is listening depends on how the server is set up:
 
-- **A supervisor holds the socket** (systemd socket activation, see `contrib/`): the connection works, and the first
+- **A supervisor holds the socket** (systemd socket activation, or launchd on macOS; see `contrib/`): the connection works, and the first
   one starts the server. The adapter never notices that the server was not running.
 - **Nothing holds it:** the adapter starts `claude-ide-server` itself, once, and then waits for it like for any other
   server. The server is not a child of Neovim: it goes on when Neovim ends, and ends by itself when no adapter has

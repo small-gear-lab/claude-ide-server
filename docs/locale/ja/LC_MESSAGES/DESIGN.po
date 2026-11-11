@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-ide-server\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-11 19:57+0900\n"
+"POT-Creation-Date: 2026-11-11 20:13+0900\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: Small Gear Lab\n"
 "Language-Team: ja <LL@li.org>\n"
@@ -1584,54 +1584,98 @@ msgid ""
 msgstr "ソケットが、引き継いだファイルディスクリプタですでに待ち受けている（`LISTEN_PID`、`LISTEN_FDS`）"
 
 #: ../../DESIGN.md:441
+msgid "handed over by launchd"
+msgstr "launchd から受け取る"
+
+#: ../../DESIGN.md:441
+msgid "launchd on macOS"
+msgstr "macOS の launchd"
+
+#: ../../DESIGN.md:441
+msgid ""
+"the socket is asked for by name, `adapter`, from the property list of the "
+"job (`launch_activate_socket`)"
+msgstr "ソケットは、ジョブのプロパティリストにある名前（`adapter`）で求めます（`launch_activate_socket`）。"
+
+#: ../../DESIGN.md:442
 msgid "bound"
 msgstr "自分で作る"
 
-#: ../../DESIGN.md:441
+#: ../../DESIGN.md:442
 msgid "everything else, and the default"
 msgstr "それ以外のすべて。既定"
 
-#: ../../DESIGN.md:441
+#: ../../DESIGN.md:442
 msgid "the server makes the socket itself, mode 0600 in a 0700 directory"
 msgstr "サーバーが自分でソケットを作る。0700 のディレクトリの中に、モード 0600 で"
 
-#: ../../DESIGN.md:444
+#: ../../DESIGN.md:445
 msgid ""
 "A handed-over socket is not the server's to delete: it stays when the server"
 " exits, and the supervisor starts the server again at the next connection. "
 "With `--idle-timeout` an on-demand server does not stay for ever. `contrib/`"
-" has the files for each system, and `contrib/systemd` was tried with a real "
-"systemd (the service stays inactive until an adapter connects, and ends "
-"after the idle time while the socket stays)."
+" has the files for each system, and each was tried with the real thing: "
+"`contrib/systemd` with a real systemd (the service stays inactive until an "
+"adapter connects, and ends after the idle time while the socket stays), and "
+"`contrib/launchd` on the macOS runner of CI, where "
+"`crates/server/tests/launchd.rs` loads the property list that is shipped "
+"into the domain of the user (`gui/<uid>`; the runner has one) and checks the"
+" same four things: nothing runs after it is loaded, the first connection "
+"starts the server and it serves the socket that launchd handed over, it ends"
+" after the idle time with the socket still there, and the next connection "
+"starts it again."
 msgstr ""
 "受け取ったソケットは、サーバーが消してよいものではありません。サーバーが終了してもそのまま残り、次の接続で監督プロセスがサーバーをもう一度起動します。`--idle-"
 "timeout` があれば、オンデマンドで起動したサーバーが居座り続けることはありません。`contrib/` "
-"に各システム向けのファイルがあり、`contrib/systemd` は本物の systemd "
-"で試しました（アダプタが接続するまでサービスは起動せず、アイドル時間が過ぎると終了し、ソケットは残ります）。"
+"に各システム向けのファイルがあり、どれも本物で試しました。`contrib/systemd` は本物の systemd "
+"で（アダプタが接続するまでサービスは起動せず、アイドル時間が過ぎると終了し、ソケットは残ります）、`contrib/launchd` は CI の "
+"macOS ランナーで試しました。そこでは `crates/server/tests/launchd.rs` "
+"が、同梱のプロパティリストをユーザーのドメイン（`gui/<uid>`。ランナーにはあります）に読み込み、同じ4つのことを確かめます。読み込んだあとは何も動いていないこと、最初の接続でサーバーが起動し、launchd"
+" が渡したソケットを提供すること、アイドル時間が過ぎるとソケットを残したまま終了すること、次の接続でまた起動することです。"
 
-#: ../../DESIGN.md:449
+#: ../../DESIGN.md:454
 msgid ""
 "What a system does differently is absorbed in a source of its own, selected "
 "by `cfg` where the system decides it:"
 msgstr "システムごとの違いは、そのシステム専用の取得元に吸収し、システムで決まる箇所では `cfg` で選びます。"
 
-#: ../../DESIGN.md:451
+#: ../../DESIGN.md:456
 msgid "**systemd** (Linux): the handed-over source."
 msgstr "**systemd**（Linux）: 受け取る取得元です。"
 
-#: ../../DESIGN.md:452
+#: ../../DESIGN.md:457
 msgid ""
-"**launchd** (macOS): launchd can start the server at log-in "
-"(`contrib/launchd`, not tried yet: the macOS runner of CI is where it will "
-"be tried, issue #18), and the server makes its own socket. launchd's socket "
-"activation hands the socket over by name through its own interface, which is"
-" not implemented."
+"**launchd** (macOS): launchd's socket activation hands a socket over by "
+"name, through `launch_activate_socket`, and not through the environment. The"
+" source asks for the socket named `adapter`; it does not apply when launchd "
+"did not start the process (the server was run by hand), or started it from a"
+" property list that has no such socket, and the server then makes its own. "
+"The call is C, so it needs `unsafe`, which the workspace forbids: it is in a"
+" crate of its own, `claude-ide-launchd`, the one place that has it (each use"
+" with its reason written down), and it gives back owned file descriptors, so"
+" the rest stays free of it. `SockPathName` in the property list cannot use "
+"`$TMPDIR` or `~`, so the file in `contrib/launchd` has `@SOCKET@` in its "
+"place, which the instructions in the file fill in with the path that the "
+"adapters look for by default (and make its directory: launchd does not). A "
+"machine with no domain of launchd that a user agent can be loaded into (a "
+"session with nobody logged in, a container) cannot run the test; it says so "
+"and ends, unless `CLAUDE_IDE_REQUIRE_LAUNCHD=1` is set, as CI does."
 msgstr ""
-"**launchd**（macOS）: launchd がログイン時にサーバーを起動でき（`contrib/launchd`。まだ試していません。CI "
-"の macOS ランナーで試す予定です。Issue #18）、ソケットはサーバーが自分で作ります。launchd "
-"のソケットアクティベーションは、独自のインターフェースを通して名前でソケットを渡す方式で、まだ実装していません。"
+"**launchd**（macOS）: launchd のソケットアクティベーションは、環境変数ではなく "
+"`launch_activate_socket` を通して、名前でソケットを渡します。この取得元は `adapter` "
+"という名前のソケットを求めます。launchd "
+"がプロセスを起動したのでない場合（サーバーを手で動かしたとき）や、そのようなソケットのないプロパティリストから起動された場合には当てはまらず、そのときはサーバーが自分でソケットを作ります。この呼び出しは"
+" C なので `unsafe` が要り、ワークスペースはそれを禁止しています。そこで専用のクレート `claude-ide-launchd` "
+"に置きました。`unsafe` "
+"があるのはここだけで（使う箇所ごとに理由を書いてあります）、所有権つきのファイルディスクリプタ（`OwnedFd`）を返すので、ほかの部分は "
+"`unsafe` なしのままです。プロパティリストの `SockPathName` には `$TMPDIR` や `~` "
+"が使えないので、`contrib/launchd` のファイルでは、その場所に `@SOCKET@` "
+"があり、ファイルの中の手順で、アダプタが既定で探すパスに置き換えます（ディレクトリも作ります。launchd "
+"は作りません）。ユーザーエージェントを読み込める launchd "
+"のドメインがないマシン（誰もログインしていないセッション、コンテナ）では、この試験は動かせません。そう表示して終了しますが、`CLAUDE_IDE_REQUIRE_LAUNCHD=1`"
+" が設定されていれば（CI がそうしています）失敗にします。"
 
-#: ../../DESIGN.md:455
+#: ../../DESIGN.md:467
 msgid ""
 "**Task Scheduler** (Windows): there is no socket activation, and the adapter"
 " socket is a Unix domain socket in this version, so the server does not run "
@@ -1646,7 +1690,7 @@ msgstr ""
 "と、それ用の取得元が必要です（サーバーのほかの部分が依存しているのは `Listener` "
 "トレイトなので、変わるのはそこだけです）。そのうえで、タスクスケジューラがログイン時に、またはアダプタが起動するタスクを通してオンデマンドで、サーバーを起動することになります。"
 
-#: ../../DESIGN.md:460
+#: ../../DESIGN.md:472
 msgid ""
 "An adapter that finds nobody listening starts this same executable itself "
 "(the Neovim adapter does, unless told not to): connecting is how the server "
@@ -1661,18 +1705,18 @@ msgstr ""
 "があれば、最後のアダプタがいなくなったところで終了します。2つのアダプタが同時にそうしても安全です。同じソケットで2つ目のサーバーは、起動を拒否する（終了コード"
 " 1）からです。"
 
-#: ../../DESIGN.md:465
+#: ../../DESIGN.md:477
 msgid "Security"
 msgstr "セキュリティ"
 
-#: ../../DESIGN.md:467
+#: ../../DESIGN.md:479
 msgid ""
 "Every listener is on `127.0.0.1`. The adapter socket is in a 0700 directory "
 "and is itself 0600."
 msgstr ""
 "待ち受けは、すべて `127.0.0.1` です。アダプターのソケットは、モード 0700 のディレクトリの中にあり、ソケット自身も 0600 です。"
 
-#: ../../DESIGN.md:468
+#: ../../DESIGN.md:480
 msgid ""
 "The token is checked on every WebSocket upgrade. A web page cannot set that "
 "header, so a browser cannot talk to the port."
@@ -1680,13 +1724,13 @@ msgstr ""
 "トークンは、WebSocket へのアップグレードのたびに確かめます。Web "
 "ページは、そのヘッダーを付けられないので、ブラウザーは、そのポートと話せません。"
 
-#: ../../DESIGN.md:470
+#: ../../DESIGN.md:482
 msgid ""
 "Frame and message sizes are capped. A malformed message closes that "
 "connection and nothing else."
 msgstr "フレームとメッセージの大きさには、上限があります。壊れたメッセージは、その接続だけを閉じます。"
 
-#: ../../DESIGN.md:471
+#: ../../DESIGN.md:483
 msgid ""
 "Paths from Claude are used as given by the adapter; the server never reads "
 "or writes project files itself. Writing a file after an accepted diff is the"
@@ -1695,11 +1739,11 @@ msgstr ""
 "Claude "
 "からのパスは、アダプターが渡したとおりに使います。サーバー自身は、プロジェクトのファイルを読み書きしません。差分が承認されたあとの、ファイルの書き込みは、アダプターの仕事です。"
 
-#: ../../DESIGN.md:474
+#: ../../DESIGN.md:486
 msgid "Testing"
 msgstr "テスト"
 
-#: ../../DESIGN.md:476
+#: ../../DESIGN.md:488
 msgid ""
 "A mock Claude client (WebSocket) and a mock adapter (Unix socket) run in the"
 " same test process. Tests cover the handshake, authentication, every tool, "
@@ -1718,7 +1762,7 @@ msgstr ""
 " つは、本物の Unix ソケットで、全部の経路を動かします（`tests/end_to_end.rs`: "
 "登録し、ロックファイルのトークンで接続し、ツールの一覧を取り、1 つ呼び、切断し、後始末をします）。"
 
-#: ../../DESIGN.md:483
+#: ../../DESIGN.md:495
 msgid ""
 "The expected shapes of what the server sends and writes come from the "
 "observed behaviour above, written down as fixtures in "
@@ -1732,17 +1776,17 @@ msgstr ""
 "`initialize`、ロックファイルの形、`initialize`・`tools/list`・`tools/call` "
 "の結果の形です。形を変えるのは、新しい観察が、そうすべきだと言ったときで、テストを通すためではありません。"
 
-#: ../../DESIGN.md:487
+#: ../../DESIGN.md:499
 msgid ""
 "Each adapter has its own tests; the Neovim one runs headless Neovim against "
 "a real server."
 msgstr "アダプターごとに、自分のテストを持ちます。Neovim のものは、ヘッドレスの Neovim を、本物のサーバーにつないで動かします。"
 
-#: ../../DESIGN.md:489
+#: ../../DESIGN.md:501
 msgid "Milestones"
 msgstr "マイルストーン"
 
-#: ../../DESIGN.md:491
+#: ../../DESIGN.md:503
 msgid ""
 "**M0, server skeleton.** WebSocket server, lock file, token, `initialize`, "
 "`tools/list`. A mock adapter."
@@ -1750,7 +1794,7 @@ msgstr ""
 "**M0、サーバーの骨組み。** WebSocket "
 "サーバー、ロックファイル、トークン、`initialize`、`tools/list`。偽のアダプター。"
 
-#: ../../DESIGN.md:492
+#: ../../DESIGN.md:504
 msgid ""
 "**M1, read-only tools.** `getOpenEditors`, `getWorkspaceFolders`, "
 "`getCurrentSelection`, `getLatestSelection`, `getDiagnostics`; "
@@ -1759,7 +1803,7 @@ msgstr ""
 "**M1、読み取りだけのツール。** "
 "`getOpenEditors`、`getWorkspaceFolders`、`getCurrentSelection`、`getLatestSelection`、`getDiagnostics`。`selection_changed`、`at_mentioned`。"
 
-#: ../../DESIGN.md:494
+#: ../../DESIGN.md:506
 msgid ""
 "**M2, Neovim adapter.** The server executable (`crates/server`), and a Lua "
 "adapter, over `vim.lsp.rpc`. Registers the main windows only."
@@ -1767,7 +1811,7 @@ msgstr ""
 "**M2、Neovim アダプタ。** サーバーの実行ファイル（`crates/server`）と、`vim.lsp.rpc` 上の Lua "
 "アダプタ。メインのウィンドウだけを登録する。"
 
-#: ../../DESIGN.md:495
+#: ../../DESIGN.md:507
 msgid ""
 "**M3, actions.** `openFile`, `checkDocumentDirty`, `saveDocument`, "
 "`diagnostics_changed`."
@@ -1775,7 +1819,7 @@ msgstr ""
 "**M3、操作。** "
 "`openFile`、`checkDocumentDirty`、`saveDocument`、`diagnostics_changed`。"
 
-#: ../../DESIGN.md:496
+#: ../../DESIGN.md:508
 msgid ""
 "**M4, diffs.** `openDiff`, `close_tab`, `closeAllDiffTabs`, and an "
 "accept/reject flow in the Neovim adapter, with a provider that shows the "
@@ -1784,31 +1828,29 @@ msgstr ""
 "**M4、差分。** `openDiff`、`close_tab`、`closeAllDiffTabs`、そして Neovim "
 "アダプタでの承認・却下の流れ。差分を見せる提供元は、差し替えられる。"
 
-#: ../../DESIGN.md:499
+#: ../../DESIGN.md:511
 msgid "Open questions"
 msgstr "未解決の問い"
 
-#: ../../DESIGN.md:501
+#: ../../DESIGN.md:513
 msgid ""
-"launchd's socket activation, and the Windows endpoint (a named-pipe "
-"`Listener`) with a Task Scheduler definition: see \"Running the server\"."
-msgstr ""
-"launchd のソケットアクティベーション、および Windows の接続口（名前付きパイプの `Listener`）とタスクスケジューラの定義: "
-"「サーバーの実行」を参照。"
+"The Windows endpoint (a named-pipe `Listener`) with a Task Scheduler "
+"definition: see \"Running the server\"."
+msgstr "Windows の接続口（名前付きパイプの `Listener`）とタスクスケジューラの定義: 「サーバーの実行」を参照。"
 
-#: ../../DESIGN.md:503
+#: ../../DESIGN.md:514
 msgid ""
 "What an adapter should do when the server is not there: retry, and for how "
 "long (issue #10)."
 msgstr "サーバーがいないときに、アダプターがどうするか。再試行するか、どのくらいの間か（Issue #10）。"
 
-#: ../../DESIGN.md:504
+#: ../../DESIGN.md:515
 msgid ""
 "Whether to write both a path and its symlink-resolved form into "
 "`workspaceFolders`, since the CLI compares text."
 msgstr "CLI は文字列で比べるので、`workspaceFolders` に、パスと、シンボリックリンクを解決した形の両方を書くか。"
 
-#: ../../DESIGN.md:505
+#: ../../DESIGN.md:516
 msgid ""
 "A process id can be reused: if an unrelated process takes the id that a dead"
 " server recorded, its leftover lock files are not cleaned up until that "
@@ -1818,7 +1860,7 @@ msgstr ""
 "プロセスの id は、再利用されることがあります。死んだサーバーが記録した id "
 "を、関係のないプロセスが引き継ぐと、そのサーバーが残したロックファイルは、そのプロセスが終わるまで、掃除されません。プロセスの開始時刻も記録すれば、解決します。"
 
-#: ../../DESIGN.md:507
+#: ../../DESIGN.md:518
 msgid "A named-pipe transport for Windows."
 msgstr "Windows 向けの、名前付きパイプの経路。"
 
@@ -2000,3 +2042,14 @@ msgstr "Windows 向けの、名前付きパイプの経路。"
 #~ "this protocol."
 #~ msgstr ""
 #~ "Claude Code の編集の前後の診断の追跡（エディタが診断を公開するのを待ちます）は、拡張機能の内部で行い、このプロトコルは通しません。"
+
+#~ msgid ""
+#~ "**launchd** (macOS): launchd can start the server at log-in "
+#~ "(`contrib/launchd`, not tried yet: the macOS runner of CI is where it will "
+#~ "be tried, issue #18), and the server makes its own socket. launchd's socket "
+#~ "activation hands the socket over by name through its own interface, which is"
+#~ " not implemented."
+#~ msgstr ""
+#~ "**launchd**（macOS）: launchd がログイン時にサーバーを起動でき（`contrib/launchd`。まだ試していません。CI "
+#~ "の macOS ランナーで試す予定です。Issue #18）、ソケットはサーバーが自分で作ります。launchd "
+#~ "のソケットアクティベーションは、独自のインターフェースを通して名前でソケットを渡す方式で、まだ実装していません。"

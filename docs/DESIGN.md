@@ -439,19 +439,31 @@ first source that applies is used:
 | source | for | how |
 |---|---|---|
 | handed over | systemd, and other supervisors and container runtimes that follow the same convention | the socket is already listening on an inherited file descriptor (`LISTEN_PID`, `LISTEN_FDS`) |
+| handed over by launchd | launchd on macOS | the socket is asked for by name, `adapter`, from the property list of the job (`launch_activate_socket`) |
 | bound | everything else, and the default | the server makes the socket itself, mode 0600 in a 0700 directory |
 
 A handed-over socket is not the server's to delete: it stays when the server exits, and the supervisor starts the
 server again at the next connection. With `--idle-timeout` an on-demand server does not stay for ever. `contrib/` has
-the files for each system, and `contrib/systemd` was tried with a real systemd (the service stays inactive until an
-adapter connects, and ends after the idle time while the socket stays).
+the files for each system, and each was tried with the real thing: `contrib/systemd` with a real systemd (the service
+stays inactive until an adapter connects, and ends after the idle time while the socket stays), and `contrib/launchd`
+on the macOS runner of CI, where `crates/server/tests/launchd.rs` loads the property list that is shipped into the domain
+of the user (`gui/<uid>`; the runner has one) and checks the same four things: nothing runs after it is loaded, the first
+connection starts the server and it serves the socket that launchd handed over, it ends after the idle time with the
+socket still there, and the next connection starts it again.
 
 What a system does differently is absorbed in a source of its own, selected by `cfg` where the system decides it:
 
 - **systemd** (Linux): the handed-over source.
-- **launchd** (macOS): launchd can start the server at log-in (`contrib/launchd`, not tried yet: the macOS runner of
-  CI is where it will be tried, issue #18), and the server makes its own socket. launchd's socket activation hands the
-  socket over by name through its own interface, which is not implemented.
+- **launchd** (macOS): launchd's socket activation hands a socket over by name, through `launch_activate_socket`, and not
+  through the environment. The source asks for the socket named `adapter`; it does not apply when launchd did not start
+  the process (the server was run by hand), or started it from a property list that has no such socket, and the server
+  then makes its own. The call is C, so it needs `unsafe`, which the workspace forbids: it is in a crate of its own,
+  `claude-ide-launchd`, the one place that has it (each use with its reason written down), and it gives back owned file
+  descriptors, so the rest stays free of it. `SockPathName` in the property list cannot use `$TMPDIR` or `~`, so the
+  file in `contrib/launchd` has `@SOCKET@` in its place, which the instructions in the file fill in with the path that
+  the adapters look for by default (and make its directory: launchd does not). A machine with no domain of launchd that
+  a user agent can be loaded into (a session with nobody logged in, a container) cannot run the test; it says so and ends,
+  unless `CLAUDE_IDE_REQUIRE_LAUNCHD=1` is set, as CI does.
 - **Task Scheduler** (Windows): there is no socket activation, and the adapter socket is a Unix domain socket in this
   version, so the server does not run on Windows yet. It needs a named-pipe `Listener` in the core crate (the
   `Listener` trait is what the rest of the server depends on, so that is the only place that changes) and a source for
@@ -498,8 +510,7 @@ same moment are safe, because a second server on the same socket refuses to star
 
 ## Open questions
 
-- launchd's socket activation, and the Windows endpoint (a named-pipe `Listener`) with a Task Scheduler definition: see
-  "Running the server".
+- The Windows endpoint (a named-pipe `Listener`) with a Task Scheduler definition: see "Running the server".
 - What an adapter should do when the server is not there: retry, and for how long (issue #10).
 - Whether to write both a path and its symlink-resolved form into `workspaceFolders`, since the CLI compares text.
 - A process id can be reused: if an unrelated process takes the id that a dead server recorded, its leftover lock
