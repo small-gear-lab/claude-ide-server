@@ -142,7 +142,80 @@ local function diagnostics_of(buf, path, uri)
   return { uri = uri or vim.uri_from_fname(path), diagnostics = found }
 end
 
---- The diagnostics of one file (`params.uri`), or of every open file that has some.
+--- How long `getDiagnostics` waits for the diagnostics of a file that has just been changed under Neovim. The times are those of
+--- the VS Code extension, which waits for the editor to publish the diagnostics of a file that Claude Code has edited: up to
+--- `first_ms` for the first update (none by then: the file has none to report), then until things are quiet for `quiet_ms`,
+--- and in all no longer than `cap_ms` (`cap_hidden_ms` for a file that no window shows). `false` does not wait.
+---@type false|{ first_ms: integer, quiet_ms: integer, cap_ms: integer, cap_hidden_ms: integer }
+M.wait = { first_ms = 750, quiet_ms = 150, cap_ms = 1500, cap_hidden_ms = 1000 }
+
+--- Makes the buffer of a file that was written by someone else (Claude Code, say) hold what is on the disk now: a buffer without
+--- changes that is older than the file is read again, and then whatever makes diagnostics (a language server, a linter) is told of the
+--- change by Neovim as for any other. A buffer with changes that were not written is the user's, and is left alone.
+---@param buf integer
+---@param path string
+---@return boolean reloaded
+local function reload_if_older(buf, path)
+  if vim.bo[buf].modified or vim.uv.fs_stat(path) == nil then
+    return false
+  end
+  if vim.deep_equal(vim.fn.readfile(path), vim.api.nvim_buf_get_lines(buf, 0, -1, false)) then
+    return false
+  end
+  vim.api.nvim_buf_call(buf, function()
+    vim.cmd('silent! edit')
+  end)
+  return true
+end
+
+--- Lets the editor publish the diagnostics of a buffer that was read again, as the VS Code extension does for a file that was
+--- changed: it returns (in the request that waits: a coroutine) when they have come and things are quiet, or when time is up.
+---@param buf integer
+local function wait_for_diagnostics(buf)
+  local wait = M.wait
+  if not wait or not coroutine.isyieldable() then
+    return
+  end
+  local shown = false
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    shown = shown or vim.api.nvim_win_get_buf(win) == buf
+  end
+  local cap = shown and wait.cap_ms or wait.cap_hidden_ms
+  local co = coroutine.running()
+  local started = vim.uv.now()
+  local timer = assert(vim.uv.new_timer())
+  local finished = false
+  local autocmd
+  local function finish()
+    if finished then
+      return
+    end
+    finished = true
+    timer:stop()
+    timer:close()
+    pcall(vim.api.nvim_del_autocmd, autocmd)
+    vim.schedule(function()
+      coroutine.resume(co)
+    end)
+  end
+  local function rearm(after)
+    timer:stop()
+    timer:start(math.max(after, 1), 0, finish)
+  end
+  rearm(math.min(wait.first_ms, cap))
+  autocmd = vim.api.nvim_create_autocmd('DiagnosticChanged', {
+    buffer = buf,
+    callback = function()
+      -- An update: wait until things are quiet, and not longer than the cap allows.
+      rearm(math.min(wait.quiet_ms, cap - (vim.uv.now() - started)))
+    end,
+  })
+  coroutine.yield()
+end
+
+--- The diagnostics of one file (`params.uri`), or of every open file that has some. For one file that was changed on the disk
+--- since Neovim read it, the file is read again and the diagnostics are waited for first: Claude Code asks for them right after
+--- it has edited the file, and what Neovim has by then is those of the text before the edit.
 ---@param params { uri: string? }?
 ---@return table[]
 function handlers.getDiagnostics(params)
@@ -156,6 +229,9 @@ function handlers.getDiagnostics(params)
     local buf = files.buffer_for(path)
     if not buf then
       return {}
+    end
+    if vim.api.nvim_buf_is_loaded(buf) and reload_if_older(buf, file_of(buf) or path) then
+      wait_for_diagnostics(buf)
     end
     return { diagnostics_of(buf, file_of(buf) or path, wanted) }
   end

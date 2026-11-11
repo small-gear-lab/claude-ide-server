@@ -230,6 +230,72 @@ check('a window was added for the file', #vim.api.nvim_tabpage_list_wins(0), bef
 check('and the terminal is still shown', vim.fn.bufwinid(terminal_buf) ~= -1, true)
 check('saving a file that is not open', actions.saveDocument({ filePath = dir .. '/other.lua' }), { success = false })
 
+-- Diagnostics of a file that was written by someone else (Claude Code, say): the buffer is read again, and the diagnostics of what
+-- is on the disk now are waited for, since whatever makes them (here a linter that answers a little after the file is read)
+-- is not quick. A file that was not changed is answered at once.
+local lint_file = vim.fn.resolve(dir) .. '/lint.lua'
+vim.fn.writefile({ 'first' }, lint_file)
+vim.cmd.edit(lint_file)
+local lint_buf = vim.fn.bufnr(lint_file)
+local namespace = vim.api.nvim_create_namespace('fake-linter')
+vim.api.nvim_create_autocmd('BufReadPost', {
+  buffer = lint_buf,
+  callback = function(args)
+    local text = vim.api.nvim_buf_get_lines(args.buf, 0, 1, false)[1]
+    vim.defer_fn(function()
+      vim.diagnostic.set(namespace, args.buf, { { lnum = 0, col = 0, message = 'about: ' .. text } })
+    end, 120)
+  end,
+})
+methods.wait = { first_ms = 750, quiet_ms = 150, cap_ms = 1500, cap_hidden_ms = 1000 }
+local function diagnostics_of_uri(uri)
+  local box = {}
+  local started = vim.uv.now()
+  local co = coroutine.create(function()
+    box.result = methods.handlers.getDiagnostics({ uri = uri })
+  end)
+  assert(coroutine.resume(co))
+  vim.wait(3000, function()
+    return box.result ~= nil
+  end, 10)
+  return box.result, vim.uv.now() - started
+end
+local lint_uri = vim.uri_from_fname(lint_file)
+local unchanged, quick = diagnostics_of_uri(lint_uri)
+check('a file that was not changed is answered at once', quick < 100, true)
+check('and has none yet', #unchanged[1].diagnostics, 0)
+vim.fn.writefile({ 'second' }, lint_file) -- written by someone else
+local fresh, waited = diagnostics_of_uri(lint_uri)
+check('the diagnostics of the text that is on the disk now', fresh[1].diagnostics[1].message, 'about: second')
+check('which were waited for', waited >= 100, true)
+check('the buffer holds what is on the disk', vim.api.nvim_buf_get_lines(lint_buf, 0, -1, false), { 'second' })
+
+-- A buffer with changes that were not written is the user's: not read again, and nothing is waited for.
+vim.api.nvim_buf_set_lines(lint_buf, 0, -1, false, { 'typed' })
+vim.fn.writefile({ 'third' }, lint_file)
+local kept, quick_again = diagnostics_of_uri(lint_uri)
+check('a buffer with changes is left alone', vim.api.nvim_buf_get_lines(lint_buf, 0, -1, false), { 'typed' })
+check('and is not waited for', quick_again < 100, true)
+vim.cmd('bwipeout! ' .. lint_buf)
+
+-- A file that gets no diagnostics at all is given up on after the first wait, not the whole cap.
+local silent_file = vim.fn.resolve(dir) .. '/silent.lua'
+vim.fn.writefile({ 'a' }, silent_file)
+vim.cmd.edit(silent_file)
+vim.fn.writefile({ 'b' }, silent_file)
+methods.wait = { first_ms = 200, quiet_ms = 50, cap_ms = 1500, cap_hidden_ms = 1000 }
+local none, gave_up = diagnostics_of_uri(vim.uri_from_fname(silent_file))
+check('no diagnostics come: it ends with none', #none[1].diagnostics, 0)
+check('after the first wait', gave_up >= 180 and gave_up < 600, true)
+methods.wait = false
+local _, not_waiting = (function()
+  vim.fn.writefile({ 'c' }, silent_file)
+  return diagnostics_of_uri(vim.uri_from_fname(silent_file))
+end)()
+check('with `false` it does not wait', not_waiting < 100, true)
+methods.wait = { first_ms = 750, quiet_ms = 150, cap_ms = 1500, cap_hidden_ms = 1000 }
+vim.cmd('bwipeout! ' .. vim.fn.bufnr(silent_file))
+
 -- A file that is asked for by a path through a link: it is found, and answered under the uri that it was asked for (Claude Code
 -- compares that uri with the path of the file that it edited, and does not resolve links).
 local real_dir = vim.fn.resolve(dir) .. '/real'

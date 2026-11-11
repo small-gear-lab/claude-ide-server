@@ -1055,6 +1055,49 @@ async fn another_claude_for(home: &Home) -> MockClaude {
 }
 
 #[tokio::test]
+async fn diagnostics_asked_for_right_after_a_file_was_written_are_those_of_the_new_text() {
+    if !nvim_available() {
+        return;
+    }
+    let home = Home::new();
+    let _server = start_server(&home);
+    let _ = connect_when_ready(&home.default_socket()).await;
+
+    let file = home.dir.path().join("a.lua");
+    std::fs::write(&file, "before\n").unwrap();
+    // A linter that answers a little after a file is read, as a language server does.
+    let _nvim = start_nvim(
+        &home,
+        &format!(
+            "vim.cmd('edit {}'); \
+             local ns = vim.api.nvim_create_namespace('linter'); \
+             vim.api.nvim_create_autocmd('BufReadPost', {{ callback = function(args) \
+               local text = vim.api.nvim_buf_get_lines(args.buf, 0, 1, false)[1]; \
+               vim.defer_fn(function() vim.diagnostic.set(ns, args.buf, {{ {{ lnum = 0, col = 0, message = 'about: ' .. text }} }}) end, 150) \
+             end }}); \
+             require('claude_ide').setup({{ server = {{ autostart = false }} }})",
+            file.display()
+        ),
+    );
+    wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
+    let mut claude = claude_for(&home).await;
+    let uri = format!("file://{}", std::fs::canonicalize(&file).unwrap().display());
+
+    // Claude Code writes the file, and asks for the diagnostics of it at once: they are of the text that it wrote.
+    std::fs::write(&file, "after the edit\n").unwrap();
+    let diagnostics = call_with(
+        &mut claude,
+        "getDiagnostics",
+        serde_json::json!({ "uri": uri }),
+    )
+    .await;
+    assert_eq!(
+        diagnostics[0]["diagnostics"][0]["message"], "about: after the edit",
+        "{diagnostics}"
+    );
+}
+
+#[tokio::test]
 async fn a_file_is_asked_for_by_a_path_through_a_link_and_answered_under_the_uri_that_was_asked_for()
  {
     if !nvim_available() {

@@ -17,6 +17,7 @@ local M = {}
 ---@field register_timeout_ms integer How long the server has to answer `register`.
 ---@field selection_debounce_ms integer How long the cursor must stay still before the selection is sent.
 ---@field diagnostics_debounce_ms integer How long diagnostics are collected before the files that changed are reported.
+---@field diagnostics_wait false|{ first_ms: integer?, quiet_ms: integer?, cap_ms: integer?, cap_hidden_ms: integer? } How long `getDiagnostics` waits for the diagnostics of a file that was changed under Neovim (see `methods.wait`). `false`: not at all.
 ---@field diff false|{ provider: ('tab'|claude_ide.DiffProvider)?, keys: { accept: string?, reject: string? }? } How the changes that Claude Code proposes are shown (`false`: not at all: Claude Code then shows them itself).
 ---@field methods table<string, fun(params: any): any, table?> What the server may ask of this Neovim.
 ---@field on_gone fun()? Called when the connection to the server has ended.
@@ -39,6 +40,7 @@ local defaults = {
   register_timeout_ms = 5000,
   selection_debounce_ms = 100,
   diagnostics_debounce_ms = 100,
+  diagnostics_wait = {},
   diff = { provider = 'tab', keys = {} },
   methods = methods.handlers,
 }
@@ -80,6 +82,11 @@ function M.setup(opts)
     diagnosing.detach()
   end
   vim.api.nvim_clear_autocmds({ group = group })
+  if opts.diagnostics_wait == false then
+    methods.wait = false
+  else
+    methods.wait = vim.tbl_extend('force', { first_ms = 750, quiet_ms = 150, cap_ms = 1500, cap_hidden_ms = 1000 }, opts.diagnostics_wait)
+  end
   -- The methods are this Neovim's own copy, so that leaving some out does not change the module's.
   opts.methods = vim.tbl_extend('force', {}, opts.methods)
   if opts.diff == false then
