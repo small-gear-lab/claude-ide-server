@@ -8,16 +8,18 @@ Neovim 側の接続部分です。Neovim を `claude-ide-server` に登録して
 
 - Neovim 0.11 以降。CI は 0.11.7 と 0.12.6 でテストを動かし、0.11.0（0.11 系の最初のリリース）は手で試しました。Neovim 0.10 では動きません（`vim.str_utfindex` の引数が違います。それより先は試していません）。
 - Windows でも動きます。サーバーはそこで動き（[DESIGN](DESIGN.md) の「サーバーの実行」を参照）、アダプターは名前付きパイプで接続します。下の「Windows」を参照してください。
-- `PATH` の通った `claude-ide-server`（[DESIGN](DESIGN.md) の「サーバーの実行」を参照）、または最初の接続で起動する監督プロセス。誰も待ち受けていなければ、アダプターが実行ファイルを自分で起動します。ダウンロードできるバイナリはまだありません。このリポジトリのクローンで `cargo install --path crates/server` を実行するとビルドされ、`~/.cargo/bin` に置かれます。
+- `PATH` の通った `claude-ide-server`（[DESIGN](DESIGN.md) の「サーバーの実行」を参照）、または最初の接続で起動する監督プロセス。誰も待ち受けていなければ、アダプターが実行ファイルを自分で起動します。実行ファイルは、[Releases](https://github.com/small-gear-lab/claude-ide-server/releases) のページのアーカイブ（`claude-ide-server-<version>-<target>`。Linux の `-musl` は静的で、どこでも動き、`-gnu` は glibc 2.34 以降が要ります）にあります。または、このリポジトリのクローンで `cargo install --path crates/server --locked` を実行するとビルドされ、`~/.cargo/bin` に置かれます。
 
 ## インストール
 
-このリポジトリのクローンにある `editors/nvim` を、お使いのプラグインマネージャのやり方で Neovim のランタイムパスに加えてから、`setup` を呼びます。
+[Releases](https://github.com/small-gear-lab/claude-ide-server/releases) のページから `claude-ide-nvim-<version>.zip` を取り（同じバージョンの `claude-ide-server` と組になります）、展開して、そのディレクトリを Neovim のランタイムパスに加え、`setup` を呼びます。
 
 ```lua
-vim.opt.runtimepath:append('/path/to/claude-ide-server/editors/nvim')
+vim.opt.runtimepath:append('/path/to/claude-ide-nvim-<version>')
 require('claude_ide').setup()
 ```
+
+このリポジトリのクローンから使うなら、ディレクトリは `editors/nvim` で、それをランタイムパスに加えます。プラグインマネージャはリポジトリの直下にあるプラグインを想定していて、このアダプターはサブディレクトリにあるので、`config` でそのディレクトリを渡すか、zip を使ってください。
 
 `setup` は、Neovim が起動し終わってから接続します。`setup({ autostart = false })` なら接続せず、`:ClaudeIde start` で接続します。
 

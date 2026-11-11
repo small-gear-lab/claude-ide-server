@@ -839,7 +839,6 @@ msgid "Transport"
 msgstr "通信の経路"
 
 #: ../../DESIGN.md:236
-#, fuzzy
 msgid ""
 "A Unix domain socket at `$XDG_RUNTIME_DIR/claude-ide-server/adapter.sock` "
 "(without `XDG_RUNTIME_DIR`, as on macOS, `claude-ide-"
@@ -849,7 +848,7 @@ msgid ""
 msgstr ""
 "`$XDG_RUNTIME_DIR/claude-ide-server/adapter.sock` にある Unix ドメインソケット（macOS "
 "のように `XDG_RUNTIME_DIR` がなければ、一時ディレクトリの下の `claude-ide-"
-"server-<user>/adapter.sock`）。ディレクトリのモードは 0700、ソケットファイルのモードは 0600 です。Windows "
+"server-<uid>/adapter.sock`）。ディレクトリのモードは 0700、ソケットファイルのモードは 0600 です。Windows "
 "では代わりに名前付きパイプを使います（「アダプター用のソケットの出どころ」を参照）。"
 
 #: ../../DESIGN.md:239

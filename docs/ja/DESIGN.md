@@ -141,9 +141,7 @@ WebSocket の接続は、1 本ごとに別のクライアントです。サー�
 
 ### 通信の経路
 
-- A Unix domain socket at `$XDG_RUNTIME_DIR/claude-ide-server/adapter.sock` (without `XDG_RUNTIME_DIR`, as on macOS,
-  `claude-ide-server-<uid>/adapter.sock` under the temporary directory), in a directory of mode 0700. The socket file is
-  mode 0600. On Windows it is a named pipe instead (see "Where the adapter socket comes from").
+- `$XDG_RUNTIME_DIR/claude-ide-server/adapter.sock` にある Unix ドメインソケット（macOS のように `XDG_RUNTIME_DIR` がなければ、一時ディレクトリの下の `claude-ide-server-<uid>/adapter.sock`）。ディレクトリのモードは 0700、ソケットファイルのモードは 0600 です。Windows では代わりに名前付きパイプを使います（「アダプター用のソケットの出どころ」を参照）。
 - JSON-RPC 2.0 を、LSP と同じ `Content-Length` のフレーミングで使います。すでに LSP クライアントを持つエディタは、そのトランスポートを再利用できます。Neovim 0.12 で確認しました。`vim.lsp.rpc.connect(path)` は Unix ソケットに接続でき、アダプターはリクエストと通知を送れ、サーバーからのリクエストにも答えられ（`server_request` ディスパッチャ）、サーバーが接続を閉じると `on_exit` が呼ばれて `is_closing()` が true になります。接続に失敗した場合もエラーは起きません。Neovim は警告を表示するだけで、`on_exit` は続きません。そのためアダプターは、まず自前の接続を試して閉じ（サーバーは何も言わずに閉じる接続を無視します）、それがうまくいったときだけ `vim.lsp.rpc` で接続します。これにより、メッセージを出さずに再試行することもできます。[Neovim アダプター](NVIM.md)を参照してください。
 - どちらの側からも、要求と通知を送ります。接続がそのままワークスペースです。接続が閉じたら、サーバーは、そのワークスペースの WebSocket のクライアントとポートを閉じて、ロックファイルを消します。
 

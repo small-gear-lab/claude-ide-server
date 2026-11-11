@@ -15,18 +15,24 @@ real Claude Code (2.1.322).
   hand. Neovim 0.10 does not work (`vim.str_utfindex` takes other arguments there; nothing was tried beyond that).
 - Windows works too: the server runs there (see "Running the server" in [DESIGN](DESIGN.md)), and the adapter connects over its named pipe. See "Windows" below.
 - `claude-ide-server` on the `PATH` (see "Running the server" in [DESIGN](DESIGN.md)), or a supervisor that starts it at
-  the first connection. The adapter starts the executable itself if nobody is listening. There is no binary to download
-  yet: `cargo install --path crates/server`, in a clone of this repository, builds it and puts it in `~/.cargo/bin`.
+  the first connection. The adapter starts the executable itself if nobody is listening. The executable is in the
+  archives of the [Releases](https://github.com/small-gear-lab/claude-ide-server/releases) page (`claude-ide-server-<version>-<target>`;
+  on Linux, `-musl` is static and runs anywhere, and `-gnu` needs glibc 2.34 or newer); or `cargo install --path crates/server --locked`,
+  in a clone of this repository, builds it and puts it in `~/.cargo/bin`.
 
 ## Installing
 
-Add `editors/nvim` of a clone of this repository to the runtime path of Neovim, in whatever way your plugin manager
-does that, and call `setup`:
+Take `claude-ide-nvim-<version>.zip` from the [Releases](https://github.com/small-gear-lab/claude-ide-server/releases)
+page (it goes with the `claude-ide-server` of the same version), unpack it, add the directory to the runtime path of Neovim,
+and call `setup`:
 
 ```lua
-vim.opt.runtimepath:append('/path/to/claude-ide-server/editors/nvim')
+vim.opt.runtimepath:append('/path/to/claude-ide-nvim-<version>')
 require('claude_ide').setup()
 ```
+
+From a clone of this repository, the directory is `editors/nvim`: add that to the runtime path instead. A plugin manager wants
+a plugin at the root of a repository, and this one is in a subdirectory, so give it the directory in `config`, or use the zip.
 
 `setup` connects once Neovim has started. `setup({ autostart = false })` does not; `:ClaudeIde start` does.
 

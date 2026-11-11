@@ -10,13 +10,14 @@ integrations behave (the VS Code extension and the JetBrains plugin), and from t
 [coder/claudecode.nvim](https://github.com/coder/claudecode.nvim/blob/main/PROTOCOL.md). It can break when Claude
 Code changes.
 
-> **Status: early development, and not published.** The server implements the whole of the protocol: the handshake, every
+> **Status: early development.** The server implements the whole of the protocol: the handshake, every
 > tool of the VS Code extension that makes sense for a terminal editor (opening files, the selection, diagnostics,
 > diffs with accept and reject), and the notifications. It was tried with a real Claude Code (2.1.322), on Linux, with
 > the Neovim adapter. It runs as an executable (`claude-ide-server`) on Linux (systemd socket activation), macOS (launchd)
 > and Windows (a named pipe, and a Task Scheduler task); macOS and Windows are tried in CI, with stand-ins for Claude
 > Code, not with a Claude Code of their own. Not done: Claude Code in WSL with an editor on Windows (#24), and
-> publishing to crates.io (#16); there are no binaries to download, so you build it yourself.
+> publishing to crates.io (#16). The executable and the adapter are on the
+> [Releases](https://github.com/small-gear-lab/claude-ide-server/releases) page.
 
 ## What it is
 
@@ -35,6 +36,19 @@ Claude Code ──WebSocket (MCP)──▶ claude-ide-server ◀──JSON-RPC (
   that workspace and its lock file, so a crashed editor leaves nothing behind.
 
 The first adapter is the one for Neovim, written in Lua (`editors/nvim`).
+
+## Installing
+
+1. From the [Releases](https://github.com/small-gear-lab/claude-ide-server/releases) page, take the archive of the server
+   for your system (`claude-ide-server-<version>-<target>`; on Linux, `-musl` is one static file that runs on any
+   distribution, and `-gnu` is dynamic and needs glibc 2.34 or newer), and put `claude-ide-server` on your `PATH`. Check it
+   against `SHA256SUMS` (or with `gh attestation verify <file> --repo small-gear-lab/claude-ide-server`).
+2. Take `claude-ide-nvim-<version>.zip`, unpack it, add the directory to the runtime path of Neovim, and call `setup`; see
+   [docs/NVIM.md](docs/NVIM.md).
+3. Start `claude` in the directory that Neovim has open, and choose Neovim in `/ide`.
+
+To build it yourself, `cargo install --path crates/server --locked` in a clone of this repository puts the executable in
+`~/.cargo/bin`; the adapter is the directory `editors/nvim` of the clone.
 
 ## Documentation
 

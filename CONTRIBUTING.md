@@ -97,6 +97,23 @@ cargo +1.88 test --workspace --locked                           # the least vers
   which works on strings so that both are tested on every system.
 - What the tests of the core and of the executable share is in `crates/test-support`.
 
+## Releasing
+
+A release is made by a tag, and a person publishes it.
+
+1. The version is the one of `[workspace.package]` in `Cargo.toml`, the same for every crate. Change it there, run
+   `cargo update --workspace` (so that `Cargo.lock` follows), and commit.
+2. Read `.github/release-notes.md`, which is the head of the notes of every release: what was tried, with which Claude Code,
+   and what was not. Change it if that has changed.
+3. Tag the commit `v<version>` and push the tag. The workflow refuses a tag that is not the version of `Cargo.toml`.
+4. The `release` workflow (`.github/workflows/release.yml`) builds the executable for each target, packs it and the Neovim
+   adapter (`tools/package-release.sh`, which can be run by hand to see what a release holds), writes `SHA256SUMS`, makes a
+   build provenance attestation of the files, and leaves a **draft** release (a prerelease while the version is 0.x).
+5. Look at the draft: download one file, check it against `SHA256SUMS`, run it. Then publish it.
+
+*Actions, release, Run workflow* does everything except the release, and the attestation, to see what a tag would make; the
+files are kept for a week as the artifact `dist`.
+
 ## Reporting a problem
 
 Say the version of Claude Code, of Neovim (or of the editor), of `claude-ide-server`, and the system. The server's log
