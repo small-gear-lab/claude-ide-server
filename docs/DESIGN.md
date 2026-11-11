@@ -164,6 +164,12 @@ the Neovim adapter where it says so. These are not answers to anything that the 
   files; it drops the result, with a `Diagnostics file path mismatch`, if the `uri` that comes back is not the file that
   it edited, after normalising both), and `set_permission_mode` (`{ mode: "ask" | "skip_all_permission_checks" }`,
   whenever its permission mode changes).
+- **The `uri` that it asks for is the one that it wants back.** It normalises the two (it takes off `file://` and the
+  like) and does not resolve symbolic links, so a file that it names through a link is not the file that comes back
+  under its real path. An adapter finds the file by its real path, and answers under the `uri` that it was asked for
+  (checked with the Neovim adapter, in a workspace that is a link: the `uri` that was asked for, through the link, came
+  back with the diagnostics of the file). What was not checked is the call that Claude Code makes by itself around an
+  edit, where the `Diagnostics file path mismatch` would show.
 - It takes these notifications from the editor: `selection_changed`, `at_mentioned`, `log_event` and the MCP logging
   message. It does not use `getOpenEditors`, `getCurrentSelection`, `getLatestSelection`, `checkDocumentDirty`,
   `saveDocument` and `getWorkspaceFolders`.
@@ -175,8 +181,12 @@ the Neovim adapter where it says so. These are not answers to anything that the 
   that is remembered (the selection) is sent again at 250 ms, 500 ms, 1 s and 3 s after the handshake, in addition to the
   replay at once (`claude_state_resends`). 500 ms is the time at which the VS Code extension sends the selection, once,
   after a connection (read from its code). With 250 ms, 1 s and 3 s (the times that were measured), ten runs out of ten
-  reached the model. Later notifications are
-  taken, so this is only about the first seconds after a connection.
+  reached the model on an idle machine. With the CPU busy as well (`stress-ng` with 32 workers on 16 cores, a load
+  average of 28 to 42), twelve runs out of twelve did, with a selection made in Neovim before Claude Code started and with
+  500 ms among the times. Claude Code was slow to start there: it connected 10 to 21 s after the adapter had registered
+  (2.4 s on an idle machine). The log of the server does not say which of the resends a run was served by, so these runs
+  do not say that any of the times can be left out; the times were not changed. Later notifications are taken, so this
+  is only about the first seconds after a connection.
 
 ### What the VS Code extension does
 
@@ -194,7 +204,10 @@ reference for what an editor answers. What a client of this protocol may rely on
 - `openFile` looks for `startText` with a plain search from the start of the document, and `endText` after it; a
   document is counted as having a line more than there are, after a final newline.
 - Its own tracking of diagnostics around the edits of Claude Code (it waits for the editor to publish them) is done
-  inside the extension, not through this protocol.
+  inside the extension, not through this protocol: for a file that was edited, it waits up to 750 ms for the first
+  update, then until 150 ms pass with none, and in all no longer than 1500 ms (1000 ms for a file that no editor shows). An
+  adapter that has no such wait answers with what it had before the edit; the Neovim adapter waits, with the same times
+  (see "Diagnostics" in [NVIM](NVIM.md)).
 
 ### Slow readers
 
@@ -299,7 +312,10 @@ it means that the notification is not passed on and the owner of the workspace i
   names its files, none replaces another, and a Claude Code that connects later is not told of it.
 - **The answer to `getDiagnostics`** (with `{ uri }` as the parameters, or none for all files) is
   `[ { uri, diagnostics: [ { message, severity, range: { start, end }, source? } ] } ]`. `severity` is one of
-  `"Error"`, `"Warning"`, `"Information"` and `"Hint"`; an empty list is an answer.
+  `"Error"`, `"Warning"`, `"Information"` and `"Hint"`; an empty list is an answer. For a `uri` that was asked for, the
+  `uri` of the entry is that one, as it was spelt (see "What Claude Code sends on its own"), and the answer is the
+  diagnostics of the file as it is now: an adapter should wait, for a short time, for those of a file that was just
+  changed under the editor.
 
 The server passes these on to Claude Code in the shapes that it expects (see the notifications above): `selectionChanged`
 becomes `selection_changed` (with a `fileUrl` added, and `isEmpty`), `atMention` becomes `at_mentioned`,

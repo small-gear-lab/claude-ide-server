@@ -110,8 +110,9 @@ Claude Code 2.1.322 のコードから分かること（プログラムを読ん
 
 - 通知 `ide_connected`。ハンドシェイクの直後に、Claude Code のプロセスつきで来ます。
 - エディタへのツール呼び出し: `closeAllDiffTabs`（接続の直後と、差分を閉じるとき）、`openDiff` と `close_tab`（差分）、`getDiagnostics`（編集しようとするファイルについて、編集の前後と、全ファイルについて。戻ってきた `uri` が、編集したファイルと（両方を正規化したうえで）違うと、`Diagnostics file path mismatch` として結果を捨てます）、`set_permission_mode`（`{ mode: "ask" | "skip_all_permission_checks" }`。許可モードが変わるたびに）。
+- **Claude Code が求める `uri` は、そのまま返してほしい `uri` です。** 2つを正規化し（`file://` などを取り除きます）、シンボリックリンクは解決しないので、リンク経由で名指したファイルは、実パスで返ってきてもそのファイルとは見なされません。アダプタは、ファイルを実パスで探し、求められた `uri` のままで答えます（Neovim のアダプタで、リンクの下のワークスペースで確認しました。リンク経由で求めた `uri` が、そのファイルの診断とともに返ってきました）。確認していないのは、Claude Code が編集の前後に自分で行う呼び出しで、`Diagnostics file path mismatch` が出るのはそこです。
 - エディタからの通知で受け付けるのは、`selection_changed`、`at_mentioned`、`log_event`、MCP のログメッセージです。`getOpenEditors`、`getCurrentSelection`、`getLatestSelection`、`checkDocumentDirty`、`saveDocument`、`getWorkspaceFolders` は使いません。
-- **ハンドシェイクの直後に届いた通知は、捨てられます。** Claude Code は、接続してからしばらくあとに、通知を受け取るものを用意し、その時間は回によって違います（確認: すぐに送った `selection_changed` は一度も届かず、25 ms や 50 ms 後に送ると3回ずつ3回とも届き、100 ms と 150 ms 後は3回中2回届きました）。サーバーは、通知が受け取られたかどうかを知ることができません。通知には返事がなく、MCP の仕様（2025-11-25 の「Lifecycle」）にも、クライアントがいつ通知を受け取れるかの合図がないからです（最初の `tools/list` も、合図ではありませんでした）。そのため、記憶している状態（選択範囲）を、すぐに送る再送に加えて、ハンドシェイクの 250 ms・500 ms・1 秒・3 秒後にも送り直します（`claude_state_resends`）。500 ms は、VS Code の拡張機能が接続のあとに選択範囲を1回送る時刻です（コードから読みました）。250 ms・1 秒・3 秒（測定した時刻）では、10回中10回がモデルに届きました。あとの通知は受け付けられるので、これは接続後の数秒だけの話です。
+- **ハンドシェイクの直後に届いた通知は、捨てられます。** Claude Code は、接続してからしばらくあとに、通知を受け取るものを用意し、その時間は回によって違います（確認: すぐに送った `selection_changed` は一度も届かず、25 ms や 50 ms 後に送ると3回ずつ3回とも届き、100 ms と 150 ms 後は3回中2回届きました）。サーバーは、通知が受け取られたかどうかを知ることができません。通知には返事がなく、MCP の仕様（2025-11-25 の「Lifecycle」）にも、クライアントがいつ通知を受け取れるかの合図がないからです（最初の `tools/list` も、合図ではありませんでした）。そのため、記憶している状態（選択範囲）を、すぐに送る再送に加えて、ハンドシェイクの 250 ms・500 ms・1 秒・3 秒後にも送り直します（`claude_state_resends`）。500 ms は、VS Code の拡張機能が接続のあとに選択範囲を1回送る時刻です（コードから読みました）。250 ms・1 秒・3 秒（測定した時刻）では、空いているマシンで10回中10回がモデルに届きました。CPU も忙しい状態（16 コアに `stress-ng` を 32 ワーカー、load average は 28〜42）で、Neovim で選択範囲を作ってから Claude Code を起動し、時刻に 500 ms を含めた測定では、12回中12回が届きました。そこでは Claude Code の起動が遅く、アダプタが登録してから 10〜21 秒後に接続しました（空いているマシンでは 2.4 秒）。サーバーのログには、どの再送で届いたかが出ないので、これらの測定からは、どの時刻も外せるとは言えません。時刻は変えていません。あとの通知は受け付けられるので、これは接続後の数秒だけの話です。
 
 ### VS Code の拡張機能がすること
 
@@ -122,7 +123,7 @@ VS Code の拡張機能は、このサーバーが代わりを務める IDE 側�
 - 診断が変わるたびに、ファイルの URI をつけて `diagnostics_changed` を送ります。
 - `filePath` を受け取るツールは、相対パスも受け取り、最初のワークスペースフォルダからのパスとして扱います。結果は、インデント2つの JSON で書いたテキストで、メッセージは、上と下の表にあるものです。
 - `openFile` は、ドキュメントの先頭から単純な検索で `startText` を探し、その後ろから `endText` を探します。ドキュメントは、最後の改行のあとにもう1行あるものとして数えます。
-- Claude Code の編集の前後の診断の追跡（エディタが診断を公開するのを待ちます）は、拡張機能の内部で行い、このプロトコルは通しません。
+- Claude Code の編集の前後の診断の追跡（エディタが診断を出すのを待ちます）は、このプロトコルではなく、拡張機能の内部で行われます。編集されたファイルについて、最初の更新を最大 750 ms 待ち、そのあとは 150 ms 更新がなくなるまで待ち、全体で 1500 ms まで（どのエディタにも表示されていないファイルは 1000 ms まで）です。こうした待ちのないアダプタは、編集の前に持っていたものを答えます。Neovim のアダプタは、同じ時間だけ待ちます（[NVIM](NVIM.md) の「診断」を参照）。
 
 ### 遅い読み手
 
@@ -185,7 +186,7 @@ WebSocket の接続は、1 本ごとに別のクライアントです。サー�
 - **`openFile` への答え**は `{ filePath, languageId, lineCount, isDirty, isUntitled }` で、`startText` が渡されたときは、さらに `selection` を持ちます。これは、テキストを探した結果で、`"text"`（`startText` のテキストを選択した）、`"range"`（`startText` から `endText` まで）、`"positioned"`（`startText` は見つかってカーソルがあるが、`endText` は見つからなかった）、`"not_found"` のどれかです。サーバーは、結果を VS Code の拡張機能と同じように書きます。`startText` が渡されたときはメッセージだけ（`Opened file and selected text "..."` など）、ファイルを最前面にするとき（`makeFrontmost`。false と書かれていなければ true）は `Opened file: <path>`、それ以外は詳細を JSON で返します。開けないファイルは、アダプタのエラー（`File not found: <path>`）で、ツール呼び出しは失敗します。絶対パスでないパスは、アダプタに聞く前に、最初のワークスペースフォルダからの絶対パスに直されるので、アダプタは絶対パスを受け取ります（VS Code の拡張機能と同じです）。
 - **`checkDocumentDirty` と `saveDocument` への答え**は、それぞれ `{ isDirty, isUntitled }` と `{ saved }` で、開いていないドキュメントには `{ "success": false }` です（サーバーは `Document not open: <path>` と言います）。`saved` は、書くものがなかった、または書けなかったときに false です。
 - **`diagnosticsChanged`** は `{ uris: [ ... ] }` で、診断が変わったファイルの URI です。これは出来事（イベント）で、それぞれがファイルを名指しし、どれもほかを置き換えず、あとから接続した Claude Code には伝えません。
-- **`getDiagnostics` の答え**（引数は `{ uri }`、すべてのファイルなら引数なし）は `[ { uri, diagnostics: [ { message, severity, range: { start, end }, source? } ] } ]` です。`severity` は、`"Error"`、`"Warning"`、`"Information"`、`"Hint"` のどれかです。空の一覧も、答えです。
+- **`getDiagnostics` の答え**（引数は `{ uri }`、すべてのファイルなら引数なし）は `[ { uri, diagnostics: [ { message, severity, range: { start, end }, source? } ] } ]` です。`severity` は、`"Error"`、`"Warning"`、`"Information"`、`"Hint"` のどれかです。空の一覧も、答えです。求められた `uri` については、項目の `uri` は、求められたものを書かれたままで返し（「Claude Code が自分から送るもの」を参照）、答えはいまのファイルの診断です。エディタの下で変更されたばかりのファイルの診断は、アダプタが短い時間だけ待つのが望ましいです。
 
 サーバーは、これらを Claude Code が期待する形で渡します（上の通知を参照）。`selectionChanged` は `selection_changed` になり（`fileUrl` と `isEmpty` が加わります）、`atMention` は `at_mentioned` に、`diagnosticsChanged` は `diagnostics_changed` になり、答えは、VS Code の拡張機能が書く形のツールの結果のテキストになります（たとえば、`getCurrentSelection` には `success` があり、`getLatestSelection` にはありません）。あとから接続した Claude Code には、そのとき現在の `selection_changed`（最後のもの）が送られ、ユーザーがいま見ている選択範囲から始められます。最初のものが捨てられることがあるので、ハンドシェイクのあとに数回、送り直されます（「Claude Code が自分から送るもの」を参照）。
 

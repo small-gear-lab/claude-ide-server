@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-ide-server\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-11 19:03+0900\n"
+"POT-Creation-Date: 2026-11-11 19:57+0900\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: Small Gear Lab\n"
 "Language-Team: ja <LL@li.org>\n"
@@ -351,7 +351,7 @@ msgstr "アダプターのメソッド"
 msgid "Notes"
 msgstr "備考"
 
-#: ../../DESIGN.md:104 ../../DESIGN.md:106 ../../DESIGN.md:248
+#: ../../DESIGN.md:104 ../../DESIGN.md:106 ../../DESIGN.md:261
 msgid "`openFile`"
 msgstr "`openFile`"
 
@@ -359,7 +359,7 @@ msgstr "`openFile`"
 msgid "optional selection by `startText` / `endText`"
 msgstr "`startText` / `endText` で、範囲を選ぶこともできます"
 
-#: ../../DESIGN.md:106 ../../DESIGN.md:107 ../../DESIGN.md:256
+#: ../../DESIGN.md:106 ../../DESIGN.md:107 ../../DESIGN.md:269
 msgid "`openDiff`"
 msgstr "`openDiff`"
 
@@ -373,7 +373,7 @@ msgstr "ユーザーが承認か却下をするまで待つ。`FILE_SAVED` と�
 msgid "`close_tab`"
 msgstr "`close_tab`"
 
-#: ../../DESIGN.md:108 ../../DESIGN.md:257
+#: ../../DESIGN.md:108 ../../DESIGN.md:270
 msgid "`closeDiff`"
 msgstr "`closeDiff`"
 
@@ -389,7 +389,7 @@ msgstr ""
 msgid "`closeAllDiffTabs`"
 msgstr "`closeAllDiffTabs`"
 
-#: ../../DESIGN.md:109 ../../DESIGN.md:258
+#: ../../DESIGN.md:109 ../../DESIGN.md:271
 msgid "`closeAllDiffs`"
 msgstr "`closeAllDiffs`"
 
@@ -411,15 +411,15 @@ msgstr "`setPermissionMode`"
 msgid "`{ mode }`; answers `OK` if the adapter has none"
 msgstr "`{ mode }`。アダプタに対応するメソッドがなければ `OK` を答える"
 
-#: ../../DESIGN.md:110 ../../DESIGN.md:111 ../../DESIGN.md:250
+#: ../../DESIGN.md:110 ../../DESIGN.md:111 ../../DESIGN.md:263
 msgid "`getOpenEditors`"
 msgstr "`getOpenEditors`"
 
-#: ../../DESIGN.md:111 ../../DESIGN.md:112 ../../DESIGN.md:251
+#: ../../DESIGN.md:111 ../../DESIGN.md:112 ../../DESIGN.md:264
 msgid "`getCurrentSelection`"
 msgstr "`getCurrentSelection`"
 
-#: ../../DESIGN.md:112 ../../DESIGN.md:113 ../../DESIGN.md:252
+#: ../../DESIGN.md:112 ../../DESIGN.md:113 ../../DESIGN.md:265
 msgid "`getLatestSelection`"
 msgstr "`getLatestSelection`"
 
@@ -439,7 +439,7 @@ msgstr "（サーバーが答えます）"
 msgid "from the registration"
 msgstr "登録の内容から返します"
 
-#: ../../DESIGN.md:114 ../../DESIGN.md:115 ../../DESIGN.md:253
+#: ../../DESIGN.md:114 ../../DESIGN.md:115 ../../DESIGN.md:266
 msgid "`getDiagnostics`"
 msgstr "`getDiagnostics`"
 
@@ -447,11 +447,11 @@ msgstr "`getDiagnostics`"
 msgid "one URI, or all"
 msgstr "1 つの URI か、すべて"
 
-#: ../../DESIGN.md:115 ../../DESIGN.md:116 ../../DESIGN.md:254
+#: ../../DESIGN.md:115 ../../DESIGN.md:116 ../../DESIGN.md:267
 msgid "`checkDocumentDirty`"
 msgstr "`checkDocumentDirty`"
 
-#: ../../DESIGN.md:116 ../../DESIGN.md:117 ../../DESIGN.md:255
+#: ../../DESIGN.md:116 ../../DESIGN.md:117 ../../DESIGN.md:268
 msgid "`saveDocument`"
 msgstr "`saveDocument`"
 
@@ -628,6 +628,24 @@ msgstr ""
 
 #: ../../DESIGN.md:167
 msgid ""
+"**The `uri` that it asks for is the one that it wants back.** It normalises "
+"the two (it takes off `file://` and the like) and does not resolve symbolic "
+"links, so a file that it names through a link is not the file that comes "
+"back under its real path. An adapter finds the file by its real path, and "
+"answers under the `uri` that it was asked for (checked with the Neovim "
+"adapter, in a workspace that is a link: the `uri` that was asked for, "
+"through the link, came back with the diagnostics of the file). What was not "
+"checked is the call that Claude Code makes by itself around an edit, where "
+"the `Diagnostics file path mismatch` would show."
+msgstr ""
+"**Claude Code が求める `uri` は、そのまま返してほしい `uri` です。** 2つを正規化し（`file://` "
+"などを取り除きます）、シンボリックリンクは解決しないので、リンク経由で名指したファイルは、実パスで返ってきてもそのファイルとは見なされません。アダプタは、ファイルを実パスで探し、求められた"
+" `uri` のままで答えます（Neovim のアダプタで、リンクの下のワークスペースで確認しました。リンク経由で求めた `uri` "
+"が、そのファイルの診断とともに返ってきました）。確認していないのは、Claude Code が編集の前後に自分で行う呼び出しで、`Diagnostics"
+" file path mismatch` が出るのはそこです。"
+
+#: ../../DESIGN.md:173
+msgid ""
 "It takes these notifications from the editor: `selection_changed`, "
 "`at_mentioned`, `log_event` and the MCP logging message. It does not use "
 "`getOpenEditors`, `getCurrentSelection`, `getLatestSelection`, "
@@ -637,7 +655,7 @@ msgstr ""
 "のログメッセージです。`getOpenEditors`、`getCurrentSelection`、`getLatestSelection`、`checkDocumentDirty`、`saveDocument`、`getWorkspaceFolders`"
 " は使いません。"
 
-#: ../../DESIGN.md:170
+#: ../../DESIGN.md:176
 msgid ""
 "**A notification that arrives right after the handshake is thrown away.** "
 "Claude Code sets up what receives notifications some time after it is "
@@ -652,8 +670,15 @@ msgid ""
 "(`claude_state_resends`). 500 ms is the time at which the VS Code extension "
 "sends the selection, once, after a connection (read from its code). With 250"
 " ms, 1 s and 3 s (the times that were measured), ten runs out of ten reached"
-" the model. Later notifications are taken, so this is only about the first "
-"seconds after a connection."
+" the model on an idle machine. With the CPU busy as well (`stress-ng` with "
+"32 workers on 16 cores, a load average of 28 to 42), twelve runs out of "
+"twelve did, with a selection made in Neovim before Claude Code started and "
+"with 500 ms among the times. Claude Code was slow to start there: it "
+"connected 10 to 21 s after the adapter had registered (2.4 s on an idle "
+"machine). The log of the server does not say which of the resends a run was "
+"served by, so these runs do not say that any of the times can be left out; "
+"the times were not changed. Later notifications are taken, so this is only "
+"about the first seconds after a connection."
 msgstr ""
 "**ハンドシェイクの直後に届いた通知は、捨てられます。** Claude Code "
 "は、接続してからしばらくあとに、通知を受け取るものを用意し、その時間は回によって違います（確認: すぐに送った `selection_changed` "
@@ -663,13 +688,17 @@ msgstr ""
 "も、合図ではありませんでした）。そのため、記憶している状態（選択範囲）を、すぐに送る再送に加えて、ハンドシェイクの 250 ms・500 ms・1 "
 "秒・3 秒後にも送り直します（`claude_state_resends`）。500 ms は、VS Code "
 "の拡張機能が接続のあとに選択範囲を1回送る時刻です（コードから読みました）。250 ms・1 秒・3 "
-"秒（測定した時刻）では、10回中10回がモデルに届きました。あとの通知は受け付けられるので、これは接続後の数秒だけの話です。"
+"秒（測定した時刻）では、空いているマシンで10回中10回がモデルに届きました。CPU も忙しい状態（16 コアに `stress-ng` を 32 "
+"ワーカー、load average は 28〜42）で、Neovim で選択範囲を作ってから Claude Code を起動し、時刻に 500 ms "
+"を含めた測定では、12回中12回が届きました。そこでは Claude Code の起動が遅く、アダプタが登録してから 10〜21 "
+"秒後に接続しました（空いているマシンでは 2.4 "
+"秒）。サーバーのログには、どの再送で届いたかが出ないので、これらの測定からは、どの時刻も外せるとは言えません。時刻は変えていません。あとの通知は受け付けられるので、これは接続後の数秒だけの話です。"
 
-#: ../../DESIGN.md:181
+#: ../../DESIGN.md:191
 msgid "What the VS Code extension does"
 msgstr "VS Code の拡張機能がすること"
 
-#: ../../DESIGN.md:183
+#: ../../DESIGN.md:193
 msgid ""
 "The VS Code extension is the IDE side that this server stands in for, so its"
 " code (2.1.322, read, not specified) is the reference for what an editor "
@@ -678,7 +707,7 @@ msgstr ""
 "VS Code の拡張機能は、このサーバーが代わりを務める IDE "
 "側そのものなので、そのコード（2.1.322。読んだものであって、仕様ではありません）が、エディタが何を答えるかの基準になります。このプロトコルのクライアントが当てにしてよいことは次のとおりです。"
 
-#: ../../DESIGN.md:186
+#: ../../DESIGN.md:196
 msgid ""
 "It serves one client at a time: a new connection closes the one before it. "
 "This server keeps several (see \"Several CLIs on one workspace\")."
@@ -686,7 +715,7 @@ msgstr ""
 "一度に1つのクライアントだけを相手にします。新しい接続は、その前の接続を閉じます。このサーバーは複数を保ちます（「1つのワークスペースに複数の "
 "CLI」を参照）。"
 
-#: ../../DESIGN.md:188
+#: ../../DESIGN.md:198
 msgid ""
 "**After a connection it waits 500 ms, and then sends the selection that was "
 "last reported** (`selection_changed`), and the telemetry events that were "
@@ -698,13 +727,13 @@ msgstr ""
 "待って、最後に報告された選択範囲（`selection_changed`）と、ためておいたテレメトリのイベント（`log_event`。このサーバーには使い道がありません）を送ります。**"
 " 待つのは、接続したばかりのクライアントが、通知を受け取る準備がまだできていないためです（「Claude Code が自分から送るもの」を参照）。"
 
-#: ../../DESIGN.md:191
+#: ../../DESIGN.md:201
 msgid ""
 "It sends `diagnostics_changed` for every change of diagnostics, with the "
 "URIs of the files."
 msgstr "診断が変わるたびに、ファイルの URI をつけて `diagnostics_changed` を送ります。"
 
-#: ../../DESIGN.md:192
+#: ../../DESIGN.md:202
 msgid ""
 "A tool that takes a `filePath` takes a relative one too, from the first "
 "folder of the workspace; the results are text that is JSON written with two "
@@ -714,7 +743,7 @@ msgstr ""
 "`filePath` を受け取るツールは、相対パスも受け取り、最初のワークスペースフォルダからのパスとして扱います。結果は、インデント2つの JSON "
 "で書いたテキストで、メッセージは、上と下の表にあるものです。"
 
-#: ../../DESIGN.md:194
+#: ../../DESIGN.md:204
 msgid ""
 "`openFile` looks for `startText` with a plain search from the start of the "
 "document, and `endText` after it; a document is counted as having a line "
@@ -723,19 +752,27 @@ msgstr ""
 "`openFile` は、ドキュメントの先頭から単純な検索で `startText` を探し、その後ろから `endText` "
 "を探します。ドキュメントは、最後の改行のあとにもう1行あるものとして数えます。"
 
-#: ../../DESIGN.md:196
+#: ../../DESIGN.md:206
 msgid ""
 "Its own tracking of diagnostics around the edits of Claude Code (it waits "
 "for the editor to publish them) is done inside the extension, not through "
-"this protocol."
+"this protocol: for a file that was edited, it waits up to 750 ms for the "
+"first update, then until 150 ms pass with none, and in all no longer than "
+"1500 ms (1000 ms for a file that no editor shows). An adapter that has no "
+"such wait answers with what it had before the edit; the Neovim adapter "
+"waits, with the same times (see \"Diagnostics\" in [NVIM](NVIM.md))."
 msgstr ""
-"Claude Code の編集の前後の診断の追跡（エディタが診断を公開するのを待ちます）は、拡張機能の内部で行い、このプロトコルは通しません。"
+"Claude Code "
+"の編集の前後の診断の追跡（エディタが診断を出すのを待ちます）は、このプロトコルではなく、拡張機能の内部で行われます。編集されたファイルについて、最初の更新を最大"
+" 750 ms 待ち、そのあとは 150 ms 更新がなくなるまで待ち、全体で 1500 ms まで（どのエディタにも表示されていないファイルは "
+"1000 ms まで）です。こうした待ちのないアダプタは、編集の前に持っていたものを答えます。Neovim "
+"のアダプタは、同じ時間だけ待ちます（[NVIM](NVIM.md) の「診断」を参照）。"
 
-#: ../../DESIGN.md:199
+#: ../../DESIGN.md:212
 msgid "Slow readers"
 msgstr "遅い読み手"
 
-#: ../../DESIGN.md:201
+#: ../../DESIGN.md:214
 msgid ""
 "A client that does not read what it is sent must not hold up the other "
 "clients, or the workspace. Notifications to Claude Code are put in a queue "
@@ -745,7 +782,7 @@ msgstr ""
 "送られたものを読まないクライアントが、ほかのクライアントや、ワークスペースを止めてはいけません。Claude Code "
 "への通知は、クライアントごとの待ち行列に入れ、そのクライアントの専用のタスクが送ります。送るときに、待つことはありません。"
 
-#: ../../DESIGN.md:204
+#: ../../DESIGN.md:217
 msgid ""
 "A notification that is a **state** (the selection) replaces the notification"
 " of the same method that is still waiting, so that a slow client is given "
@@ -755,14 +792,14 @@ msgstr ""
 "**状態** "
 "の通知（選択範囲）は、まだ待っている、同じメソッドの通知を置き換えます。だから、遅いクライアントには、状態の履歴ではなく、いまの状態が届き、最新のものが失われることはありません。"
 
-#: ../../DESIGN.md:207
+#: ../../DESIGN.md:220
 msgid ""
 "The others (a mentioned file) are kept in order. If more than 64 are waiting"
 " for a client, the oldest is dropped."
 msgstr ""
 "それ以外（メンションされたファイル）は、順番を保ちます。1 つのクライアントに 64 件より多くが待っているときは、いちばん古いものを捨てます。"
 
-#: ../../DESIGN.md:208
+#: ../../DESIGN.md:221
 msgid ""
 "The events that the owner of a workspace reads (`Workspace::next_event`) are"
 " information, and are handed over the same way: past 256 waiting, the newest"
@@ -773,11 +810,11 @@ msgstr ""
 "件より多くが待つと、新しいものを捨てて、数えます（`dropped_events`）。選択範囲を Claude Code "
 "に渡すことは、だれかがそれを読むことに、依存しません。"
 
-#: ../../DESIGN.md:212
+#: ../../DESIGN.md:225
 msgid "Several CLIs on one workspace"
 msgstr "1 つのワークスペースに、複数の CLI"
 
-#: ../../DESIGN.md:214
+#: ../../DESIGN.md:227
 msgid ""
 "Each WebSocket connection is a separate client. The server accepts more than"
 " one per workspace (the VS Code extension keeps only the latest). A diff "
@@ -787,15 +824,15 @@ msgstr ""
 "WebSocket の接続は、1 本ごとに別のクライアントです。サーバーは、1 つのワークスペースで、複数を受け付けます（VS Code "
 "の拡張は、最新の 1 本だけを残します）。差分は、それを開いた接続のものです。その接続が閉じたとき、または、いなくなったときに、閉じます。"
 
-#: ../../DESIGN.md:218
+#: ../../DESIGN.md:231
 msgid "The adapter side"
 msgstr "アダプター側"
 
-#: ../../DESIGN.md:220
+#: ../../DESIGN.md:233
 msgid "Transport"
 msgstr "通信の経路"
 
-#: ../../DESIGN.md:222
+#: ../../DESIGN.md:235
 msgid ""
 "A Unix domain socket at `$XDG_RUNTIME_DIR/claude-ide-server/adapter.sock`, "
 "in a directory of mode 0700. The socket file is mode 0600."
@@ -803,7 +840,7 @@ msgstr ""
 "`$XDG_RUNTIME_DIR/claude-ide-server/adapter.sock` の Unix "
 "ドメインソケットです。置き場所のディレクトリはモード 0700、ソケットのファイルはモード 0600 です。"
 
-#: ../../DESIGN.md:224
+#: ../../DESIGN.md:237
 msgid ""
 "JSON-RPC 2.0 with `Content-Length` framing, as in LSP. Editors that already "
 "have an LSP client can reuse its transport. Checked with Neovim 0.12: "
@@ -827,7 +864,7 @@ msgstr ""
 "`vim.lsp.rpc` で接続します。これにより、メッセージを出さずに再試行することもできます。[Neovim "
 "アダプタ](NVIM.md)を参照してください。"
 
-#: ../../DESIGN.md:231
+#: ../../DESIGN.md:244
 msgid ""
 "Both sides send requests and notifications. The connection is the workspace:"
 " when it closes, the server closes the workspace's WebSocket clients and "
@@ -836,38 +873,38 @@ msgstr ""
 "どちらの側からも、要求と通知を送ります。接続がそのままワークスペースです。接続が閉じたら、サーバーは、そのワークスペースの WebSocket "
 "のクライアントとポートを閉じて、ロックファイルを消します。"
 
-#: ../../DESIGN.md:234
+#: ../../DESIGN.md:247
 msgid "Messages"
 msgstr "メッセージ"
 
-#: ../../DESIGN.md:236
+#: ../../DESIGN.md:249
 msgid "Adapter → server:"
 msgstr "アダプター → サーバー:"
 
-#: ../../DESIGN.md:238 ../../DESIGN.md:248
+#: ../../DESIGN.md:251 ../../DESIGN.md:261
 msgid "Message"
 msgstr "メッセージ"
 
-#: ../../DESIGN.md:238 ../../DESIGN.md:248
+#: ../../DESIGN.md:251 ../../DESIGN.md:261
 msgid "Kind"
 msgstr "種類"
 
-#: ../../DESIGN.md:238
+#: ../../DESIGN.md:251
 msgid "Params"
 msgstr "引数"
 
-#: ../../DESIGN.md:238
+#: ../../DESIGN.md:251
 msgid "`register`"
 msgstr "`register`"
 
-#: ../../DESIGN.md:240 ../../DESIGN.md:250 ../../DESIGN.md:251
-#: ../../DESIGN.md:252 ../../DESIGN.md:253 ../../DESIGN.md:254
-#: ../../DESIGN.md:255 ../../DESIGN.md:256 ../../DESIGN.md:257
-#: ../../DESIGN.md:258 ../../DESIGN.md:259
+#: ../../DESIGN.md:253 ../../DESIGN.md:263 ../../DESIGN.md:264
+#: ../../DESIGN.md:265 ../../DESIGN.md:266 ../../DESIGN.md:267
+#: ../../DESIGN.md:268 ../../DESIGN.md:269 ../../DESIGN.md:270
+#: ../../DESIGN.md:271 ../../DESIGN.md:272
 msgid "request"
 msgstr "要求"
 
-#: ../../DESIGN.md:240
+#: ../../DESIGN.md:253
 #, python-brace-format
 msgid ""
 "`ideName`, `pid`, `workspaceFolders`, `methods` (the server→adapter methods "
@@ -876,52 +913,52 @@ msgstr ""
 "`ideName`、`pid`、`workspaceFolders`、`methods`（実装しているサーバー→アダプターのメソッド）→ `{ "
 "\"port\": n }`"
 
-#: ../../DESIGN.md:240
+#: ../../DESIGN.md:253
 msgid "`workspaceFoldersChanged`"
 msgstr "`workspaceFoldersChanged`"
 
-#: ../../DESIGN.md:241 ../../DESIGN.md:242 ../../DESIGN.md:243
-#: ../../DESIGN.md:244 ../../DESIGN.md:260
+#: ../../DESIGN.md:254 ../../DESIGN.md:255 ../../DESIGN.md:256
+#: ../../DESIGN.md:257 ../../DESIGN.md:273
 msgid "notification"
 msgstr "通知"
 
-#: ../../DESIGN.md:241
+#: ../../DESIGN.md:254
 msgid "`workspaceFolders` (the lock file is rewritten)"
 msgstr "`workspaceFolders`（ロックファイルを書き直します）"
 
-#: ../../DESIGN.md:241
+#: ../../DESIGN.md:254
 msgid "`selectionChanged`"
 msgstr "`selectionChanged`"
 
-#: ../../DESIGN.md:242
+#: ../../DESIGN.md:255
 msgid "`filePath`, `text`, `selection`"
 msgstr "`filePath`、`text`、`selection`"
 
-#: ../../DESIGN.md:242
+#: ../../DESIGN.md:255
 msgid "`diagnosticsChanged`"
 msgstr "`diagnosticsChanged`"
 
-#: ../../DESIGN.md:243
+#: ../../DESIGN.md:256
 msgid "`uris`"
 msgstr "`uris`"
 
-#: ../../DESIGN.md:243
+#: ../../DESIGN.md:256
 msgid "`atMention`"
 msgstr "`atMention`"
 
-#: ../../DESIGN.md:244
+#: ../../DESIGN.md:257
 msgid "`filePath`, `lineStart`, `lineEnd`"
 msgstr "`filePath`、`lineStart`、`lineEnd`"
 
-#: ../../DESIGN.md:246
+#: ../../DESIGN.md:259
 msgid "Server → adapter:"
 msgstr "サーバー → アダプター:"
 
-#: ../../DESIGN.md:248
+#: ../../DESIGN.md:261
 msgid "Params → result"
 msgstr "引数 → 結果"
 
-#: ../../DESIGN.md:250
+#: ../../DESIGN.md:263
 #, python-brace-format
 msgid ""
 "`filePath`, `preview`, `startText`, `endText`, `selectToEndOfLine`, "
@@ -931,24 +968,24 @@ msgstr ""
 "`filePath`、`preview`、`startText`、`endText`、`selectToEndOfLine`、`makeFrontmost`"
 " → `{ filePath, languageId, lineCount, isDirty, isUntitled, selection? }`"
 
-#: ../../DESIGN.md:251
+#: ../../DESIGN.md:264
 #, python-brace-format
 msgid "→ `{ tabs: [{ uri, isActive, label, languageId, isDirty, ... }] }`"
 msgstr "→ `{ tabs: [{ uri, isActive, label, languageId, isDirty, ... }] }`"
 
-#: ../../DESIGN.md:252 ../../DESIGN.md:253
+#: ../../DESIGN.md:265 ../../DESIGN.md:266
 #, python-brace-format
 msgid "→ selection, or `{ success: false }`"
 msgstr "→ 選択範囲、または `{ success: false }`"
 
-#: ../../DESIGN.md:254
+#: ../../DESIGN.md:267
 #, python-brace-format
 msgid ""
 "`uri?` → `[{ uri, diagnostics: [{ message, severity, range, source }] }]`"
 msgstr ""
 "`uri?` → `[{ uri, diagnostics: [{ message, severity, range, source }] }]`"
 
-#: ../../DESIGN.md:255
+#: ../../DESIGN.md:268
 #, python-brace-format
 msgid ""
 "`filePath` → `{ isDirty, isUntitled }`, or `{ success: false }` if the "
@@ -956,14 +993,14 @@ msgid ""
 msgstr ""
 "`filePath` → `{ isDirty, isUntitled }`。ドキュメントが開いていなければ `{ success: false }`"
 
-#: ../../DESIGN.md:256
+#: ../../DESIGN.md:269
 #, python-brace-format
 msgid ""
 "`filePath` → `{ saved }`, or `{ success: false }` if the document is not "
 "open"
 msgstr "`filePath` → `{ saved }`。ドキュメントが開いていなければ `{ success: false }`"
 
-#: ../../DESIGN.md:257
+#: ../../DESIGN.md:270
 #, python-brace-format
 msgid ""
 "`oldFilePath`, `newFilePath`, `newFileContents`, `tabName`, `diffId` → `{ "
@@ -973,24 +1010,24 @@ msgstr ""
 "`oldFilePath`、`newFilePath`、`newFileContents`、`tabName`、`diffId` → `{ "
 "accepted: true, contents }` か `{ accepted: false }`。ユーザーが決めたときに答える"
 
-#: ../../DESIGN.md:258
+#: ../../DESIGN.md:271
 msgid "`tabName`, and `diffId` if only that diff is to be closed → anything"
 msgstr "`tabName`。そのタブのうち、その差分だけを閉じたいときは `diffId` も → 何でもよい"
 
-#: ../../DESIGN.md:259
+#: ../../DESIGN.md:272
 #, python-brace-format
 msgid "→ `{ closed: n }`"
 msgstr "→ `{ closed: n }`"
 
-#: ../../DESIGN.md:259
+#: ../../DESIGN.md:272
 msgid "`shutdown`"
 msgstr "`shutdown`"
 
-#: ../../DESIGN.md:260
+#: ../../DESIGN.md:273
 msgid "the server is stopping"
 msgstr "サーバーが止まるとき"
 
-#: ../../DESIGN.md:262
+#: ../../DESIGN.md:275
 #, python-brace-format
 msgid ""
 "A position is `{ line, character }`, with `line` 0-based and `character` in "
@@ -1003,11 +1040,11 @@ msgstr ""
 "の決まり）で、範囲の終わりは含みません。エディタ自身の単位からの変換は、アダプターが行います。**（仮定）** CLI "
 "は、選択範囲から行数を数えるだけなので、`character` を間違えても、Claude に見えるものは変わりません。"
 
-#: ../../DESIGN.md:266
+#: ../../DESIGN.md:279
 msgid "What an adapter reports of the editor"
 msgstr "アダプターが報告する、エディタの状態"
 
-#: ../../DESIGN.md:268
+#: ../../DESIGN.md:281
 msgid ""
 "What an adapter sends is checked by the server. A missing field or a wrong "
 "type is not guessed at: in the answer to a request it makes the tool call "
@@ -1021,7 +1058,7 @@ msgstr ""
 "expected a "
 "boolean`）。通知なら、その通知は転送せず、ワークスペースの持ち主に知らせます（`MalformedNotification`）。"
 
-#: ../../DESIGN.md:273
+#: ../../DESIGN.md:286
 #, python-brace-format
 msgid ""
 "A **selection** is `{ filePath, text, selection: { start, end } }`, where "
@@ -1038,7 +1075,7 @@ msgstr ""
 "}` です（`message` は省略できます）。選択のないカーソルは、`text` が空で、`start` と `end` "
 "が等しい選択範囲です。`isEmpty` は、サーバーが範囲から求めます。"
 
-#: ../../DESIGN.md:278
+#: ../../DESIGN.md:291
 #, python-brace-format
 msgid ""
 "**`atMention`** is `{ filePath, lineStart, lineEnd }`, 0-based, `lineEnd` "
@@ -1047,7 +1084,7 @@ msgstr ""
 "**`atMention`** は `{ filePath, lineStart, lineEnd }` で、0 始まり、`lineEnd` "
 "は最後の行です。"
 
-#: ../../DESIGN.md:279
+#: ../../DESIGN.md:292
 msgid ""
 "A **`filePath`** is an absolute path (it starts with `/`). Claude Code works"
 " out what to show from it, and a relative one would be taken relative to the"
@@ -1057,7 +1094,7 @@ msgstr ""
 "は、これから、見せるものを決めます。相対パスだと、Claude Code "
 "が動いているディレクトリが基準になりますが、それはエディタのものではありません。"
 
-#: ../../DESIGN.md:281
+#: ../../DESIGN.md:294
 #, python-brace-format
 msgid ""
 "**The answer to `getOpenEditors`** is `{ tabs: [ ... ] }`. A tab has five "
@@ -1075,7 +1112,7 @@ msgstr ""
 "の拡張機能は、タブにさらに加えており、アダプタはどれを省いてもかまいません。`isPinned`、`isPreview`、`groupIndex`、`viewColumn`（そのタブがいるグループと、その列）、`isGroupActive`、`fileName`、`lineCount`、`isUntitled`、そしてアクティブなタブには"
 " `selection: { start, end, isReversed }` です。あるものはそのまま渡し、あれば検査します。"
 
-#: ../../DESIGN.md:286
+#: ../../DESIGN.md:299
 #, python-brace-format
 msgid ""
 "**The answer to `openFile`** is `{ filePath, languageId, lineCount, isDirty,"
@@ -1105,7 +1142,7 @@ msgstr ""
 "<path>`）で、ツール呼び出しは失敗します。絶対パスでないパスは、アダプタに聞く前に、最初のワークスペースフォルダからの絶対パスに直されるので、アダプタは絶対パスを受け取ります（VS"
 " Code の拡張機能と同じです）。"
 
-#: ../../DESIGN.md:295
+#: ../../DESIGN.md:308
 #, python-brace-format
 msgid ""
 "**The answers to `checkDocumentDirty` and `saveDocument`** are `{ isDirty, "
@@ -1118,7 +1155,7 @@ msgstr ""
 "`Document not open: <path>` と言います）。`saved` は、書くものがなかった、または書けなかったときに false "
 "です。"
 
-#: ../../DESIGN.md:298
+#: ../../DESIGN.md:311
 #, python-brace-format
 msgid ""
 "**`diagnosticsChanged`** is `{ uris: [ ... ] }`: the URIs of the files whose"
@@ -1128,20 +1165,26 @@ msgstr ""
 "**`diagnosticsChanged`** は `{ uris: [ ... ] }` で、診断が変わったファイルの URI "
 "です。これは出来事（イベント）で、それぞれがファイルを名指しし、どれもほかを置き換えず、あとから接続した Claude Code には伝えません。"
 
-#: ../../DESIGN.md:300
+#: ../../DESIGN.md:313
 #, python-brace-format
 msgid ""
 "**The answer to `getDiagnostics`** (with `{ uri }` as the parameters, or "
 "none for all files) is `[ { uri, diagnostics: [ { message, severity, range: "
 "{ start, end }, source? } ] } ]`. `severity` is one of `\"Error\"`, "
 "`\"Warning\"`, `\"Information\"` and `\"Hint\"`; an empty list is an answer."
+" For a `uri` that was asked for, the `uri` of the entry is that one, as it "
+"was spelt (see \"What Claude Code sends on its own\"), and the answer is the"
+" diagnostics of the file as it is now: an adapter should wait, for a short "
+"time, for those of a file that was just changed under the editor."
 msgstr ""
 "**`getDiagnostics` の答え**（引数は `{ uri }`、すべてのファイルなら引数なし）は `[ { uri, "
 "diagnostics: [ { message, severity, range: { start, end }, source? } ] } ]` "
 "です。`severity` は、`\"Error\"`、`\"Warning\"`、`\"Information\"`、`\"Hint\"` "
-"のどれかです。空の一覧も、答えです。"
+"のどれかです。空の一覧も、答えです。求められた `uri` については、項目の `uri` は、求められたものを書かれたままで返し（「Claude "
+"Code "
+"が自分から送るもの」を参照）、答えはいまのファイルの診断です。エディタの下で変更されたばかりのファイルの診断は、アダプタが短い時間だけ待つのが望ましいです。"
 
-#: ../../DESIGN.md:304
+#: ../../DESIGN.md:320
 msgid ""
 "The server passes these on to Claude Code in the shapes that it expects (see"
 " the notifications above): `selectionChanged` becomes `selection_changed` "
@@ -1163,7 +1206,7 @@ msgstr ""
 "`selection_changed`（最後のもの）が送られ、ユーザーがいま見ている選択範囲から始められます。最初のものが捨てられることがあるので、ハンドシェイクのあとに数回、送り直されます（「Claude"
 " Code が自分から送るもの」を参照）。"
 
-#: ../../DESIGN.md:311
+#: ../../DESIGN.md:327
 msgid ""
 "**Diffs.** The editor does not write the file: Claude Code does, with the "
 "contents that the editor gives back (the VS Code extension answers "
@@ -1177,7 +1220,7 @@ msgstr ""
 "と、そのときのファイルの内容を答えます。内容は、差分の中で編集されたものかもしれません。Claude Code "
 "は、2つ目のテキストを読んで使い、`FILE_SAVED` 以外は、承認されなかったものとして扱います）。そのため、次のようになります。"
 
-#: ../../DESIGN.md:316
+#: ../../DESIGN.md:332
 #, python-brace-format
 msgid ""
 "`openDiff` is answered when the user decides, and until then it is not "
@@ -1194,7 +1237,7 @@ msgstr ""
 "がファイルを書けないからです）か `{ accepted: false }` です。サーバーは、これらを、`FILE_SAVED` "
 "と内容、`DIFF_REJECTED` と タブ名に変えます。"
 
-#: ../../DESIGN.md:320
+#: ../../DESIGN.md:336
 msgid ""
 "The server gives each diff a number, `diffId`. A new `openDiff` of the name "
 "of a diff that is shown replaces that diff: the adapter ends the older one, "
@@ -1211,17 +1254,17 @@ msgstr ""
 "を送ります。誰にも聞けない差分が、画面に残らないようにするためです。アダプタは、その名前で表示されているのがその差分のときだけ閉じます（新しいものには触りません）。Claude"
 " Code からの `close_tab` には `diffId` がなく、その名前の差分なら、どれでも閉じます。"
 
-#: ../../DESIGN.md:325
+#: ../../DESIGN.md:341
 #, python-brace-format
 msgid ""
 "`closeAllDiffs` is answered with how many diffs it closed (`{ closed: n }`)."
 msgstr "`closeAllDiffs` には、いくつ閉じたかを答えます（`{ closed: n }`）。"
 
-#: ../../DESIGN.md:327
+#: ../../DESIGN.md:343
 msgid "Versioning"
 msgstr "バージョン"
 
-#: ../../DESIGN.md:329
+#: ../../DESIGN.md:345
 msgid ""
 "`register` carries `protocolVersion`, an integer; the version described here"
 " is `1`. The server refuses an adapter whose version it does not know. "
@@ -1231,11 +1274,11 @@ msgstr ""
 "`register` は、整数の `protocolVersion` を持ちます。ここに書いてある版は `1` "
 "です。サーバーは、知らない版のアダプターを断ります。メソッドは、版を上げずに足せます。アダプターは、実装しているものを `methods` に並べます。"
 
-#: ../../DESIGN.md:333
+#: ../../DESIGN.md:349
 msgid "`register` in detail"
 msgstr "`register` の詳細"
 
-#: ../../DESIGN.md:335
+#: ../../DESIGN.md:351
 msgid ""
 "It must be the first message, and it is a request. Anything else first is "
 "answered with an error (a request) or just closes the connection (a "
@@ -1245,7 +1288,7 @@ msgstr ""
 "は、最初のメッセージで、要求でなければなりません。ほかのものが最初に来たときは、要求ならエラーで答え、通知なら、接続を閉じるだけです。`register`"
 " を 2 回送るのも、エラーです。"
 
-#: ../../DESIGN.md:337
+#: ../../DESIGN.md:353
 msgid ""
 "Parameters: `protocolVersion` (integer), `ideName` (non-empty string), `pid`"
 " (positive integer), `workspaceFolders` (a non-empty array of strings), "
@@ -1253,19 +1296,19 @@ msgid ""
 msgstr ""
 "引数は、`protocolVersion`（整数）、`ideName`（空でない文字列）、`pid`（正の整数）、`workspaceFolders`（空でない文字列の配列）、`methods`（文字列の配列）です。足りない引数や、型が違う引数は、エラーです。"
 
-#: ../../DESIGN.md:339
+#: ../../DESIGN.md:355
 #, python-brace-format
 msgid ""
 "The result is `{ \"port\": <integer> }`. By then the port listens and the "
 "lock file exists."
 msgstr "結果は `{ \"port\": <整数> }` です。この時点で、そのポートは待ち受けていて、ロックファイルもあります。"
 
-#: ../../DESIGN.md:340
+#: ../../DESIGN.md:356
 msgid ""
 "An adapter has 10 seconds to send it; a connection that does not is closed."
 msgstr "アダプターは、10 秒以内に送らなければなりません。送らない接続は、閉じられます。"
 
-#: ../../DESIGN.md:341
+#: ../../DESIGN.md:357
 #, python-brace-format
 msgid ""
 "`workspaceFoldersChanged` takes `{ \"workspaceFolders\": [...] }` (non-"
@@ -1274,7 +1317,7 @@ msgstr ""
 "`workspaceFoldersChanged` の引数は、`{ \"workspaceFolders\": [...] "
 "}`（空でない）です。それ以外は、無視されます。"
 
-#: ../../DESIGN.md:342
+#: ../../DESIGN.md:358
 msgid ""
 "The server's methods that an adapter has not declared in `methods` are not "
 "called. A request that the server does not know, sent by a registered "
@@ -1283,7 +1326,7 @@ msgstr ""
 "アダプターが `methods` で宣言していないメソッドは、呼ばれません。登録したアダプターが、サーバーの知らない要求を送ると、`-32601` "
 "が返ります。"
 
-#: ../../DESIGN.md:345
+#: ../../DESIGN.md:361
 msgid ""
 "Error codes: the JSON-RPC ones (`-32602` for bad parameters, `-32601` for an"
 " unknown method) and three of this protocol: `-32000` the protocol version "
@@ -1296,7 +1339,7 @@ msgstr ""
 "は最初のメッセージが `register` ではなかった、または `register` が 2 回来た、です。`register` "
 "へのエラーのあと、サーバーは、接続を閉じます。"
 
-#: ../../DESIGN.md:350
+#: ../../DESIGN.md:366
 msgid ""
 "When the server drops a workspace it sends the notification `shutdown` and "
 "closes the connection. A request that is waiting for an answer when the "
@@ -1304,11 +1347,11 @@ msgid ""
 msgstr ""
 "サーバーがワークスペースを手放すときは、通知 `shutdown` を送って、接続を閉じます。接続が終わったときに、答えを待っている要求は、失敗します。"
 
-#: ../../DESIGN.md:353
+#: ../../DESIGN.md:369
 msgid "Structure of the core crate"
 msgstr "core クレートの構成"
 
-#: ../../DESIGN.md:355
+#: ../../DESIGN.md:371
 msgid ""
 "The crate runs on tokio: its `async` functions must be called inside a tokio"
 " runtime, and tokio's I/O traits (`AsyncRead`, `AsyncWrite`) are the common "
@@ -1319,26 +1362,26 @@ msgstr ""
 " の I/O のトレイト（`AsyncRead`、`AsyncWrite`）を使います。それ以外の tokio "
 "の型（チャネル、タスク）と、下の層のライブラリの型は、このクレートの公開されたインターフェースに出しません。"
 
-#: ../../DESIGN.md:359
+#: ../../DESIGN.md:375
 msgid ""
 "Each outside library sits behind a type of the crate's own, and what lies "
 "inside knows only those types. There are three layers:"
 msgstr "外のライブラリは、それぞれ、このクレート自身の型の後ろに置きます。内側は、その型だけを知っています。層は 3 つです。"
 
-#: ../../DESIGN.md:362
+#: ../../DESIGN.md:378
 msgid ""
 "**The Claude side:** the WebSocket server (`ws`), the MCP handling, the lock"
 " files (`lock`)."
 msgstr "**Claude 側:** WebSocket サーバー（`ws`）、MCP の処理、ロックファイル（`lock`）。"
 
-#: ../../DESIGN.md:363
+#: ../../DESIGN.md:379
 msgid ""
 "**The middle:** workspaces (`workspace`), the dispatch of tool calls, and "
 "the crate's own types for tools, selections and diagnostics."
 msgstr ""
 "**中間:** ワークスペース（`workspace`）、ツール呼び出しの振り分け、ツール・選択範囲・診断についての、このクレート自身の型。"
 
-#: ../../DESIGN.md:365
+#: ../../DESIGN.md:381
 msgid ""
 "**The adapter side:** the adapter transport, the `register` exchange and the"
 " requests (`adapter`), and the JSON-RPC framing (`jsonrpc`)."
@@ -1346,7 +1389,7 @@ msgstr ""
 "**アダプター側:** アダプターとの通信路、`register` のやりとり、要求（`adapter`）と、JSON-RPC "
 "の区切り（`jsonrpc`）。"
 
-#: ../../DESIGN.md:368
+#: ../../DESIGN.md:384
 msgid ""
 "The sides do not know each other. `adapter` has no port and no lock file in "
 "it: when an adapter registers, it hands the registration up (as a "
@@ -1362,13 +1405,13 @@ msgstr ""
 "サーバーを起動し、ロックファイルを書き、アダプターにポートを渡し、それぞれの寿命を結びつけます。`ws` と `lock` "
 "は、アダプターのことを何も知りません。"
 
-#: ../../DESIGN.md:374
+#: ../../DESIGN.md:390
 msgid ""
 "Three seams are drawn on purpose, where this design already says that "
 "something may change:"
 msgstr "この設計がすでに「変わるかもしれない」と言っている所に、3 つの境界を、わざと引いています。"
 
-#: ../../DESIGN.md:376
+#: ../../DESIGN.md:392
 msgid ""
 "**The adapter transport.** A Unix socket now, a named pipe later. Everything"
 " above it works with a duplex byte stream that a listener accepts, not with "
@@ -1377,7 +1420,7 @@ msgstr ""
 "**アダプターとの通信路。** 今は Unix ソケット、あとで名前付きパイプ。これより上は、Unix "
 "ソケットの型ではなく、待ち受けが受け付ける、双方向のバイトストリームを使います。"
 
-#: ../../DESIGN.md:378
+#: ../../DESIGN.md:394
 msgid ""
 "**The MCP SDK.** If `rmcp` is used, its types stay inside the Claude side. "
 "The middle and the adapter side use the crate's own types, so that a new "
@@ -1386,7 +1429,7 @@ msgstr ""
 "**MCP の SDK。** `rmcp` を使うなら、その型は、Claude "
 "側の中にとどめます。中間とアダプター側は、このクレート自身の型を使います。SDK の新しい版や、別の SDK に替えても、1 つの層だけで済みます。"
 
-#: ../../DESIGN.md:380
+#: ../../DESIGN.md:396
 msgid ""
 "**The file system and the environment.** The lock file directory, the "
 "runtime directory and the check that a `pid` is alive are passed in as "
@@ -1395,7 +1438,7 @@ msgstr ""
 "**ファイルシステムと環境。** ロックファイルのディレクトリ、実行時のディレクトリ、`pid` "
 "が生きているかの確認は、設定として外から渡します。テストでは、一時ディレクトリを渡します。"
 
-#: ../../DESIGN.md:383
+#: ../../DESIGN.md:399
 msgid ""
 "Nothing else is put behind a trait in advance (TCP itself, the JSON shape of"
 " a lock file). A seam is added when something is known to change, not "
@@ -1404,7 +1447,7 @@ msgstr ""
 "それ以外は、前もってトレイトの後ろには置きません（TCP そのもの、ロックファイルの JSON "
 "の形）。境界は、変わることが分かったときに足します。その前には足しません。"
 
-#: ../../DESIGN.md:386
+#: ../../DESIGN.md:402
 msgid ""
 "One thing is kept out of the seams on purpose: the source of the token. The "
 "token is the only thing that keeps the other processes of the machine away "
@@ -1422,19 +1465,19 @@ msgstr ""
 " `test-support` という feature を通して、差し替えられます。この feature "
 "は、このクレート自身のテストでだけ有効で、ふつうのビルドでは、有効になりません。"
 
-#: ../../DESIGN.md:392
+#: ../../DESIGN.md:408
 msgid "Lifecycle"
 msgstr "起動から終了までの流れ"
 
-#: ../../DESIGN.md:394
+#: ../../DESIGN.md:410
 msgid "The server starts and listens on the adapter socket."
 msgstr "サーバーが起動して、アダプターのソケットで待ち受けます。"
 
-#: ../../DESIGN.md:395
+#: ../../DESIGN.md:411
 msgid "An adapter connects and sends `register`."
 msgstr "アダプターが接続して、`register` を送ります。"
 
-#: ../../DESIGN.md:396
+#: ../../DESIGN.md:412
 msgid ""
 "The server picks a free port on `127.0.0.1`, generates a 128-bit token from "
 "the OS CSPRNG, writes the lock file atomically (write to a temporary name, "
@@ -1443,7 +1486,7 @@ msgstr ""
 "サーバーは、`127.0.0.1` の空いているポートを選び、OS の暗号論的乱数から 128 "
 "ビットのトークンを作り、ロックファイルを原子的に書き（一時的な名前で書いてから、名前を変える）、ポートを返します。"
 
-#: ../../DESIGN.md:398
+#: ../../DESIGN.md:414
 msgid ""
 "The CLI finds the lock file, connects, and authenticates. Selection and "
 "diagnostics flow to it; its tool calls become adapter requests."
@@ -1451,19 +1494,19 @@ msgstr ""
 "CLI が、ロックファイルを見つけて、つないで、認証します。選択範囲と診断は、CLI へ流れます。CLI "
 "のツール呼び出しは、アダプターへの要求になります。"
 
-#: ../../DESIGN.md:400
+#: ../../DESIGN.md:416
 msgid ""
 "The adapter disconnects (or crashes): the server closes the workspace's "
 "connections, removes the lock file, and fails any pending requests."
 msgstr "アダプターが切れる（か、落ちる）と、サーバーは、そのワークスペースの接続を閉じ、ロックファイルを消し、保留中の要求を失敗にします。"
 
-#: ../../DESIGN.md:402
+#: ../../DESIGN.md:418
 msgid ""
 "On shutdown the server sends `shutdown` to adapters and removes every lock "
 "file it wrote."
 msgstr "終了するとき、サーバーは、アダプターに `shutdown` を送り、自分が書いたロックファイルをすべて消します。"
 
-#: ../../DESIGN.md:404
+#: ../../DESIGN.md:420
 msgid ""
 "If the server itself is killed, its lock files are left behind. The server "
 "records the lock files it wrote under its runtime directory and removes the "
@@ -1471,11 +1514,11 @@ msgid ""
 msgstr ""
 "サーバー自身が強制終了されると、ロックファイルが残ります。サーバーは、自分が書いたロックファイルを、実行時のディレクトリに記録しておき、次の起動で、まだ残っているものを消します。"
 
-#: ../../DESIGN.md:407
+#: ../../DESIGN.md:423
 msgid "Running the server"
 msgstr "サーバーの実行"
 
-#: ../../DESIGN.md:409
+#: ../../DESIGN.md:425
 msgid ""
 "`claude-ide-server` (the `crates/server` crate) is one executable for every "
 "editor. `claude-ide-server --help` lists its switches: `--socket` (where the"
@@ -1495,11 +1538,11 @@ msgstr ""
 "を伝えて、ロックファイルとポート（と、自分で作ったソケット）を片付けます。終了コードは、0 が指示どおりの停止、1 "
 "が起動できなかった（またはソケットが閉じた）、2 がコマンドラインの誤り、3 が時間内にワークスペースを閉じられなかった、です。"
 
-#: ../../DESIGN.md:416
+#: ../../DESIGN.md:432
 msgid "Where the adapter socket comes from"
 msgstr "アダプタ用のソケットの出どころ"
 
-#: ../../DESIGN.md:418
+#: ../../DESIGN.md:434
 msgid ""
 "The server does not care how it was started: by hand, by a supervisor that "
 "listens for it and starts it at the first connection (socket activation), or"
@@ -1512,47 +1555,47 @@ msgstr ""
 " "
 "`SocketSource`（`crates/server/src/activation.rs`）の裏に隠してあります。当てはまる最初の取得元が使われます。"
 
-#: ../../DESIGN.md:423
+#: ../../DESIGN.md:439
 msgid "source"
 msgstr "取得元"
 
-#: ../../DESIGN.md:423
+#: ../../DESIGN.md:439
 msgid "for"
 msgstr "対象"
 
-#: ../../DESIGN.md:423
+#: ../../DESIGN.md:439
 msgid "how"
 msgstr "方法"
 
-#: ../../DESIGN.md:423
+#: ../../DESIGN.md:439
 msgid "handed over"
 msgstr "受け取る"
 
-#: ../../DESIGN.md:423
+#: ../../DESIGN.md:439
 msgid ""
 "systemd, and other supervisors and container runtimes that follow the same "
 "convention"
 msgstr "systemd、および同じ規約に従う他の監督プロセスやコンテナランタイム"
 
-#: ../../DESIGN.md:423
+#: ../../DESIGN.md:439
 msgid ""
 "the socket is already listening on an inherited file descriptor "
 "(`LISTEN_PID`, `LISTEN_FDS`)"
 msgstr "ソケットが、引き継いだファイルディスクリプタですでに待ち受けている（`LISTEN_PID`、`LISTEN_FDS`）"
 
-#: ../../DESIGN.md:425
+#: ../../DESIGN.md:441
 msgid "bound"
 msgstr "自分で作る"
 
-#: ../../DESIGN.md:425
+#: ../../DESIGN.md:441
 msgid "everything else, and the default"
 msgstr "それ以外のすべて。既定"
 
-#: ../../DESIGN.md:425
+#: ../../DESIGN.md:441
 msgid "the server makes the socket itself, mode 0600 in a 0700 directory"
 msgstr "サーバーが自分でソケットを作る。0700 のディレクトリの中に、モード 0600 で"
 
-#: ../../DESIGN.md:428
+#: ../../DESIGN.md:444
 msgid ""
 "A handed-over socket is not the server's to delete: it stays when the server"
 " exits, and the supervisor starts the server again at the next connection. "
@@ -1566,17 +1609,17 @@ msgstr ""
 "に各システム向けのファイルがあり、`contrib/systemd` は本物の systemd "
 "で試しました（アダプタが接続するまでサービスは起動せず、アイドル時間が過ぎると終了し、ソケットは残ります）。"
 
-#: ../../DESIGN.md:433
+#: ../../DESIGN.md:449
 msgid ""
 "What a system does differently is absorbed in a source of its own, selected "
 "by `cfg` where the system decides it:"
 msgstr "システムごとの違いは、そのシステム専用の取得元に吸収し、システムで決まる箇所では `cfg` で選びます。"
 
-#: ../../DESIGN.md:435
+#: ../../DESIGN.md:451
 msgid "**systemd** (Linux): the handed-over source."
 msgstr "**systemd**（Linux）: 受け取る取得元です。"
 
-#: ../../DESIGN.md:436
+#: ../../DESIGN.md:452
 msgid ""
 "**launchd** (macOS): launchd can start the server at log-in "
 "(`contrib/launchd`, not tried yet: the macOS runner of CI is where it will "
@@ -1588,7 +1631,7 @@ msgstr ""
 "の macOS ランナーで試す予定です。Issue #18）、ソケットはサーバーが自分で作ります。launchd "
 "のソケットアクティベーションは、独自のインターフェースを通して名前でソケットを渡す方式で、まだ実装していません。"
 
-#: ../../DESIGN.md:439
+#: ../../DESIGN.md:455
 msgid ""
 "**Task Scheduler** (Windows): there is no socket activation, and the adapter"
 " socket is a Unix domain socket in this version, so the server does not run "
@@ -1603,7 +1646,7 @@ msgstr ""
 "と、それ用の取得元が必要です（サーバーのほかの部分が依存しているのは `Listener` "
 "トレイトなので、変わるのはそこだけです）。そのうえで、タスクスケジューラがログイン時に、またはアダプタが起動するタスクを通してオンデマンドで、サーバーを起動することになります。"
 
-#: ../../DESIGN.md:444
+#: ../../DESIGN.md:460
 msgid ""
 "An adapter that finds nobody listening starts this same executable itself "
 "(the Neovim adapter does, unless told not to): connecting is how the server "
@@ -1618,18 +1661,18 @@ msgstr ""
 "があれば、最後のアダプタがいなくなったところで終了します。2つのアダプタが同時にそうしても安全です。同じソケットで2つ目のサーバーは、起動を拒否する（終了コード"
 " 1）からです。"
 
-#: ../../DESIGN.md:449
+#: ../../DESIGN.md:465
 msgid "Security"
 msgstr "セキュリティ"
 
-#: ../../DESIGN.md:451
+#: ../../DESIGN.md:467
 msgid ""
 "Every listener is on `127.0.0.1`. The adapter socket is in a 0700 directory "
 "and is itself 0600."
 msgstr ""
 "待ち受けは、すべて `127.0.0.1` です。アダプターのソケットは、モード 0700 のディレクトリの中にあり、ソケット自身も 0600 です。"
 
-#: ../../DESIGN.md:452
+#: ../../DESIGN.md:468
 msgid ""
 "The token is checked on every WebSocket upgrade. A web page cannot set that "
 "header, so a browser cannot talk to the port."
@@ -1637,13 +1680,13 @@ msgstr ""
 "トークンは、WebSocket へのアップグレードのたびに確かめます。Web "
 "ページは、そのヘッダーを付けられないので、ブラウザーは、そのポートと話せません。"
 
-#: ../../DESIGN.md:454
+#: ../../DESIGN.md:470
 msgid ""
 "Frame and message sizes are capped. A malformed message closes that "
 "connection and nothing else."
 msgstr "フレームとメッセージの大きさには、上限があります。壊れたメッセージは、その接続だけを閉じます。"
 
-#: ../../DESIGN.md:455
+#: ../../DESIGN.md:471
 msgid ""
 "Paths from Claude are used as given by the adapter; the server never reads "
 "or writes project files itself. Writing a file after an accepted diff is the"
@@ -1652,11 +1695,11 @@ msgstr ""
 "Claude "
 "からのパスは、アダプターが渡したとおりに使います。サーバー自身は、プロジェクトのファイルを読み書きしません。差分が承認されたあとの、ファイルの書き込みは、アダプターの仕事です。"
 
-#: ../../DESIGN.md:458
+#: ../../DESIGN.md:474
 msgid "Testing"
 msgstr "テスト"
 
-#: ../../DESIGN.md:460
+#: ../../DESIGN.md:476
 msgid ""
 "A mock Claude client (WebSocket) and a mock adapter (Unix socket) run in the"
 " same test process. Tests cover the handshake, authentication, every tool, "
@@ -1675,7 +1718,7 @@ msgstr ""
 " つは、本物の Unix ソケットで、全部の経路を動かします（`tests/end_to_end.rs`: "
 "登録し、ロックファイルのトークンで接続し、ツールの一覧を取り、1 つ呼び、切断し、後始末をします）。"
 
-#: ../../DESIGN.md:467
+#: ../../DESIGN.md:483
 msgid ""
 "The expected shapes of what the server sends and writes come from the "
 "observed behaviour above, written down as fixtures in "
@@ -1689,17 +1732,17 @@ msgstr ""
 "`initialize`、ロックファイルの形、`initialize`・`tools/list`・`tools/call` "
 "の結果の形です。形を変えるのは、新しい観察が、そうすべきだと言ったときで、テストを通すためではありません。"
 
-#: ../../DESIGN.md:471
+#: ../../DESIGN.md:487
 msgid ""
 "Each adapter has its own tests; the Neovim one runs headless Neovim against "
 "a real server."
 msgstr "アダプターごとに、自分のテストを持ちます。Neovim のものは、ヘッドレスの Neovim を、本物のサーバーにつないで動かします。"
 
-#: ../../DESIGN.md:473
+#: ../../DESIGN.md:489
 msgid "Milestones"
 msgstr "マイルストーン"
 
-#: ../../DESIGN.md:475
+#: ../../DESIGN.md:491
 msgid ""
 "**M0, server skeleton.** WebSocket server, lock file, token, `initialize`, "
 "`tools/list`. A mock adapter."
@@ -1707,7 +1750,7 @@ msgstr ""
 "**M0、サーバーの骨組み。** WebSocket "
 "サーバー、ロックファイル、トークン、`initialize`、`tools/list`。偽のアダプター。"
 
-#: ../../DESIGN.md:476
+#: ../../DESIGN.md:492
 msgid ""
 "**M1, read-only tools.** `getOpenEditors`, `getWorkspaceFolders`, "
 "`getCurrentSelection`, `getLatestSelection`, `getDiagnostics`; "
@@ -1716,7 +1759,7 @@ msgstr ""
 "**M1、読み取りだけのツール。** "
 "`getOpenEditors`、`getWorkspaceFolders`、`getCurrentSelection`、`getLatestSelection`、`getDiagnostics`。`selection_changed`、`at_mentioned`。"
 
-#: ../../DESIGN.md:478
+#: ../../DESIGN.md:494
 msgid ""
 "**M2, Neovim adapter.** The server executable (`crates/server`), and a Lua "
 "adapter, over `vim.lsp.rpc`. Registers the main windows only."
@@ -1724,7 +1767,7 @@ msgstr ""
 "**M2、Neovim アダプタ。** サーバーの実行ファイル（`crates/server`）と、`vim.lsp.rpc` 上の Lua "
 "アダプタ。メインのウィンドウだけを登録する。"
 
-#: ../../DESIGN.md:479
+#: ../../DESIGN.md:495
 msgid ""
 "**M3, actions.** `openFile`, `checkDocumentDirty`, `saveDocument`, "
 "`diagnostics_changed`."
@@ -1732,7 +1775,7 @@ msgstr ""
 "**M3、操作。** "
 "`openFile`、`checkDocumentDirty`、`saveDocument`、`diagnostics_changed`。"
 
-#: ../../DESIGN.md:480
+#: ../../DESIGN.md:496
 msgid ""
 "**M4, diffs.** `openDiff`, `close_tab`, `closeAllDiffTabs`, and an "
 "accept/reject flow in the Neovim adapter, with a provider that shows the "
@@ -1741,11 +1784,11 @@ msgstr ""
 "**M4、差分。** `openDiff`、`close_tab`、`closeAllDiffTabs`、そして Neovim "
 "アダプタでの承認・却下の流れ。差分を見せる提供元は、差し替えられる。"
 
-#: ../../DESIGN.md:483
+#: ../../DESIGN.md:499
 msgid "Open questions"
 msgstr "未解決の問い"
 
-#: ../../DESIGN.md:485
+#: ../../DESIGN.md:501
 msgid ""
 "launchd's socket activation, and the Windows endpoint (a named-pipe "
 "`Listener`) with a Task Scheduler definition: see \"Running the server\"."
@@ -1753,19 +1796,19 @@ msgstr ""
 "launchd のソケットアクティベーション、および Windows の接続口（名前付きパイプの `Listener`）とタスクスケジューラの定義: "
 "「サーバーの実行」を参照。"
 
-#: ../../DESIGN.md:487
+#: ../../DESIGN.md:503
 msgid ""
 "What an adapter should do when the server is not there: retry, and for how "
 "long (issue #10)."
 msgstr "サーバーがいないときに、アダプターがどうするか。再試行するか、どのくらいの間か（Issue #10）。"
 
-#: ../../DESIGN.md:488
+#: ../../DESIGN.md:504
 msgid ""
 "Whether to write both a path and its symlink-resolved form into "
 "`workspaceFolders`, since the CLI compares text."
 msgstr "CLI は文字列で比べるので、`workspaceFolders` に、パスと、シンボリックリンクを解決した形の両方を書くか。"
 
-#: ../../DESIGN.md:489
+#: ../../DESIGN.md:505
 msgid ""
 "A process id can be reused: if an unrelated process takes the id that a dead"
 " server recorded, its leftover lock files are not cleaned up until that "
@@ -1775,7 +1818,7 @@ msgstr ""
 "プロセスの id は、再利用されることがあります。死んだサーバーが記録した id "
 "を、関係のないプロセスが引き継ぐと、そのサーバーが残したロックファイルは、そのプロセスが終わるまで、掃除されません。プロセスの開始時刻も記録すれば、解決します。"
 
-#: ../../DESIGN.md:491
+#: ../../DESIGN.md:507
 msgid "A named-pipe transport for Windows."
 msgstr "Windows 向けの、名前付きパイプの経路。"
 
@@ -1950,3 +1993,10 @@ msgstr "Windows 向けの、名前付きパイプの経路。"
 #~ "`openDiff` が `\"saved\"` を返したとき、アダプターは、`newFileContents` を `newFilePath` "
 #~ "に書き終えています。サーバーは、Claude に `FILE_SAVED` というテキストで答えます。`\"rejected\"` "
 #~ "のときは、`DIFF_REJECTED` です。"
+
+#~ msgid ""
+#~ "Its own tracking of diagnostics around the edits of Claude Code (it waits "
+#~ "for the editor to publish them) is done inside the extension, not through "
+#~ "this protocol."
+#~ msgstr ""
+#~ "Claude Code の編集の前後の診断の追跡（エディタが診断を公開するのを待ちます）は、拡張機能の内部で行い、このプロトコルは通しません。"

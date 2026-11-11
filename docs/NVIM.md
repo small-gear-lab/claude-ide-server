@@ -50,6 +50,9 @@ require('claude_ide').setup({
   selection_debounce_ms = 100,
   -- How long diagnostics are collected before the files that changed are reported (once, for all of them).
   diagnostics_debounce_ms = 100,
+  -- How long `getDiagnostics` waits for the diagnostics of a file that was changed under Neovim. See "Diagnostics";
+  -- `false` does not wait.
+  diagnostics_wait = { first_ms = 750, quiet_ms = 150, cap_ms = 1500, cap_hidden_ms = 1000 },
   -- How the changes that Claude Code proposes are shown. See "Diffs"; `false` leaves them out.
   diff = { provider = 'tab', keys = {} },
   -- Called each time the registration has been accepted.
@@ -92,7 +95,9 @@ nobody is listening depends on how the server is set up:
   looked up on the `PATH`; the output of a detached process has nowhere to go, so a wrapper of your own is the way to
   keep its log). If the executable is not found, the user is told, once; if the server that was started ends with an
   error before it can be reached, the exit code is in the last problem that `:ClaudeIde status` shows, and a server that
-  did not understand its command line (exit code 2 or more) is reported with a message.
+  did not understand its command line (exit code 2 or more) is reported with a message. The first retry after the
+  adapter has started the server comes after 100 ms (or `reconnect.initial_ms`, if that is less), since the server is
+  ready within a few tens of milliseconds; the retries after that follow the waits below.
 
 Either way the adapter keeps trying: after `reconnect.initial_ms`, then after twice that, and so on up to
 `reconnect.max_ms`, without a message, so a Neovim that starts before the server is not noisy. When the server says
@@ -137,6 +142,28 @@ replace them or add to them with the `methods` option):
 
 Claude Code 2.1.322 asks for `getDiagnostics` itself, around its own edits, and does not use the others. See "What
 Claude Code sends on its own" in [DESIGN](DESIGN.md).
+
+## Diagnostics
+
+`getDiagnostics` answers with what `vim.diagnostic` has. Two things are done for a file that is asked for by its `uri`:
+
+- **The file is found by its real path, and answered under the `uri` that was asked for.** Claude Code does not resolve
+  symbolic links, and drops an answer whose `uri` is not the file that it asked about, so a file that it names through a
+  link is looked up by where it really is, and comes back under the name that it was given. A file that is listed but
+  not loaded yet is answered with no diagnostics, and a file that Neovim does not list with an empty list.
+- **A file that was written by someone else is read again, and its diagnostics are waited for.** Claude Code asks for the
+  diagnostics of a file right after it has edited it, to find the problems that the edit made, and a language server
+  answers a little after the change: what Neovim has at that moment are the diagnostics of the text from before. If the
+  buffer has no changes of the user's and is older than the file, it is read again (so that what makes the diagnostics
+  is told of the change, as for any other), and the request waits, as the VS Code extension does, up to `first_ms` for
+  the first update, then until `quiet_ms` pass with none, and in all no longer than `cap_ms` (`cap_hidden_ms` for a
+  file that no window shows). A buffer with changes that were not written is the user's, and is left alone. Only the
+  request waits, not Neovim. `diagnostics_wait = false` turns this off, and a table sets some of the times.
+
+Checked with Claude Code 2.1.322 and pyright: right after it edited a file, `getDiagnostics` answered with the
+diagnostics of the new text. That does not tell the wait from no wait: the model takes seconds between the two calls, and
+pyright was done by then (the same run with `diagnostics_wait = false` answered the same). The wait is tested with a
+linter, written in Lua, that answers 150 ms after a file is read, in the tests of the adapter, which fail without it.
 
 ## Diffs
 
