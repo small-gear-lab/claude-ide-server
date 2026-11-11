@@ -4,9 +4,12 @@
 //! the right token in the `x-claude-code-ide-authorization` header; anything else is refused during the upgrade
 //! and never reaches the caller. A bad or slow peer affects only its own connection.
 
+use std::fmt;
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
+
+use futures_util::{SinkExt, StreamExt};
 
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
@@ -14,13 +17,90 @@ use tokio::task::JoinHandle;
 use tokio_tungstenite::WebSocketStream;
 use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, Response};
 use tokio_tungstenite::tungstenite::http::StatusCode;
-use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
+use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+use tokio_tungstenite::tungstenite::protocol::{CloseFrame, WebSocketConfig};
+use tokio_tungstenite::tungstenite::{Error as WsError, Message};
 
 /// The header that carries the token. Claude Code sends it with the value from the lock file.
 pub const AUTH_HEADER: &str = "x-claude-code-ide-authorization";
 
-/// An accepted, authenticated connection.
-pub type Connection = WebSocketStream<TcpStream>;
+/// What can go wrong on a connection. The WebSocket library's own error type is not part of this crate's interface.
+#[derive(Debug)]
+pub enum Error {
+    /// The network failed.
+    Io(io::Error),
+    /// The peer broke the WebSocket protocol, or sent a message above the size limit.
+    Protocol(String),
+    /// The peer sent a binary frame; this protocol uses text frames only.
+    UnexpectedBinary,
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Io(error) => write!(f, "network error: {error}"),
+            Self::Protocol(reason) => write!(f, "WebSocket protocol error: {reason}"),
+            Self::UnexpectedBinary => f.write_str("unexpected binary frame"),
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Io(error) => Some(error),
+            _ => None,
+        }
+    }
+}
+
+impl From<WsError> for Error {
+    fn from(error: WsError) -> Self {
+        match error {
+            WsError::Io(error) => Self::Io(error),
+            other => Self::Protocol(other.to_string()),
+        }
+    }
+}
+
+/// An accepted, authenticated connection that carries text messages (JSON-RPC, one per message).
+///
+/// Pings, pongs and the closing handshake are handled inside. Nothing of the WebSocket library shows in this type.
+#[derive(Debug)]
+pub struct Connection {
+    inner: WebSocketStream<TcpStream>,
+}
+
+impl Connection {
+    /// The next text message, or `None` once the peer has closed the connection.
+    pub async fn recv(&mut self) -> Option<Result<String, Error>> {
+        loop {
+            match self.inner.next().await? {
+                Ok(Message::Text(text)) => return Some(Ok(text.as_str().to_owned())),
+                Ok(Message::Binary(_)) => return Some(Err(Error::UnexpectedBinary)),
+                Ok(Message::Close(_)) => return None,
+                // Pings are answered by the library; pongs and raw frames need no action.
+                Ok(_) => {}
+                Err(WsError::ConnectionClosed | WsError::AlreadyClosed) => return None,
+                Err(error) => return Some(Err(error.into())),
+            }
+        }
+    }
+
+    /// Sends one text message.
+    pub async fn send(&mut self, text: impl Into<String>) -> Result<(), Error> {
+        Ok(self.inner.send(Message::text(text.into())).await?)
+    }
+
+    /// Closes the connection with a WebSocket close code (for example 1008, "policy violation") and a reason.
+    pub async fn close(&mut self, code: u16, reason: &str) {
+        let frame = CloseFrame {
+            code: CloseCode::from(code),
+            reason: reason.to_owned().into(),
+        };
+        let _ = self.inner.close(Some(frame)).await;
+    }
+}
 
 /// Limits and timeouts of the server.
 #[derive(Debug, Clone)]
@@ -110,8 +190,8 @@ async fn accept_loop(
             let upgraded =
                 tokio::time::timeout(config.handshake_timeout, upgrade(stream, &token, &config))
                     .await;
-            if let Ok(Ok(connection)) = upgraded {
-                let _ = tx.send(connection).await;
+            if let Ok(Ok(inner)) = upgraded {
+                let _ = tx.send(Connection { inner }).await;
             }
         });
     }
@@ -121,7 +201,7 @@ async fn upgrade(
     stream: TcpStream,
     token: &str,
     config: &Config,
-) -> Result<Connection, tokio_tungstenite::tungstenite::Error> {
+) -> Result<WebSocketStream<TcpStream>, WsError> {
     // The callback's signature, with its large error type, is fixed by tungstenite.
     #[allow(clippy::result_large_err)]
     let check = |request: &Request, response: Response| -> Result<Response, ErrorResponse> {

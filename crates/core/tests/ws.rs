@@ -47,19 +47,13 @@ async fn a_client_with_the_right_token_connects_and_exchanges_messages() {
         .unwrap()
         .expect("a connection arrives");
 
-    accepted
-        .send(Message::text("from the server"))
-        .await
-        .unwrap();
+    accepted.send("from the server").await.unwrap();
     assert_eq!(
         client.next().await.unwrap().unwrap(),
         Message::text("from the server")
     );
     client.send(Message::text("from the client")).await.unwrap();
-    assert_eq!(
-        accepted.next().await.unwrap().unwrap(),
-        Message::text("from the client")
-    );
+    assert_eq!(accepted.recv().await.unwrap().unwrap(), "from the client");
 }
 
 #[tokio::test]
@@ -141,7 +135,7 @@ async fn an_oversized_message_ends_that_connection_only() {
     let mut client = connect(server.port(), Some(TOKEN)).await.unwrap();
     let mut accepted = timeout(WAIT, connections.recv()).await.unwrap().unwrap();
     client.send(Message::binary(vec![0u8; 4096])).await.unwrap();
-    let outcome = timeout(WAIT, accepted.next()).await.unwrap();
+    let outcome = timeout(WAIT, accepted.recv()).await.unwrap();
     assert!(
         matches!(outcome, Some(Err(_)) | None),
         "the oversized message is not delivered: {outcome:?}"
@@ -169,4 +163,36 @@ async fn dropping_the_server_stops_it_listening() {
     // Give the aborted task a moment to release the port.
     tokio::time::sleep(Duration::from_millis(100)).await;
     assert!(TcpStream::connect(addr).await.is_err());
+}
+
+#[tokio::test]
+async fn binary_frames_are_reported_and_a_close_ends_the_stream() {
+    let (server, mut connections) = start(Config::default()).await;
+    let mut client = connect(server.port(), Some(TOKEN)).await.unwrap();
+    let mut accepted = timeout(WAIT, connections.recv()).await.unwrap().unwrap();
+
+    client.send(Message::binary(vec![1, 2, 3])).await.unwrap();
+    assert!(matches!(
+        accepted.recv().await,
+        Some(Err(claude_ide_core::ws::Error::UnexpectedBinary))
+    ));
+
+    client.close(None).await.unwrap();
+    assert!(timeout(WAIT, accepted.recv()).await.unwrap().is_none());
+}
+
+#[tokio::test]
+async fn the_server_can_close_with_a_code_and_a_reason() {
+    let (server, mut connections) = start(Config::default()).await;
+    let mut client = connect(server.port(), Some(TOKEN)).await.unwrap();
+    let mut accepted = timeout(WAIT, connections.recv()).await.unwrap().unwrap();
+
+    accepted.close(1008, "policy violation").await;
+    match timeout(WAIT, client.next()).await.unwrap() {
+        Some(Ok(Message::Close(Some(frame)))) => {
+            assert_eq!(u16::from(frame.code), 1008);
+            assert_eq!(frame.reason.as_str(), "policy violation");
+        }
+        other => panic!("expected a close frame, got {other:?}"),
+    }
 }
