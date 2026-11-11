@@ -13,6 +13,7 @@ real Claude Code (2.1.322).
 
 - Neovim 0.11 or newer. CI runs the tests with 0.11.7 and 0.12.6, and 0.11.0 (the first of the 0.11 series) was tried by
   hand. Neovim 0.10 does not work (`vim.str_utfindex` takes other arguments there; nothing was tried beyond that).
+- Not Windows yet: the server runs there (see "Running the server" in [DESIGN](DESIGN.md)), but this adapter does not connect over a named pipe, and its tests are for Unix (issue #23).
 - `claude-ide-server` on the `PATH` (see "Running the server" in [DESIGN](DESIGN.md)), or a supervisor that starts it at
   the first connection. The adapter starts the executable itself if nobody is listening.
 

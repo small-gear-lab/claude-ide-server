@@ -17,7 +17,7 @@ checked against Claude Code itself.
 
 - Starting or managing the Claude Code CLI or its terminal. The CLI runs wherever the user runs it; `/ide`
   finds the server through the lock file.
-- Windows. The adapter socket is a Unix domain socket. A named-pipe transport can be added later.
+- Everything that an editor needs on Windows. The server runs there (a named pipe for the adapters, lock files, Task Scheduler), but the Neovim adapter on Windows and the Windows forms of paths and URIs are issue #23.
 - Replacing the official integrations. This is for editors that do not have one.
 - A hub entry that stands for all workspaces. Considered and left out: a CLI normally runs inside the project that its editor has open, and a second entry that matches the same directory would make `/ide` ambiguous.
 
@@ -389,7 +389,7 @@ adapters.
 
 Three seams are drawn on purpose, where this design already says that something may change:
 
-1. **The adapter transport.** A Unix socket now, a named pipe later. Everything above it works with a duplex byte
+1. **The adapter transport.** A Unix socket, or a named pipe on Windows. Everything above it works with a duplex byte
    stream that a listener accepts, not with a Unix socket type.
 2. **The MCP SDK.** If `rmcp` is used, its types stay inside the Claude side. The middle and the adapter side use
    the crate's own types, so that a new version of the SDK, or a different SDK, touches one layer.
@@ -425,7 +425,7 @@ under its runtime directory and removes the ones that are still there on the nex
 `claude-ide-server` (the `crates/server` crate) is one executable for every editor. `claude-ide-server --help` lists
 its switches: `--socket` (where the adapters connect), `--idle-timeout` (exit when the last adapter has been gone for
 that many seconds), `-v` / `-q` (the log). The log goes to standard error, through `tracing`; `CLAUDE_IDE_SERVER_LOG`
-or `RUST_LOG` replace what the switches say. It runs until `SIGINT` or `SIGTERM`, then tells every adapter `shutdown`
+or `RUST_LOG` replace what the switches say. It runs until `SIGINT` or `SIGTERM` (on Windows, Ctrl-C or Ctrl-Break, the closing of the console, or the shutdown of the system), then tells every adapter `shutdown`
 and removes the lock files and ports, and the socket if it made it. Exit codes: 0 stopped as asked, 1 could not start
 (or the socket closed), 2 wrong command line, 3 the workspaces were not closed in time.
 
@@ -440,7 +440,7 @@ first source that applies is used:
 |---|---|---|
 | handed over | systemd, and other supervisors and container runtimes that follow the same convention | the socket is already listening on an inherited file descriptor (`LISTEN_PID`, `LISTEN_FDS`) |
 | handed over by launchd | launchd on macOS | the socket is asked for by name, `adapter`, from the property list of the job (`launch_activate_socket`) |
-| bound | everything else, and the default | the server makes the socket itself, mode 0600 in a 0700 directory |
+| bound | everything else, and the default | the server makes the socket itself, mode 0600 in a 0700 directory (on Windows, a named pipe that only the user can open) |
 
 A handed-over socket is not the server's to delete: it stays when the server exits, and the supervisor starts the
 server again at the next connection. With `--idle-timeout` an on-demand server does not stay for ever. `contrib/` has
@@ -464,10 +464,43 @@ What a system does differently is absorbed in a source of its own, selected by `
   the adapters look for by default (and make its directory: launchd does not). A machine with no domain of launchd that
   a user agent can be loaded into (a session with nobody logged in, a container) cannot run the test; it says so and ends,
   unless `CLAUDE_IDE_REQUIRE_LAUNCHD=1` is set, as CI does.
-- **Task Scheduler** (Windows): there is no socket activation, and the adapter socket is a Unix domain socket in this
-  version, so the server does not run on Windows yet. It needs a named-pipe `Listener` in the core crate (the
-  `Listener` trait is what the rest of the server depends on, so that is the only place that changes) and a source for
-  it; Task Scheduler would then start the server at log-in, or on demand through a task that the adapter triggers.
+- **Task Scheduler** (Windows): a task cannot be started by a connection, so there is no socket activation: the server
+  runs from log-on on (`contrib/windows`), and the adapters connect to a named pipe, `\\.\pipe\claude-ide-server-<sid>`
+  (`--socket` takes another name). The pipe is made by `PipeListener` in the core crate, in place of the Unix socket, and
+  the rest of the server does not know the difference. What is particular to it:
+  - The name has the security identifier (SID) of the user in it, since the names of pipes are shared by everyone on the
+    machine, and the pipe has an access list with the user alone and refuses clients from other machines. The first
+    instance of the name is made as the first, which the system refuses if the name is taken, so a second server on the
+    same name fails to start (exit code 1), as on Unix. A pipe goes with its last handle, so a server that died leaves
+    nothing to be replaced.
+  - The calls that need `unsafe` (whether a process is alive, who the user is, making the pipe with its access list) are
+    in a crate of their own, `claude-ide-windows`, like the one for launchd.
+  - The lock files are in `CLAUDE_CONFIG_DIR`, or else `%USERPROFILE%\.claude\ide` (`USERPROFILE` is where Node, which
+    Claude Code is, takes the home directory from on Windows). There are no modes: a file has what the directory of the
+    user gives it.
+  - **Task Scheduler ends a task by killing the process**: on the runner the last result of a task that was stopped was
+    `267014` (terminated by the user), and the server got no chance to clean up. So each lock file, and its record, is
+    held by a handle that says "delete when closed", which the system closes when the process is gone, however it
+    ended. (A reader, such as Claude Code, is not held back by it, and the file can still be replaced, which is how it
+    is rewritten. What is left by a power cut, or on a system that does not do this, is removed by the next server, as
+    on Unix.)
+  - The console events of a server that is run by hand: Ctrl-C and Ctrl-Break are "interrupted", the closing of the
+    console and the shutdown of the system are "terminated", and both end the server as `SIGINT` and `SIGTERM` do.
+  - `contrib/windows/claude-ide-server.xml` is the task. Its declaration says UTF-16, as Task Scheduler writes it,
+    because the `schtasks` program reads only that; the instructions in the file use PowerShell, which is given the text
+    (`Register-ScheduledTask -Xml`). The task has no environment, so the server has the paths of the user.
+  - Tried on the Windows runner of CI: all the tests of the core, and of the executable (an adapter registers over the
+    pipe, a stand-in for Claude Code connects with the token from the lock file and calls a tool, a server that is killed
+    leaves no lock file, a second server is refused, the idle exit), and `crates/server/tests/task_scheduler.rs`, which
+    registers the file that is shipped, starts the task, does the same with the adapter and the stand-in, stops the task,
+    and finds the pipe gone and no lock file left. That test runs only with `CLAUDE_IDE_TRY_TASK_SCHEDULER=1` (the task has
+    the paths of the user, which a test must not take from a machine that has a server of its own); CI sets it.
+  - What Claude Code does with the lock file on Windows, from its code (2.1.322), not tried with a Claude Code on Windows:
+    it lists `*.lock` in `<config dir>/ide`, asks whether the process of `pid` is alive (`process.kill(pid, 0)`), and
+    compares its working directory (the drive letter in upper case, in NFC) with each of `workspaceFolders` by
+    containment. It connects to `127.0.0.1`; another address is for WSL with an editor on Windows (`runningInWindows`).
+  - Not done: starting the server on demand from an adapter on Windows (the adapter starts the executable itself, or
+    triggers the task), and everything about paths and the Neovim adapter: issue #23.
 
 An adapter that finds nobody listening starts this same executable itself (the Neovim adapter does, unless told not to):
 connecting is how the server is activated, whether a supervisor or the adapter answers it. The server is then not a
@@ -476,7 +509,7 @@ same moment are safe, because a second server on the same socket refuses to star
 
 ## Security
 
-- Every listener is on `127.0.0.1`. The adapter socket is in a 0700 directory and is itself 0600.
+- Every listener is on `127.0.0.1`. The adapter socket is in a 0700 directory and is itself 0600 (on Windows the pipe has an access list with the user alone, and refuses clients from other machines).
 - The token is checked on every WebSocket upgrade. A web page cannot set that header, so a browser cannot talk
   to the port.
 - Frame and message sizes are capped. A malformed message closes that connection and nothing else.
@@ -510,9 +543,8 @@ same moment are safe, because a second server on the same socket refuses to star
 
 ## Open questions
 
-- The Windows endpoint (a named-pipe `Listener`) with a Task Scheduler definition: see "Running the server".
+- Windows: the Neovim adapter over a pipe, and the Windows forms of paths and URIs (issue #23).
 - What an adapter should do when the server is not there: retry, and for how long (issue #10).
 - Whether to write both a path and its symlink-resolved form into `workspaceFolders`, since the CLI compares text.
 - A process id can be reused: if an unrelated process takes the id that a dead server recorded, its leftover lock
   files are not cleaned up until that process ends. Recording the start time of the process as well would settle it.
-- A named-pipe transport for Windows.

@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-ide-server\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-11 20:13+0900\n"
+"POT-Creation-Date: 2026-11-11 20:51+0900\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: Small Gear Lab\n"
 "Language-Team: ja <LL@li.org>\n"
@@ -82,9 +82,13 @@ msgstr ""
 
 #: ../../DESIGN.md:20
 msgid ""
-"Windows. The adapter socket is a Unix domain socket. A named-pipe transport "
-"can be added later."
-msgstr "Windows。アダプターのソケットは Unix ドメインソケットです。名前付きパイプの経路は、あとから足せます。"
+"Everything that an editor needs on Windows. The server runs there (a named "
+"pipe for the adapters, lock files, Task Scheduler), but the Neovim adapter "
+"on Windows and the Windows forms of paths and URIs are issue #23."
+msgstr ""
+"エディタが Windows で必要とするものすべて。サーバーは Windows "
+"で動きます（アダプタ用の名前付きパイプ、ロックファイル、タスクスケジューラ）が、Windows での Neovim アダプタと、パスや URI の "
+"Windows での形は Issue #23 です。"
 
 #: ../../DESIGN.md:21
 msgid ""
@@ -1413,11 +1417,11 @@ msgstr "この設計がすでに「変わるかもしれない」と言ってい
 
 #: ../../DESIGN.md:392
 msgid ""
-"**The adapter transport.** A Unix socket now, a named pipe later. Everything"
-" above it works with a duplex byte stream that a listener accepts, not with "
-"a Unix socket type."
+"**The adapter transport.** A Unix socket, or a named pipe on Windows. "
+"Everything above it works with a duplex byte stream that a listener accepts,"
+" not with a Unix socket type."
 msgstr ""
-"**アダプターとの通信路。** 今は Unix ソケット、あとで名前付きパイプ。これより上は、Unix "
+"**アダプターとの通信路。** Unix ソケット、Windows では名前付きパイプ。これより上は、Unix "
 "ソケットの型ではなく、待ち受けが受け付ける、双方向のバイトストリームを使います。"
 
 #: ../../DESIGN.md:394
@@ -1525,16 +1529,19 @@ msgid ""
 " adapters connect), `--idle-timeout` (exit when the last adapter has been "
 "gone for that many seconds), `-v` / `-q` (the log). The log goes to standard"
 " error, through `tracing`; `CLAUDE_IDE_SERVER_LOG` or `RUST_LOG` replace "
-"what the switches say. It runs until `SIGINT` or `SIGTERM`, then tells every"
-" adapter `shutdown` and removes the lock files and ports, and the socket if "
-"it made it. Exit codes: 0 stopped as asked, 1 could not start (or the socket"
-" closed), 2 wrong command line, 3 the workspaces were not closed in time."
+"what the switches say. It runs until `SIGINT` or `SIGTERM` (on Windows, "
+"Ctrl-C or Ctrl-Break, the closing of the console, or the shutdown of the "
+"system), then tells every adapter `shutdown` and removes the lock files and "
+"ports, and the socket if it made it. Exit codes: 0 stopped as asked, 1 could"
+" not start (or the socket closed), 2 wrong command line, 3 the workspaces "
+"were not closed in time."
 msgstr ""
 "`claude-ide-server`（`crates/server` クレート）は、すべてのエディタに共通の1つの実行ファイルです。`claude-"
 "ide-server --help` でスイッチの一覧が出ます。`--socket`（アダプタの接続先）、`--idle-"
 "timeout`（最後のアダプタがいなくなってから、その秒数が経ったら終了する）、`-v` / `-q`（ログの詳しさ）。ログは `tracing` "
 "を通して標準エラーに出ます。`CLAUDE_IDE_SERVER_LOG` か `RUST_LOG` "
-"があれば、スイッチの指定より優先されます。`SIGINT` か `SIGTERM` が来るまで動き続け、来たらすべてのアダプタに `shutdown` "
+"があれば、スイッチの指定より優先されます。`SIGINT` か `SIGTERM`（Windows では Ctrl-C か Ctrl-"
+"Break、コンソールを閉じること、システムのシャットダウン）が来るまで動き続け、来たらすべてのアダプタに `shutdown` "
 "を伝えて、ロックファイルとポート（と、自分で作ったソケット）を片付けます。終了コードは、0 が指示どおりの停止、1 "
 "が起動できなかった（またはソケットが閉じた）、2 がコマンドラインの誤り、3 が時間内にワークスペースを閉じられなかった、です。"
 
@@ -1606,8 +1613,11 @@ msgid "everything else, and the default"
 msgstr "それ以外のすべて。既定"
 
 #: ../../DESIGN.md:442
-msgid "the server makes the socket itself, mode 0600 in a 0700 directory"
-msgstr "サーバーが自分でソケットを作る。0700 のディレクトリの中に、モード 0600 で"
+msgid ""
+"the server makes the socket itself, mode 0600 in a 0700 directory (on "
+"Windows, a named pipe that only the user can open)"
+msgstr ""
+"サーバーが自分でソケットを作る。0700 のディレクトリの中に、モード 0600 で（Windows では、ユーザーだけが開ける名前付きパイプ）"
 
 #: ../../DESIGN.md:445
 msgid ""
@@ -1677,20 +1687,142 @@ msgstr ""
 
 #: ../../DESIGN.md:467
 msgid ""
-"**Task Scheduler** (Windows): there is no socket activation, and the adapter"
-" socket is a Unix domain socket in this version, so the server does not run "
-"on Windows yet. It needs a named-pipe `Listener` in the core crate (the "
-"`Listener` trait is what the rest of the server depends on, so that is the "
-"only place that changes) and a source for it; Task Scheduler would then "
-"start the server at log-in, or on demand through a task that the adapter "
-"triggers."
+"**Task Scheduler** (Windows): a task cannot be started by a connection, so "
+"there is no socket activation: the server runs from log-on on "
+"(`contrib/windows`), and the adapters connect to a named pipe, "
+"`\\\\.\\pipe\\claude-ide-server-<sid>` (`--socket` takes another name). The "
+"pipe is made by `PipeListener` in the core crate, in place of the Unix "
+"socket, and the rest of the server does not know the difference. What is "
+"particular to it:"
 msgstr ""
-"**タスクスケジューラ**（Windows）: ソケットアクティベーションはなく、このバージョンのアダプタ用ソケットは Unix "
-"ドメインソケットなので、サーバーはまだ Windows では動きません。コアクレートに名前付きパイプの `Listener` "
-"と、それ用の取得元が必要です（サーバーのほかの部分が依存しているのは `Listener` "
-"トレイトなので、変わるのはそこだけです）。そのうえで、タスクスケジューラがログイン時に、またはアダプタが起動するタスクを通してオンデマンドで、サーバーを起動することになります。"
+"**タスクスケジューラ**（Windows）: "
+"タスクは接続では起動できないので、ソケットアクティベーションはありません。サーバーはログオンしたときから動き（`contrib/windows`）、アダプタは名前付きパイプ"
+" `\\\\.\\pipe\\claude-ide-server-<sid>` に接続します（`--socket` "
+"で別の名前も指定できます）。パイプは、コアクレートの `PipeListener` が Unix "
+"ソケットの代わりに作り、サーバーのほかの部分は違いを知りません。このパイプに特有のことは次のとおりです。"
 
-#: ../../DESIGN.md:472
+#: ../../DESIGN.md:471
+msgid ""
+"The name has the security identifier (SID) of the user in it, since the "
+"names of pipes are shared by everyone on the machine, and the pipe has an "
+"access list with the user alone and refuses clients from other machines. The"
+" first instance of the name is made as the first, which the system refuses "
+"if the name is taken, so a second server on the same name fails to start "
+"(exit code 1), as on Unix. A pipe goes with its last handle, so a server "
+"that died leaves nothing to be replaced."
+msgstr ""
+"名前にはユーザーのセキュリティ識別子（SID）が入っています。パイプの名前はマシン上のすべての人に共通だからです。パイプのアクセスリストにはそのユーザーだけがいて、ほかのマシンからのクライアントは拒否されます。名前の最初のインスタンスは「最初のもの」として作られ、名前がすでに使われていればシステムが拒否するので、同じ名前での2つ目のサーバーは、Unix"
+" と同じように、起動に失敗します（終了コード "
+"1）。パイプは最後のハンドルとともになくなるので、死んだサーバーが置き換えの要るものを残すことはありません。"
+
+#: ../../DESIGN.md:476
+msgid ""
+"The calls that need `unsafe` (whether a process is alive, who the user is, "
+"making the pipe with its access list) are in a crate of their own, `claude-"
+"ide-windows`, like the one for launchd."
+msgstr ""
+"`unsafe` が要る呼び出し（プロセスが生きているかどうか、ユーザーが誰か、アクセスリストつきのパイプを作ること）は、launchd "
+"のものと同じように、専用のクレート `claude-ide-windows` に置いてあります。"
+
+#: ../../DESIGN.md:478
+msgid ""
+"The lock files are in `CLAUDE_CONFIG_DIR`, or else "
+"`%USERPROFILE%\\.claude\\ide` (`USERPROFILE` is where Node, which Claude "
+"Code is, takes the home directory from on Windows). There are no modes: a "
+"file has what the directory of the user gives it."
+msgstr ""
+"ロックファイルは `CLAUDE_CONFIG_DIR` に、なければ `%USERPROFILE%\\.claude\\ide` "
+"に置きます（Windows で Claude Code、つまり Node がホームディレクトリを取るのが `USERPROFILE` "
+"だからです）。モードはありません。ファイルは、ユーザーのディレクトリが与えるものを持ちます。"
+
+#: ../../DESIGN.md:481
+msgid ""
+"**Task Scheduler ends a task by killing the process**: on the runner the "
+"last result of a task that was stopped was `267014` (terminated by the "
+"user), and the server got no chance to clean up. So each lock file, and its "
+"record, is held by a handle that says \"delete when closed\", which the "
+"system closes when the process is gone, however it ended. (A reader, such as"
+" Claude Code, is not held back by it, and the file can still be replaced, "
+"which is how it is rewritten. What is left by a power cut, or on a system "
+"that does not do this, is removed by the next server, as on Unix.)"
+msgstr ""
+"**タスクスケジューラは、タスクをプロセスの強制終了で止めます。** ランナーで、止めたタスクの最後の結果は "
+"`267014`（ユーザーによる終了）で、サーバーは後始末をする機会を得ませんでした。そこで、ロックファイルとその記録は、それぞれ「閉じたら削除」という印のハンドルで持たれ、プロセスがどう終わっても、なくなったときにシステムがそれを閉じます。（読む側、たとえば"
+" Claude Code "
+"は、これに妨げられず、ファイルを置き換えることもできます。書き直しはその方法です。停電で残ったものや、これを行わないシステムで残ったものは、Unix "
+"と同じように、次のサーバーが消します。）"
+
+#: ../../DESIGN.md:487
+msgid ""
+"The console events of a server that is run by hand: Ctrl-C and Ctrl-Break "
+"are \"interrupted\", the closing of the console and the shutdown of the "
+"system are \"terminated\", and both end the server as `SIGINT` and `SIGTERM`"
+" do."
+msgstr ""
+"手で動かしたサーバーのコンソールのイベント: Ctrl-C と Ctrl-Break "
+"は「interrupted」、コンソールを閉じることとシステムのシャットダウンは「terminated」で、どちらも `SIGINT` や "
+"`SIGTERM` と同じようにサーバーを終了させます。"
+
+#: ../../DESIGN.md:489
+msgid ""
+"`contrib/windows/claude-ide-server.xml` is the task. Its declaration says "
+"UTF-16, as Task Scheduler writes it, because the `schtasks` program reads "
+"only that; the instructions in the file use PowerShell, which is given the "
+"text (`Register-ScheduledTask -Xml`). The task has no environment, so the "
+"server has the paths of the user."
+msgstr ""
+"`contrib/windows/claude-ide-server.xml` がそのタスクです。宣言は、タスクスケジューラが書き出すのと同じ "
+"UTF-16 になっています。`schtasks` プログラムがそれしか読めないからです。ファイルの中の手順は PowerShell "
+"を使い、そちらにはテキストが渡されます（`Register-ScheduledTask "
+"-Xml`）。タスクには環境変数がないので、サーバーはユーザーのパスを使います。"
+
+#: ../../DESIGN.md:492
+msgid ""
+"Tried on the Windows runner of CI: all the tests of the core, and of the "
+"executable (an adapter registers over the pipe, a stand-in for Claude Code "
+"connects with the token from the lock file and calls a tool, a server that "
+"is killed leaves no lock file, a second server is refused, the idle exit), "
+"and `crates/server/tests/task_scheduler.rs`, which registers the file that "
+"is shipped, starts the task, does the same with the adapter and the stand-"
+"in, stops the task, and finds the pipe gone and no lock file left. That test"
+" runs only with `CLAUDE_IDE_TRY_TASK_SCHEDULER=1` (the task has the paths of"
+" the user, which a test must not take from a machine that has a server of "
+"its own); CI sets it."
+msgstr ""
+"CI の Windows ランナーで試したこと: コアのすべてのテスト、実行ファイルのテスト（アダプタがパイプで登録し、Claude Code "
+"の代役がロックファイルのトークンで接続してツールを呼ぶ。強制終了したサーバーがロックファイルを残さない。2つ目のサーバーは拒否される。アイドルでの終了）、そして"
+" "
+"`crates/server/tests/task_scheduler.rs`。後者は、同梱のファイルを登録し、タスクを開始し、アダプタと代役で同じことをして、タスクを止め、パイプがなくなっていて、ロックファイルが残っていないことを確かめます。この試験は"
+" `CLAUDE_IDE_TRY_TASK_SCHEDULER=1` "
+"があるときだけ動きます（タスクはユーザーのパスを使うので、自分のサーバーがあるマシンから、試験がそれを取ってはいけません）。CI がそれを設定します。"
+
+#: ../../DESIGN.md:498
+msgid ""
+"What Claude Code does with the lock file on Windows, from its code "
+"(2.1.322), not tried with a Claude Code on Windows: it lists `*.lock` in "
+"`<config dir>/ide`, asks whether the process of `pid` is alive "
+"(`process.kill(pid, 0)`), and compares its working directory (the drive "
+"letter in upper case, in NFC) with each of `workspaceFolders` by "
+"containment. It connects to `127.0.0.1`; another address is for WSL with an "
+"editor on Windows (`runningInWindows`)."
+msgstr ""
+"Windows で Claude Code がロックファイルをどう扱うか。コード（2.1.322）から読んだことで、Windows の Claude "
+"Code では試していません。`<設定ディレクトリ>/ide` の `*.lock` を一覧し、`pid` "
+"のプロセスが生きているかを尋ね（`process.kill(pid, "
+"0)`）、自分の作業ディレクトリ（ドライブレターは大文字、NFC）を、`workspaceFolders` のそれぞれと、包含で比べます。接続先は "
+"`127.0.0.1` で、別のアドレスは、エディタが Windows にある WSL のためのものです（`runningInWindows`）。"
+
+#: ../../DESIGN.md:502
+msgid ""
+"Not done: starting the server on demand from an adapter on Windows (the "
+"adapter starts the executable itself, or triggers the task), and everything "
+"about paths and the Neovim adapter: issue #23."
+msgstr ""
+"まだしていないこと: Windows "
+"で、アダプタからサーバーをオンデマンドで起動すること（アダプタが実行ファイルを自分で起動するか、タスクを起動する）。そして、パスと Neovim "
+"アダプタに関するすべて: Issue #23。"
+
+#: ../../DESIGN.md:505
 msgid ""
 "An adapter that finds nobody listening starts this same executable itself "
 "(the Neovim adapter does, unless told not to): connecting is how the server "
@@ -1705,18 +1837,20 @@ msgstr ""
 "があれば、最後のアダプタがいなくなったところで終了します。2つのアダプタが同時にそうしても安全です。同じソケットで2つ目のサーバーは、起動を拒否する（終了コード"
 " 1）からです。"
 
-#: ../../DESIGN.md:477
+#: ../../DESIGN.md:510
 msgid "Security"
 msgstr "セキュリティ"
 
-#: ../../DESIGN.md:479
+#: ../../DESIGN.md:512
 msgid ""
 "Every listener is on `127.0.0.1`. The adapter socket is in a 0700 directory "
-"and is itself 0600."
+"and is itself 0600 (on Windows the pipe has an access list with the user "
+"alone, and refuses clients from other machines)."
 msgstr ""
-"待ち受けは、すべて `127.0.0.1` です。アダプターのソケットは、モード 0700 のディレクトリの中にあり、ソケット自身も 0600 です。"
+"待ち受けは、すべて `127.0.0.1` です。アダプターのソケットは、モード 0700 のディレクトリの中にあり、ソケット自身も 0600 "
+"です（Windows では、パイプのアクセスリストにユーザーだけがいて、ほかのマシンからのクライアントは拒否されます）。"
 
-#: ../../DESIGN.md:480
+#: ../../DESIGN.md:513
 msgid ""
 "The token is checked on every WebSocket upgrade. A web page cannot set that "
 "header, so a browser cannot talk to the port."
@@ -1724,13 +1858,13 @@ msgstr ""
 "トークンは、WebSocket へのアップグレードのたびに確かめます。Web "
 "ページは、そのヘッダーを付けられないので、ブラウザーは、そのポートと話せません。"
 
-#: ../../DESIGN.md:482
+#: ../../DESIGN.md:515
 msgid ""
 "Frame and message sizes are capped. A malformed message closes that "
 "connection and nothing else."
 msgstr "フレームとメッセージの大きさには、上限があります。壊れたメッセージは、その接続だけを閉じます。"
 
-#: ../../DESIGN.md:483
+#: ../../DESIGN.md:516
 msgid ""
 "Paths from Claude are used as given by the adapter; the server never reads "
 "or writes project files itself. Writing a file after an accepted diff is the"
@@ -1739,11 +1873,11 @@ msgstr ""
 "Claude "
 "からのパスは、アダプターが渡したとおりに使います。サーバー自身は、プロジェクトのファイルを読み書きしません。差分が承認されたあとの、ファイルの書き込みは、アダプターの仕事です。"
 
-#: ../../DESIGN.md:486
+#: ../../DESIGN.md:519
 msgid "Testing"
 msgstr "テスト"
 
-#: ../../DESIGN.md:488
+#: ../../DESIGN.md:521
 msgid ""
 "A mock Claude client (WebSocket) and a mock adapter (Unix socket) run in the"
 " same test process. Tests cover the handshake, authentication, every tool, "
@@ -1762,7 +1896,7 @@ msgstr ""
 " つは、本物の Unix ソケットで、全部の経路を動かします（`tests/end_to_end.rs`: "
 "登録し、ロックファイルのトークンで接続し、ツールの一覧を取り、1 つ呼び、切断し、後始末をします）。"
 
-#: ../../DESIGN.md:495
+#: ../../DESIGN.md:528
 msgid ""
 "The expected shapes of what the server sends and writes come from the "
 "observed behaviour above, written down as fixtures in "
@@ -1776,17 +1910,17 @@ msgstr ""
 "`initialize`、ロックファイルの形、`initialize`・`tools/list`・`tools/call` "
 "の結果の形です。形を変えるのは、新しい観察が、そうすべきだと言ったときで、テストを通すためではありません。"
 
-#: ../../DESIGN.md:499
+#: ../../DESIGN.md:532
 msgid ""
 "Each adapter has its own tests; the Neovim one runs headless Neovim against "
 "a real server."
 msgstr "アダプターごとに、自分のテストを持ちます。Neovim のものは、ヘッドレスの Neovim を、本物のサーバーにつないで動かします。"
 
-#: ../../DESIGN.md:501
+#: ../../DESIGN.md:534
 msgid "Milestones"
 msgstr "マイルストーン"
 
-#: ../../DESIGN.md:503
+#: ../../DESIGN.md:536
 msgid ""
 "**M0, server skeleton.** WebSocket server, lock file, token, `initialize`, "
 "`tools/list`. A mock adapter."
@@ -1794,7 +1928,7 @@ msgstr ""
 "**M0、サーバーの骨組み。** WebSocket "
 "サーバー、ロックファイル、トークン、`initialize`、`tools/list`。偽のアダプター。"
 
-#: ../../DESIGN.md:504
+#: ../../DESIGN.md:537
 msgid ""
 "**M1, read-only tools.** `getOpenEditors`, `getWorkspaceFolders`, "
 "`getCurrentSelection`, `getLatestSelection`, `getDiagnostics`; "
@@ -1803,7 +1937,7 @@ msgstr ""
 "**M1、読み取りだけのツール。** "
 "`getOpenEditors`、`getWorkspaceFolders`、`getCurrentSelection`、`getLatestSelection`、`getDiagnostics`。`selection_changed`、`at_mentioned`。"
 
-#: ../../DESIGN.md:506
+#: ../../DESIGN.md:539
 msgid ""
 "**M2, Neovim adapter.** The server executable (`crates/server`), and a Lua "
 "adapter, over `vim.lsp.rpc`. Registers the main windows only."
@@ -1811,7 +1945,7 @@ msgstr ""
 "**M2、Neovim アダプタ。** サーバーの実行ファイル（`crates/server`）と、`vim.lsp.rpc` 上の Lua "
 "アダプタ。メインのウィンドウだけを登録する。"
 
-#: ../../DESIGN.md:507
+#: ../../DESIGN.md:540
 msgid ""
 "**M3, actions.** `openFile`, `checkDocumentDirty`, `saveDocument`, "
 "`diagnostics_changed`."
@@ -1819,7 +1953,7 @@ msgstr ""
 "**M3、操作。** "
 "`openFile`、`checkDocumentDirty`、`saveDocument`、`diagnostics_changed`。"
 
-#: ../../DESIGN.md:508
+#: ../../DESIGN.md:541
 msgid ""
 "**M4, diffs.** `openDiff`, `close_tab`, `closeAllDiffTabs`, and an "
 "accept/reject flow in the Neovim adapter, with a provider that shows the "
@@ -1828,29 +1962,29 @@ msgstr ""
 "**M4、差分。** `openDiff`、`close_tab`、`closeAllDiffTabs`、そして Neovim "
 "アダプタでの承認・却下の流れ。差分を見せる提供元は、差し替えられる。"
 
-#: ../../DESIGN.md:511
+#: ../../DESIGN.md:544
 msgid "Open questions"
 msgstr "未解決の問い"
 
-#: ../../DESIGN.md:513
+#: ../../DESIGN.md:546
 msgid ""
-"The Windows endpoint (a named-pipe `Listener`) with a Task Scheduler "
-"definition: see \"Running the server\"."
-msgstr "Windows の接続口（名前付きパイプの `Listener`）とタスクスケジューラの定義: 「サーバーの実行」を参照。"
+"Windows: the Neovim adapter over a pipe, and the Windows forms of paths and "
+"URIs (issue #23)."
+msgstr "Windows: パイプ越しの Neovim アダプタと、パスや URI の Windows での形（Issue #23）。"
 
-#: ../../DESIGN.md:514
+#: ../../DESIGN.md:547
 msgid ""
 "What an adapter should do when the server is not there: retry, and for how "
 "long (issue #10)."
 msgstr "サーバーがいないときに、アダプターがどうするか。再試行するか、どのくらいの間か（Issue #10）。"
 
-#: ../../DESIGN.md:515
+#: ../../DESIGN.md:548
 msgid ""
 "Whether to write both a path and its symlink-resolved form into "
 "`workspaceFolders`, since the CLI compares text."
 msgstr "CLI は文字列で比べるので、`workspaceFolders` に、パスと、シンボリックリンクを解決した形の両方を書くか。"
 
-#: ../../DESIGN.md:516
+#: ../../DESIGN.md:549
 msgid ""
 "A process id can be reused: if an unrelated process takes the id that a dead"
 " server recorded, its leftover lock files are not cleaned up until that "
@@ -1859,10 +1993,6 @@ msgid ""
 msgstr ""
 "プロセスの id は、再利用されることがあります。死んだサーバーが記録した id "
 "を、関係のないプロセスが引き継ぐと、そのサーバーが残したロックファイルは、そのプロセスが終わるまで、掃除されません。プロセスの開始時刻も記録すれば、解決します。"
-
-#: ../../DESIGN.md:518
-msgid "A named-pipe transport for Windows."
-msgstr "Windows 向けの、名前付きパイプの経路。"
 
 #~ msgid "Hub: one entry for all workspaces (later)"
 #~ msgstr "ハブ: すべてのワークスペースへの、1 つの入口（あとで）"
@@ -2053,3 +2183,30 @@ msgstr "Windows 向けの、名前付きパイプの経路。"
 #~ "**launchd**（macOS）: launchd がログイン時にサーバーを起動でき（`contrib/launchd`。まだ試していません。CI "
 #~ "の macOS ランナーで試す予定です。Issue #18）、ソケットはサーバーが自分で作ります。launchd "
 #~ "のソケットアクティベーションは、独自のインターフェースを通して名前でソケットを渡す方式で、まだ実装していません。"
+
+#~ msgid ""
+#~ "Windows. The adapter socket is a Unix domain socket. A named-pipe transport "
+#~ "can be added later."
+#~ msgstr "Windows。アダプターのソケットは Unix ドメインソケットです。名前付きパイプの経路は、あとから足せます。"
+
+#~ msgid ""
+#~ "**Task Scheduler** (Windows): there is no socket activation, and the adapter"
+#~ " socket is a Unix domain socket in this version, so the server does not run "
+#~ "on Windows yet. It needs a named-pipe `Listener` in the core crate (the "
+#~ "`Listener` trait is what the rest of the server depends on, so that is the "
+#~ "only place that changes) and a source for it; Task Scheduler would then "
+#~ "start the server at log-in, or on demand through a task that the adapter "
+#~ "triggers."
+#~ msgstr ""
+#~ "**タスクスケジューラ**（Windows）: ソケットアクティベーションはなく、このバージョンのアダプタ用ソケットは Unix "
+#~ "ドメインソケットなので、サーバーはまだ Windows では動きません。コアクレートに名前付きパイプの `Listener` "
+#~ "と、それ用の取得元が必要です（サーバーのほかの部分が依存しているのは `Listener` "
+#~ "トレイトなので、変わるのはそこだけです）。そのうえで、タスクスケジューラがログイン時に、またはアダプタが起動するタスクを通してオンデマンドで、サーバーを起動することになります。"
+
+#~ msgid ""
+#~ "The Windows endpoint (a named-pipe `Listener`) with a Task Scheduler "
+#~ "definition: see \"Running the server\"."
+#~ msgstr "Windows の接続口（名前付きパイプの `Listener`）とタスクスケジューラの定義: 「サーバーの実行」を参照。"
+
+#~ msgid "A named-pipe transport for Windows."
+#~ msgstr "Windows 向けの、名前付きパイプの経路。"
