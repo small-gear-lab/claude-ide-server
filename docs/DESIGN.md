@@ -50,8 +50,34 @@ What is observed of the existing integrations:
 - Messages are JSON-RPC 2.0, based on MCP 2025-03-26.
 - The CLI sends `initialize`, then the notification `ide_connected` with its pid.
 
-**(assumption)** `/ide` lists the lock files whose `workspaceFolders` contain the CLI's working directory, and
-checks that `pid` is alive. The server writes the adapter's pid into the lock file for that reason.
+### How the CLI picks a lock file
+
+Observed in Claude Code 2.1.322, by reading the installed CLI:
+
+- **Matching.** The CLI compares its working directory with each folder of `workspaceFolders` (both normalised
+  to Unicode NFC). A lock file is offered when a folder contains the working directory (equal to it, or an
+  ancestor of it). A folder that lies inside the working directory counts as a weaker match, under a condition
+  that is not known. Anything else is not offered. The comparison is on the text of the paths; no resolving of
+  symlinks was seen, so write `workspaceFolders` as the paths the user would `cd` to.
+- **The port variable.** A lock file whose port equals `CLAUDE_CODE_SSE_PORT` is always offered, whatever its
+  folders.
+- **Order.** Lock files are read newest first (by modification time). `/ide` lists the matches; when several
+  have the same `ideName`, the list shows their folders to tell them apart. Auto-connect takes the first.
+- **`pid`.** The CLI removes a lock file whose `pid` is not a live process on the machine (`kill(pid, 0)`), or
+  that cannot be read, or that has no `pid` and whose port does not accept a TCP connection. So `pid` must be the
+  adapter's own live process, and a lock file that outlives it is deleted by the next CLI that looks.
+- **Inside an IDE terminal.** When the CLI runs in a VS Code or JetBrains terminal (or with
+  `FORCE_CODE_TERMINAL` set), it also requires the lock file's `pid` to be its parent process or an ancestor
+  (up to 10 levels), unless the port equals `CLAUDE_CODE_SSE_PORT`. In an ordinary terminal there is no such
+  check. A Neovim `:terminal` satisfies it, because Neovim is an ancestor of the shell.
+- **Transport.** `transport` equal to `"ws"` means a WebSocket at `ws://<host>:<port>`; anything else is treated
+  as the older SSE transport at `http://<host>:<port>/sse`. The port is the lock file's name without `.lock`.
+  A lock file that is not JSON is read as a plain list of folders, one per line.
+- **Auto-connect.** In an ordinary terminal the CLI connects only when asked (`/ide`) or when the user turned on
+  auto-connect in its configuration; inside an IDE terminal, or with `CLAUDE_CODE_SSE_PORT` set, it connects by
+  itself.
+
+Not tested: what the CLI does when `authToken` is missing.
 
 ### Tools exposed to Claude
 
@@ -190,8 +216,7 @@ under its runtime directory and removes the ones that are still there on the nex
 
 ## Open questions
 
-- How the CLI chooses among several lock files, and what it does with `pid` (assumed above).
 - Whether to start the server on demand (systemd socket activation) or keep it running.
 - What an adapter should do when the server is not there: retry, and for how long.
-- Whether to accept lock files for workspaces in a path that is a symlink, and how to compare paths.
+- Whether to write both a path and its symlink-resolved form into `workspaceFolders`, since the CLI compares text.
 - A named-pipe transport for Windows.
