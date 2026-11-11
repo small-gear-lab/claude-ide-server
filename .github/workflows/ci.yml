@@ -39,12 +39,12 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
 
-  # The tests run on the least version that rust-version names (1.85) and on the latest stable.
+  # The tests run on the least version that rust-version names (1.88) and on the latest stable.
   test:
     strategy:
       fail-fast: false
       matrix:
-        toolchain: ["1.85", stable]
+        toolchain: ["1.88", stable]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
