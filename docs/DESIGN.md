@@ -99,8 +99,11 @@ connection closes it or goes away.
 - A Unix domain socket at `$XDG_RUNTIME_DIR/claude-ide-server/adapter.sock`, in a directory of mode 0700. The
   socket file is mode 0600.
 - JSON-RPC 2.0 with `Content-Length` framing, as in LSP. Editors that already have an LSP client can reuse its
-  transport. **(assumption)** Neovim's `vim.lsp.rpc.connect` can connect to a Unix socket and be driven by hand;
-  to be confirmed with a prototype.
+  transport. Checked with Neovim 0.12: `vim.lsp.rpc.connect(path)` connects to a Unix socket, the adapter can
+  send requests and notifications and answer the server's requests (the `server_request` dispatcher), and when
+  the server closes the connection `on_exit` is called and `is_closing()` becomes true. A missing socket raises no
+  error: Neovim prints a message and no `on_exit` follows, so the adapter checks that the socket exists before
+  connecting.
 - Both sides send requests and notifications. The connection is the workspace: when it closes, the server closes
   the workspace's WebSocket clients and port and removes the lock file.
 
