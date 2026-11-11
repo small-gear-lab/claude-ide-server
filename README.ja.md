@@ -24,7 +24,7 @@ Claude Code ──WebSocket (MCP)──▶ claude-ide-server ◀──JSON-RPC (
 ## ドキュメント
 
 - [docs/DESIGN.md](docs/ja/DESIGN.md): 設計、サーバーとエディタのアダプターの間のプロトコル、マイルストーン。
-- [docs/NVIM.md](docs/ja/NVIM.md): Neovim アダプタ。インストール、オプション、できること。
+- [docs/NVIM.md](docs/ja/NVIM.md): Neovim アダプター。インストール、オプション、できること。
 
 ドキュメントは英語で書いてあり、日本語版（`README.ja.md`、`docs/ja/`）があります。日本語版は、`docs/locale/ja/` の gettext のカタログから、`tools/build-docs.sh` で作ります。
 

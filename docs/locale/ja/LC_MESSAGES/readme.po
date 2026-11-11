@@ -127,7 +127,7 @@ msgstr "[docs/DESIGN.md](docs/DESIGN.md): 設計、サーバーとエディタ�
 msgid ""
 "[docs/NVIM.md](docs/NVIM.md): the Neovim adapter: installing it, its "
 "options, and what it does."
-msgstr "[docs/NVIM.md](docs/NVIM.md): Neovim アダプタ。インストール、オプション、できること。"
+msgstr "[docs/NVIM.md](docs/NVIM.md): Neovim アダプター。インストール、オプション、できること。"
 
 #: ../../../README.md:44
 msgid ""

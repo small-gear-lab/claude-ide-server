@@ -234,7 +234,7 @@ connection closes it or goes away.
 ### Transport
 
 - A Unix domain socket at `$XDG_RUNTIME_DIR/claude-ide-server/adapter.sock` (without `XDG_RUNTIME_DIR`, as on macOS,
-  `claude-ide-server-<user>/adapter.sock` under the temporary directory), in a directory of mode 0700. The socket file is
+  `claude-ide-server-<uid>/adapter.sock` under the temporary directory), in a directory of mode 0700. The socket file is
   mode 0600. On Windows it is a named pipe instead (see "Where the adapter socket comes from").
 - JSON-RPC 2.0 with `Content-Length` framing, as in LSP. Editors that already have an LSP client can reuse its
   transport. Checked with Neovim 0.12: `vim.lsp.rpc.connect(path)` connects to a Unix socket, the adapter can
