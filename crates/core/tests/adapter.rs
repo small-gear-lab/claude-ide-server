@@ -448,3 +448,64 @@ async fn a_socket_file_left_by_a_dead_server_is_replaced() {
 fn mode(path: &Path) -> u32 {
     fs::metadata(path).unwrap().permissions().mode() & 0o777
 }
+
+#[tokio::test]
+async fn a_request_that_times_out_or_is_abandoned_leaves_nothing_behind() {
+    let mut fixture = Fixture::with(|config| config.request_timeout = Duration::from_millis(150));
+    let (mut client, _info, session) = registered(&mut fixture).await;
+    let handle = session.handle();
+
+    // Twenty requests that the adapter never answers: each ends in a timeout.
+    let calls: Vec<_> = (0..20)
+        .map(|_| {
+            let handle = handle.clone();
+            tokio::spawn(async move { handle.request("getOpenEditors", json!({})).await })
+        })
+        .collect();
+    for call in calls {
+        assert_eq!(call.await.unwrap(), Err(RequestError::Timeout));
+    }
+    assert_eq!(handle.pending_requests(), 0);
+
+    // The adapter answers them all, too late: nothing happens, and the next request goes through.
+    for _ in 0..20 {
+        match client.recv().await {
+            Some(Message::Request { id, .. }) => {
+                client
+                    .send(Message::Response {
+                        id,
+                        outcome: Ok(json!("late")),
+                    })
+                    .await;
+            }
+            other => panic!("expected a request, got {other:?}"),
+        }
+    }
+    let next = tokio::spawn({
+        let handle = handle.clone();
+        async move { handle.request("getOpenEditors", json!({})).await }
+    });
+    let id = match client.recv().await {
+        Some(Message::Request { id, .. }) => id,
+        other => panic!("expected a request, got {other:?}"),
+    };
+    client
+        .send(Message::Response {
+            id,
+            outcome: Ok(json!("on time")),
+        })
+        .await;
+    assert_eq!(next.await.unwrap(), Ok(json!("on time")));
+    assert_eq!(handle.pending_requests(), 0);
+
+    // A caller that gives up (its future is dropped) leaves nothing behind either.
+    let abandoned = tokio::spawn({
+        let handle = handle.clone();
+        async move { handle.request("getOpenEditors", json!({})).await }
+    });
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(handle.pending_requests(), 1);
+    abandoned.abort();
+    let _ = abandoned.await;
+    assert_eq!(handle.pending_requests(), 0);
+}

@@ -9,7 +9,8 @@
 use std::collections::HashMap;
 use std::future::Future;
 use std::io;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde_json::{Value, json};
@@ -281,11 +282,28 @@ impl std::fmt::Display for RequestError {
 
 impl std::error::Error for RequestError {}
 
+/// The requests that wait for an answer, by the id that they were sent with. The handle puts an entry in before it
+/// sends and takes it out when it stops waiting; the session task takes it out when the answer arrives.
+type Pending = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<Value, RpcError>>>>>;
+
+/// Takes a request out of the pending ones when its caller stops waiting, whichever way that happens (an answer, a
+/// timeout, or the caller's future being dropped), so that no entry is left behind.
+struct Waiting {
+    pending: Pending,
+    id: u64,
+}
+
+impl Drop for Waiting {
+    fn drop(&mut self) {
+        self.pending.lock().expect("not poisoned").remove(&self.id);
+    }
+}
+
 enum Command {
     Request {
+        id: u64,
         method: String,
         params: Value,
-        reply: oneshot::Sender<Result<Value, RpcError>>,
     },
     Notify {
         method: String,
@@ -299,6 +317,8 @@ pub struct AdapterHandle {
     commands: mpsc::Sender<Command>,
     request_timeout: Duration,
     methods: Arc<Vec<String>>,
+    pending: Pending,
+    next_id: Arc<AtomicU64>,
 }
 
 impl std::fmt::Debug for AdapterHandle {
@@ -316,12 +336,18 @@ impl AdapterHandle {
         if !self.methods.iter().any(|declared| declared == method) {
             return Err(RequestError::NotDeclared(method.to_owned()));
         }
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let (reply, answer) = oneshot::channel();
+        self.pending.lock().expect("not poisoned").insert(id, reply);
+        let _waiting = Waiting {
+            pending: self.pending.clone(),
+            id,
+        };
         self.commands
             .send(Command::Request {
+                id,
                 method: method.to_owned(),
                 params,
-                reply,
             })
             .await
             .map_err(|_| RequestError::Disconnected)?;
@@ -331,6 +357,13 @@ impl AdapterHandle {
             Ok(Ok(Ok(result))) => Ok(result),
             Ok(Ok(Err(error))) => Err(RequestError::Rpc(error)),
         }
+    }
+
+    /// How many requests are waiting for an answer. For tests: it shows that a request that is answered, timed out or
+    /// abandoned leaves nothing behind.
+    #[cfg(feature = "test-support")]
+    pub fn pending_requests(&self) -> usize {
+        self.pending.lock().expect("not poisoned").len()
     }
 
     /// Sends a notification.
@@ -511,6 +544,7 @@ where
 
     let (notifications_tx, notifications) = mpsc::channel(256);
     let (commands_tx, commands) = mpsc::channel(64);
+    let pending: Pending = Arc::new(Mutex::new(HashMap::new()));
     let (finished_tx, finished) = oneshot::channel();
     let (decision_tx, decision_rx) = oneshot::channel();
     let registering = Registering {
@@ -521,6 +555,8 @@ where
                 commands: commands_tx,
                 request_timeout: config.request_timeout,
                 methods: Arc::new(registration.methods.clone()),
+                pending: pending.clone(),
+                next_id: Arc::new(AtomicU64::new(1)),
             },
             notifications,
             finished,
@@ -558,7 +594,14 @@ where
         return;
     }
 
-    serve(&mut incoming, &mut write, commands, notifications_tx).await;
+    serve(
+        &mut incoming,
+        &mut write,
+        commands,
+        notifications_tx,
+        &pending,
+    )
+    .await;
 
     reader.abort();
     let _ = finished_tx.send(());
@@ -615,9 +658,8 @@ async fn serve<W: AsyncWrite + Unpin>(
     write: &mut W,
     mut commands: mpsc::Receiver<Command>,
     notifications: mpsc::Sender<Notification>,
+    pending: &Pending,
 ) {
-    let mut pending: HashMap<u64, oneshot::Sender<Result<Value, RpcError>>> = HashMap::new();
-    let mut next_id: u64 = 1;
     // Set when the session is dropped (its handle and its receiver go together), as opposed to the adapter going
     // away: only then is there someone to say goodbye to.
     let mut say_goodbye = false;
@@ -627,7 +669,8 @@ async fn serve<W: AsyncWrite + Unpin>(
                 let Some(Ok(message)) = message else { break };
                 match message {
                     Message::Response { id, outcome } => {
-                        if let Some(waiting) = id.as_u64().and_then(|id| pending.remove(&id)) {
+                        let waiting = id.as_u64().and_then(|id| pending.lock().expect("not poisoned").remove(&id));
+                        if let Some(waiting) = waiting {
                             let _ = waiting.send(outcome);
                         }
                     }
@@ -655,10 +698,7 @@ async fn serve<W: AsyncWrite + Unpin>(
                     break;
                 };
                 let written = match command {
-                    Command::Request { method, params, reply: waiting } => {
-                        let id = next_id;
-                        next_id += 1;
-                        pending.insert(id, waiting);
+                    Command::Request { id, method, params } => {
                         jsonrpc::write_message(write, &Message::Request { id: json!(id), method, params }).await
                     }
                     Command::Notify { method, params } => {
@@ -687,5 +727,5 @@ async fn serve<W: AsyncWrite + Unpin>(
         .await;
     }
     // Pending requests are failed by dropping their senders.
-    drop(pending);
+    pending.lock().expect("not poisoned").clear();
 }
