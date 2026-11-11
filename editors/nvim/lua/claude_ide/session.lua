@@ -210,7 +210,7 @@ end
 function Session:_registration()
   local folders = self.opts.workspace_folders()
   if #folders == 0 then
-    folders = { vim.uv.cwd() }
+    folders = { require('claude_ide.files').cwd() }
   end
   return {
     protocolVersion = PROTOCOL_VERSION,

@@ -28,7 +28,7 @@ local defaults = {
     return true
   end,
   workspace_folders = function()
-    return { vim.uv.cwd() }
+    return { require('claude_ide.files').cwd() }
   end,
   reconnect = { initial_ms = 500, max_ms = 10000 },
   server = {

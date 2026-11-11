@@ -220,6 +220,9 @@ check('the offset of the start of a line', { actions.position_at(text_lines, 12)
 -- The files of the buffers: dirty, saved, not open, and opened.
 local dir = vim.fn.tempname()
 vim.fn.mkdir(dir, 'p')
+-- The directory by the name that the adapter reports for what is in it (on Windows the temporary directory has the short
+-- form of 8.3, which the adapter writes out in full).
+dir = require('claude_ide.files').long_path(dir)
 local file = vim.fn.resolve(dir) .. '/doc.lua'
 vim.fn.writefile({ 'one', 'two', 'three' }, file)
 check('a file that is not open', actions.checkDocumentDirty({ filePath = file }), { success = false })
@@ -227,7 +230,7 @@ check('opening a file that is not there fails', select(1, actions.openFile({ fil
 check('a directory is not a file that can be opened', select(1, actions.openFile({ filePath = dir })), nil)
 local opened = actions.openFile({ filePath = file, startText = 'two' })
 check('the file is opened', {
-  opened.filePath == file,
+  vim.fs.normalize(opened.filePath) == vim.fs.normalize(file),
   opened.languageId,
   opened.lineCount,
   opened.isDirty,

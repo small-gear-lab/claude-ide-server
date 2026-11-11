@@ -48,7 +48,36 @@ function M.file_of(buf)
   if name == '' or vim.bo[buf].buftype ~= '' then
     return nil
   end
-  return vim.fn.fnamemodify(name, ':p')
+  return M.long_path(vim.fn.fnamemodify(name, ':p'))
+end
+
+--- Whether a path starts at a root, as Claude Code (which is Node) takes it: with a separator, or on Windows with a drive and
+--- a separator too (`C:\a`).
+---@param path string
+---@return boolean
+function M.is_absolute(path)
+  if path:sub(1, 1) == '/' then
+    return true
+  end
+  return vim.fn.has('win32') == 1 and (path:match('^[\\/]') ~= nil or path:match('^%a:[\\/]') ~= nil)
+end
+
+--- On Windows, the path with the names written out in full and in their own case: Neovim keeps the name that it was given,
+--- which may be the short form of 8.3 (`C:\Users\RUNNER~1`), and Claude Code compares the paths with its own working directory as
+--- text, which has the long form. Anywhere else the path is as it is (Neovim names a file by its real path there already).
+---@param path string
+---@return string
+function M.long_path(path)
+  if vim.fn.has('win32') == 1 then
+    return vim.uv.fs_realpath(path) or path
+  end
+  return path
+end
+
+--- The working directory, as a path to report (see `long_path`).
+---@return string
+function M.cwd()
+  return M.long_path(vim.uv.cwd())
 end
 
 --- How many lines a document has, counted as the VS Code extension counts them: the empty line after a final newline is

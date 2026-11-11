@@ -41,12 +41,9 @@ end
 function M.current(bufnr, state)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   state = state or editor_state()
-  local name = vim.api.nvim_buf_get_name(bufnr)
-  if name == '' or vim.bo[bufnr].buftype ~= '' then
-    return nil
-  end
-  local path = vim.fn.fnamemodify(name, ':p')
-  if path:sub(1, 1) ~= '/' then
+  local files = require('claude_ide.files')
+  local path = files.file_of(bufnr)
+  if not path or not files.is_absolute(path) then
     return nil
   end
 
