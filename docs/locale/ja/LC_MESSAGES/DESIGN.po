@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-ide-server\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-11 15:06+0900\n"
+"POT-Creation-Date: 2026-11-11 15:11+0900\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: Small Gear Lab\n"
 "Language-Team: ja <LL@li.org>\n"
@@ -1063,28 +1063,46 @@ msgstr "テスト"
 msgid ""
 "A mock Claude client (WebSocket) and a mock adapter (Unix socket) run in the"
 " same test process. Tests cover the handshake, authentication, every tool, "
-"notifications, diffs, disconnects and cleanup."
+"notifications, diffs, disconnects and cleanup. The parts that the tests "
+"share are in `crates/core/tests/common/`: the adapter's end of a connection "
+"(`Client`), a workspace server on temporary directories (`Fixture`), Claude "
+"Code's client (`MockClaude`), and a workspace with both already connected "
+"(`Scene`). Most tests run over in-memory streams; one runs the whole path on"
+" a real Unix socket (`tests/end_to_end.rs`: register, connect with the token"
+" from the lock file, list the tools, call one, disconnect, clean up)."
 msgstr ""
 "偽の Claude クライアント（WebSocket）と、偽のアダプター（Unix "
-"ソケット）を、同じテストのプロセスで動かします。テストは、握手、認証、すべてのツール、通知、差分、切断、後始末を扱います。"
+"ソケット）を、同じテストのプロセスで動かします。テストは、握手、認証、すべてのツール、通知、差分、切断、後始末を扱います。テストが共有する部品は、`crates/core/tests/common/`"
+" にあります。アダプターの側の接続（`Client`）、一時ディレクトリの上のワークスペースのサーバー（`Fixture`）、Claude Code "
+"のクライアント（`MockClaude`）、両方がすでにつながったワークスペース（`Scene`）です。ほとんどのテストは、メモリ上のストリームで動かし、1"
+" つは、本物の Unix ソケットで、全部の経路を動かします（`tests/end_to_end.rs`: "
+"登録し、ロックファイルのトークンで接続し、ツールの一覧を取り、1 つ呼び、切断し、後始末をします）。"
 
-#: ../../DESIGN.md:296
+#: ../../DESIGN.md:301
 msgid ""
-"The expected shapes of tool results come from the observed behaviour above, "
-"written down as fixtures."
-msgstr "ツールの結果の期待する形は、上に書いた、観察した挙動から取り、フィクスチャとして書き残します。"
+"The expected shapes of what the server sends and writes come from the "
+"observed behaviour above, written down as fixtures in "
+"`crates/core/tests/fixtures/`: the `initialize` that Claude Code sends, and "
+"the shapes of a lock file and of the results of `initialize`, `tools/list` "
+"and `tools/call`. A shape changes when a new observation says it should, not"
+" to make a test pass."
+msgstr ""
+"サーバーが送るもの、書くものの、期待する形は、上で書いた、観察した挙動から、`crates/core/tests/fixtures/` "
+"のフィクスチャとして書き残します。Claude Code が送る "
+"`initialize`、ロックファイルの形、`initialize`・`tools/list`・`tools/call` "
+"の結果の形です。形を変えるのは、新しい観察が、そうすべきだと言ったときで、テストを通すためではありません。"
 
-#: ../../DESIGN.md:297
+#: ../../DESIGN.md:305
 msgid ""
 "Each adapter has its own tests; the Neovim one runs headless Neovim against "
 "a real server."
 msgstr "アダプターごとに、自分のテストを持ちます。Neovim のものは、ヘッドレスの Neovim を、本物のサーバーにつないで動かします。"
 
-#: ../../DESIGN.md:299
+#: ../../DESIGN.md:307
 msgid "Milestones"
 msgstr "マイルストーン"
 
-#: ../../DESIGN.md:301
+#: ../../DESIGN.md:309
 msgid ""
 "**M0, server skeleton.** WebSocket server, lock file, token, `initialize`, "
 "`tools/list`. A mock adapter."
@@ -1092,7 +1110,7 @@ msgstr ""
 "**M0、サーバーの骨組み。** WebSocket "
 "サーバー、ロックファイル、トークン、`initialize`、`tools/list`。偽のアダプター。"
 
-#: ../../DESIGN.md:302
+#: ../../DESIGN.md:310
 msgid ""
 "**M1, read-only tools.** `getOpenEditors`, `getWorkspaceFolders`, "
 "`getCurrentSelection`, `getLatestSelection`, `getDiagnostics`; "
@@ -1101,14 +1119,14 @@ msgstr ""
 "**M1、読み取りだけのツール。** "
 "`getOpenEditors`、`getWorkspaceFolders`、`getCurrentSelection`、`getLatestSelection`、`getDiagnostics`。`selection_changed`、`at_mentioned`。"
 
-#: ../../DESIGN.md:304
+#: ../../DESIGN.md:312
 msgid ""
 "**M2, Neovim adapter.** Lua, over `vim.lsp.rpc`. Registers the main windows "
 "only."
 msgstr ""
 "**M2、Neovim のアダプター。** Lua で、`vim.lsp.rpc` の上に作ります。登録するのは、メインのウィンドウだけです。"
 
-#: ../../DESIGN.md:305
+#: ../../DESIGN.md:313
 msgid ""
 "**M3, actions.** `openFile`, `checkDocumentDirty`, `saveDocument`, "
 "`diagnostics_changed`."
@@ -1116,7 +1134,7 @@ msgstr ""
 "**M3、操作。** "
 "`openFile`、`checkDocumentDirty`、`saveDocument`、`diagnostics_changed`。"
 
-#: ../../DESIGN.md:306
+#: ../../DESIGN.md:314
 msgid ""
 "**M4, diffs.** `openDiff`, `close_tab`, `closeAllDiffTabs`, and an "
 "accept/reject flow in the Neovim adapter."
@@ -1124,29 +1142,29 @@ msgstr ""
 "**M4、差分。** `openDiff`、`close_tab`、`closeAllDiffTabs`。それと、Neovim "
 "のアダプターの、承認と拒否の流れ。"
 
-#: ../../DESIGN.md:308
+#: ../../DESIGN.md:316
 msgid "Open questions"
 msgstr "未解決の問い"
 
-#: ../../DESIGN.md:310
+#: ../../DESIGN.md:318
 msgid ""
 "Whether to start the server on demand (systemd socket activation) or keep it"
 " running."
 msgstr "サーバーを、必要になったときに起動するか（systemd のソケットアクティベーション）、動かしたままにするか。"
 
-#: ../../DESIGN.md:311
+#: ../../DESIGN.md:319
 msgid ""
 "What an adapter should do when the server is not there: retry, and for how "
 "long."
 msgstr "サーバーがいないときに、アダプターがどうするか。再試行するか、どのくらいの間か。"
 
-#: ../../DESIGN.md:312
+#: ../../DESIGN.md:320
 msgid ""
 "Whether to write both a path and its symlink-resolved form into "
 "`workspaceFolders`, since the CLI compares text."
 msgstr "CLI は文字列で比べるので、`workspaceFolders` に、パスと、シンボリックリンクを解決した形の両方を書くか。"
 
-#: ../../DESIGN.md:313
+#: ../../DESIGN.md:321
 msgid "A named-pipe transport for Windows."
 msgstr "Windows 向けの、名前付きパイプの経路。"
 
@@ -1246,3 +1264,16 @@ msgstr "Windows 向けの、名前付きパイプの経路。"
 
 #~ msgid "Messages are JSON-RPC 2.0, based on MCP 2025-03-26."
 #~ msgstr "メッセージは JSON-RPC 2.0 で、MCP 2025-03-26 に基づいています。"
+
+#~ msgid ""
+#~ "A mock Claude client (WebSocket) and a mock adapter (Unix socket) run in the"
+#~ " same test process. Tests cover the handshake, authentication, every tool, "
+#~ "notifications, diffs, disconnects and cleanup."
+#~ msgstr ""
+#~ "偽の Claude クライアント（WebSocket）と、偽のアダプター（Unix "
+#~ "ソケット）を、同じテストのプロセスで動かします。テストは、握手、認証、すべてのツール、通知、差分、切断、後始末を扱います。"
+
+#~ msgid ""
+#~ "The expected shapes of tool results come from the observed behaviour above, "
+#~ "written down as fixtures."
+#~ msgstr "ツールの結果の期待する形は、上に書いた、観察した挙動から取り、フィクスチャとして書き残します。"
