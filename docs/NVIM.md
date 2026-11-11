@@ -3,11 +3,11 @@
 The Neovim side of the connection: it registers a Neovim with `claude-ide-server`, so that Claude Code's `/ide`
 finds it. The adapter is the directory `editors/nvim/` of this repository, written in Lua.
 
-**What works now:** connecting to the server (and again when it is not there or goes away), registering the workspace,
-following `:cd`, sending the selection, mentioning a file or some lines to Claude Code, and answering Claude Code's
-requests for the open editors, the selection and the diagnostics. It was tried with a real Claude Code (2.1.322). **What
-does not yet:** `openFile`, `checkDocumentDirty` and `saveDocument` (issue #11), diagnostics notifications (#12), and
-diffs (#13, #14).
+**What works now:** everything of the protocol except diffs: connecting to the server (and again when it is not there or
+goes away), registering the workspace, following `:cd`, sending the selection and the diagnostics that change,
+mentioning a file or some lines to Claude Code, and answering its requests for the open editors, the selection, the
+diagnostics, and for opening, checking and saving a file. It was tried with a real Claude Code (2.1.322). **What does
+not yet:** diffs (issues #13 and #14).
 
 ## Requirements
 
@@ -48,6 +48,8 @@ require('claude_ide').setup({
   register_timeout_ms = 5000,
   -- How long the cursor must stay still before the selection is sent.
   selection_debounce_ms = 100,
+  -- How long diagnostics are collected before the files that changed are reported (once, for all of them).
+  diagnostics_debounce_ms = 100,
   -- Called each time the registration has been accepted.
   on_registered = nil,
 })
@@ -119,10 +121,19 @@ replace them or add to them with the `methods` option):
   `shellscript`, no filetype is `plaintext`).
 - `getCurrentSelection` and `getLatestSelection`: the selection of the file that the user is in, or the last one that
   there was while the focus is somewhere that has none.
+- `openFile`: opens the file in a window that shows files (one that shows it already, or else one that shows another
+  file; with the focus in a terminal and no such window, a new one, so that what runs in the terminal is left alone), gives
+  it the focus unless `makeFrontmost` is false, and selects the text between `startText` and `endText`. The selection
+  is made in the window that has the focus (Neovim has no selection in a window that does not), so with
+  `makeFrontmost` false the cursor is put at the text and nothing is selected. A directory, or a file that is not there,
+  is an error.
+- `checkDocumentDirty` and `saveDocument`: for a file whose text is in memory. A file that is not open is answered with
+  `success = false`. `saveDocument` writes only a file that has changes. `lineCount` counts the empty line after a final
+  newline, as the VS Code extension does.
 - `getDiagnostics`: the diagnostics of `vim.diagnostic`, for the file of a `uri` or for every open file that has some,
   with `Error`, `Warning`, `Information` or `Hint` as the severity and the columns in UTF-16 code units.
 
-Claude Code 2.1.322 asks for `getDiagnostics` itself, around its own edits, and does not use the other three. See "What
+Claude Code 2.1.322 asks for `getDiagnostics` itself, around its own edits, and does not use the others. See "What
 Claude Code sends on its own" in [DESIGN](DESIGN.md).
 
 ## Mentioning to Claude Code

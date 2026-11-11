@@ -12,8 +12,8 @@ Code changes.
 
 > **Status: early development.** The core library talks to a real Claude Code (the handshake, the list of tools, tool
 > calls, notifications), and is tested with stand-ins for Claude Code and for an editor. The server runs as an
-> executable (`claude-ide-server`, with an example systemd socket unit under `contrib/`). The Neovim adapter connects,
-> registers the workspace and sends the selection; it does not yet answer Claude Code's requests (#20).
+> executable (`claude-ide-server`, with an example systemd socket unit under `contrib/`). The Neovim adapter does
+> everything of the protocol except diffs (#13, #14).
 
 ## What it will be
 

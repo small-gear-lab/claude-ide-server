@@ -29,7 +29,12 @@ What the other side is expected to say, written down from what was observed, as 
     called with and without a `uri`; the model reported the message, the severity, the source and the range, with the
     columns in UTF-16 code units.
   - A notification that arrives right after the handshake is thrown away (see `docs/DESIGN.md`, "What Claude Code sends on its own").
-- **Not** seen: the results of `getCurrentSelection`, `getLatestSelection` and `getOpenEditors`. The CLI 2.1.322 does not
+- Read from the code of the VS Code extension (2.1.322), which is the IDE side that this server stands in for:
+  `get_selection_result.shape.json` (with `success` and `fileUrl`), `get_latest_selection_result.shape.json` (without
+  `success`), `get_open_editors_result.shape.json` (the five that every client takes; the extension adds more to a tab),
+  and `diagnostics_changed.shape.json` (`{ uris }`). The texts of `openFile`, `checkDocumentDirty` and `saveDocument`
+  and of the workspace folders are in `tests/actions.rs` and `src/tools.rs`, from the same code.
+- **Not** seen from a real Claude Code: the results of `getCurrentSelection`, `getLatestSelection` and `getOpenEditors`. The CLI 2.1.322 does not
   call them at all (nor `checkDocumentDirty`, `saveDocument` and `getWorkspaceFolders`), so they cannot be checked
   against it; they follow the public protocol notes of other implementations and the behaviour of the existing IDE
   integrations (`getCurrentSelection` as `{ success, text, filePath, selection }`, or `{ success: false, message }`;

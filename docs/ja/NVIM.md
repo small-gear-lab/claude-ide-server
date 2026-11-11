@@ -2,7 +2,7 @@
 
 Neovim 側の接続部分です。Neovim を `claude-ide-server` に登録して、Claude Code の `/ide` から見つけられるようにします。アダプタは、このリポジトリの `editors/nvim/` ディレクトリにあり、Lua で書かれています。
 
-**いま動くこと:** サーバーへの接続（サーバーがいないときや、いなくなったときの再接続を含む）、ワークスペースの登録、`:cd` への追従、選択範囲の送信、ファイルや行を Claude Code にメンションすること、そして開いているエディタ・選択範囲・診断についての Claude Code のリクエストへの応答。本物の Claude Code（2.1.322）で試しました。**まだ動かないこと:** `openFile`、`checkDocumentDirty`、`saveDocument`（Issue #11）、診断の通知（#12）、差分（#13、#14）。
+**いま動くこと:** 差分を除く、プロトコルのすべて。サーバーへの接続（サーバーがいないときや、いなくなったときの再接続を含む）、ワークスペースの登録、`:cd` への追従、選択範囲と、変わった診断の送信、ファイルや行を Claude Code にメンションすること、そして、開いているエディタ・選択範囲・診断、およびファイルを開く・確認する・保存することについての Claude Code のリクエストへの応答。本物の Claude Code（2.1.322）で試しました。**まだ動かないこと:** 差分（Issue #13、#14）。
 
 ## 必要なもの
 
@@ -40,6 +40,8 @@ require('claude_ide').setup({
   register_timeout_ms = 5000,
   -- How long the cursor must stay still before the selection is sent.
   selection_debounce_ms = 100,
+  -- How long diagnostics are collected before the files that changed are reported (once, for all of them).
+  diagnostics_debounce_ms = 100,
   -- Called each time the registration has been accepted.
   on_registered = nil,
 })
@@ -82,9 +84,11 @@ require('claude_ide').setup({
 
 - `getOpenEditors`: 一覧にあるバッファのうち、ファイルであるもの。アクティブなのは、現在のウィンドウのファイルです（ターミナルやヘルプにフォーカスがあるときは、直前にいたファイル）。名前のないバッファ、ターミナル、ヘルプは、Claude にとってのエディタではありません。ファイルの言語は `filetype` で、まだ読み込まれていないバッファは、ファイル名から決まるものです。いくつかの filetype は、Claude Code が使う言語 ID に直します（`sh` は `shellscript`、filetype なしは `plaintext`）。
 - `getCurrentSelection` と `getLatestSelection`: ユーザーがいるファイルの選択範囲。ファイルのない場所にフォーカスがあるあいだは、直前にあった選択範囲。
+- `openFile`: ファイルを、ファイルを表示するウィンドウで開きます（すでに表示しているウィンドウ、なければ別のファイルを表示しているウィンドウ。ターミナルにフォーカスがあって、そういうウィンドウがないときは、ターミナルで動いているものに触らないよう、新しいウィンドウ）。`makeFrontmost` が false でなければフォーカスを渡し、`startText` から `endText` までのテキストを選択します。選択は、フォーカスのあるウィンドウで行います（フォーカスのないウィンドウでは、Neovim は選択を持てません）。そのため、`makeFrontmost` が false のときは、テキストの位置にカーソルを置くだけで、何も選択しません。ディレクトリや、ないファイルは、エラーです。
+- `checkDocumentDirty` と `saveDocument`: テキストがメモリにあるファイルが対象です。開いていないファイルには `success = false` と答えます。`saveDocument` は、変更のあるファイルだけを書きます。`lineCount` は、VS Code の拡張機能と同じく、最後の改行のあとの空行も数えます。
 - `getDiagnostics`: `vim.diagnostic` の診断。`uri` のファイル、またはその診断を持つ開いているすべてのファイルについて。重大度は `Error`、`Warning`、`Information`、`Hint`、列は UTF-16 コードユニット単位です。
 
-Claude Code 2.1.322 は、自分で編集する前後に `getDiagnostics` を頼み、ほかの3つは使いません。[DESIGN](DESIGN.md) の「Claude Code が自分から送るもの」を参照してください。
+Claude Code 2.1.322 は、自分で編集する前後に `getDiagnostics` を頼み、ほかのものは使いません。[DESIGN](DESIGN.md) の「Claude Code が自分から送るもの」を参照してください。
 
 ## Claude Code へのメンション
 

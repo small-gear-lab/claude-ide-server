@@ -148,11 +148,9 @@ are custom notifications of the SDK.
 | `at_mentioned` | the user sends the selection or a file as a reference (`filePath`, `lineStart`, `lineEnd`) |
 | `diagnostics_changed` | the adapter reports changed diagnostics (`{ "uris": [...] }`) |
 
-Several integrations send `diagnostics_changed`; some third-party implementations do not. It is the first
-feature this project adds beyond what is commonly available.
-
-Claude Code 2.1.322 does not take `diagnostics_changed` (its code does not mention it): it asks for the diagnostics
-itself, with `getDiagnostics`, around its own edits. Other clients may take it.
+The VS Code extension sends `diagnostics_changed` as it sees diagnostics change (one notification for each change
+event, with the URIs of the files). Claude Code 2.1.322 does not take it (its code does not mention it): it asks for the
+diagnostics itself, with `getDiagnostics`, around its own edits. Other clients may take it, so it is sent.
 
 ### What Claude Code sends on its own
 
@@ -173,9 +171,29 @@ the Neovim adapter where it says so. These are not answers to anything that the 
   arrives; sent after 25 ms or 50 ms it did in three runs of three, after 100 ms and 150 ms in two of three). The server
   cannot tell whether a notification was taken: a notification has no answer, and the MCP specification (2025-11-25,
   "Lifecycle") has no signal for when a client can take them (the first `tools/list` is not one either). So the state
-  that is remembered (the selection) is sent again at 250 ms, 1 s and 3 s after the handshake, in addition to the
-  replay at once (`claude_state_resends`). With these, ten runs out of ten reached the model. Later notifications are
+  that is remembered (the selection) is sent again at 250 ms, 500 ms, 1 s and 3 s after the handshake, in addition to the
+  replay at once (`claude_state_resends`). 500 ms is the time at which the VS Code extension sends the selection, once,
+  after a connection (read from its code). With 250 ms, 1 s and 3 s (the times that were measured), ten runs out of ten
+  reached the model. Later notifications are
   taken, so this is only about the first seconds after a connection.
+
+### What the VS Code extension does
+
+The VS Code extension is the IDE side that this server stands in for, so its code (2.1.322, read, not specified) is the
+reference for what an editor answers. What a client of this protocol may rely on:
+
+- It serves one client at a time: a new connection closes the one before it. This server keeps several (see "Several
+  CLIs on one workspace").
+- **After a connection it waits 500 ms, and then sends the selection that was last reported** (`selection_changed`), and
+  the telemetry events that were queued (`log_event`, which this server has no use for). The wait is there because a
+  client that has just connected is not ready for a notification (see "What Claude Code sends on its own").
+- It sends `diagnostics_changed` for every change of diagnostics, with the URIs of the files.
+- A tool that takes a `filePath` takes a relative one too, from the first folder of the workspace; the results are text
+  that is JSON written with two spaces of indent, and the messages are the ones in the tables above and below.
+- `openFile` looks for `startText` with a plain search from the start of the document, and `endText` after it; a
+  document is counted as having a line more than there are, after a final newline.
+- Its own tracking of diagnostics around the edits of Claude Code (it waits for the editor to publish them) is done
+  inside the extension, not through this protocol.
 
 ### Slow readers
 
@@ -228,13 +246,13 @@ Server → adapter:
 
 | Message | Kind | Params → result |
 |---|---|---|
-| `openFile` | request | `filePath`, `preview`, `startText`, `endText`, `selectToEndOfLine`, `makeFrontmost` → `{ filePath, languageId, lineCount }` |
-| `getOpenEditors` | request | → `{ tabs: [{ uri, isActive, label, languageId, isDirty }] }` |
+| `openFile` | request | `filePath`, `preview`, `startText`, `endText`, `selectToEndOfLine`, `makeFrontmost` → `{ filePath, languageId, lineCount, isDirty, isUntitled, selection? }` |
+| `getOpenEditors` | request | → `{ tabs: [{ uri, isActive, label, languageId, isDirty, ... }] }` |
 | `getCurrentSelection` | request | → selection, or `{ success: false }` |
 | `getLatestSelection` | request | → selection, or `{ success: false }` |
 | `getDiagnostics` | request | `uri?` → `[{ uri, diagnostics: [{ message, severity, range, source }] }]` |
-| `checkDocumentDirty` | request | `filePath` → `{ isDirty, isUntitled }` |
-| `saveDocument` | request | `filePath` → `{ saved }` |
+| `checkDocumentDirty` | request | `filePath` → `{ isDirty, isUntitled }`, or `{ success: false }` if the document is not open |
+| `saveDocument` | request | `filePath` → `{ saved }`, or `{ success: false }` if the document is not open |
 | `openDiff` | request | `oldFilePath`, `newFilePath`, `newFileContents`, `tabName` → `"saved"` or `"rejected"`, answered when the user decides |
 | `closeDiff` | request | `tabName` |
 | `closeAllDiffs` | request | → `{ closed: n }` |
@@ -259,15 +277,33 @@ it means that the notification is not passed on and the owner of the workspace i
 - **`atMention`** is `{ filePath, lineStart, lineEnd }`, 0-based, `lineEnd` being the last line.
 - A **`filePath`** is an absolute path (it starts with `/`). Claude Code works out what to show from it, and a relative
   one would be taken relative to the directory that Claude Code runs in, which is not that of the editor.
-- **The answer to `getOpenEditors`** is `{ tabs: [ { uri, isActive, label, languageId, isDirty } ] }`; all five are
-  required.
+- **The answer to `getOpenEditors`** is `{ tabs: [ ... ] }`. A tab has five things that every client of this protocol
+  takes, and all five are required: `uri`, `isActive`, `label`, `languageId`, `isDirty`. The VS Code extension adds more
+  to a tab, and an adapter may leave any of them out: `isPinned`, `isPreview`, `groupIndex`, `viewColumn` (the group of
+  tabs that it is in, and its column), `isGroupActive`, `fileName`, `lineCount`, `isUntitled`, and for the active tab
+  `selection: { start, end, isReversed }`. They are passed on as they are, and checked when they are there.
+- **The answer to `openFile`** is `{ filePath, languageId, lineCount, isDirty, isUntitled }`, and `selection` if
+  `startText` was given: what came of looking for the text, one of `"text"` (the text of `startText` is selected),
+  `"range"` (from `startText` to `endText`), `"positioned"` (`startText` was found and the cursor is there, `endText`
+  was not) and `"not_found"`. The server writes the result as the VS Code extension does: the message alone
+  (`Opened file and selected text "..."`, and so on) when `startText` was given, `Opened file: <path>` when the file is
+  made the frontmost one (`makeFrontmost`, true unless it says false), and otherwise the details as JSON. A file that
+  cannot be opened is an error of the adapter (`File not found: <path>`), which makes the tool call fail. A path that
+  is not absolute is made absolute from the first folder of the workspace before the adapter is asked, as the VS Code
+  extension does, so the adapter gets an absolute one.
+- **The answers to `checkDocumentDirty` and `saveDocument`** are `{ isDirty, isUntitled }` and `{ saved }`, or
+  `{ "success": false }` for a document that is not open (the server says `Document not open: <path>`). `saved` is
+  false if there was nothing to write or writing failed.
+- **`diagnosticsChanged`** is `{ uris: [ ... ] }`: the URIs of the files whose diagnostics changed. It is an event: each
+  names its files, none replaces another, and a Claude Code that connects later is not told of it.
 - **The answer to `getDiagnostics`** (with `{ uri }` as the parameters, or none for all files) is
   `[ { uri, diagnostics: [ { message, severity, range: { start, end }, source? } ] } ]`. `severity` is one of
   `"Error"`, `"Warning"`, `"Information"` and `"Hint"`; an empty list is an answer.
 
 The server passes these on to Claude Code in the shapes that it expects (see the notifications above): `selectionChanged`
-becomes `selection_changed` (with a `fileUrl` added, and `isEmpty`), `atMention` becomes `at_mentioned`, and the answers
-become the text of the tool results. A Claude Code that connects later is sent the `selection_changed` that is current
+becomes `selection_changed` (with a `fileUrl` added, and `isEmpty`), `atMention` becomes `at_mentioned`,
+`diagnosticsChanged` becomes `diagnostics_changed`, and the answers become the text of the tool results, in the shapes
+that the VS Code extension writes (for example, `getCurrentSelection` has `success` and `getLatestSelection` has not). A Claude Code that connects later is sent the `selection_changed` that is current
 (the last one), so that it starts from the selection that the user has now; it is sent again a few times after the
 handshake, because the first may be thrown away (see "What Claude Code sends on its own").
 

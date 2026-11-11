@@ -102,9 +102,7 @@ MCP のプロトコル自体（握手、版の交渉、`tools/list`、`tools/cal
 | `at_mentioned`        | 利用者が、選択範囲かファイルを、参照として送ったとき（`filePath`、`lineStart`、`lineEnd`） |
 | `diagnostics_changed` | アダプターが、診断の変更を知らせたとき（`{ "uris": [...] }`）                     |
 
-`diagnostics_changed` を送る連携はいくつかありますが、送らない第三者の実装もあります。広く使えるものに、このプロジェクトが最初に足す機能です。
-
-Claude Code 2.1.322 は `diagnostics_changed` を受け付けません（コードに出てきません）。自分で編集する前後に、`getDiagnostics` で診断を取りに来ます。ほかのクライアントは受け付けるかもしれません。
+VS Code の拡張機能は、診断が変わるのを見るたびに（変化のイベントごとに1つ、ファイルの URI をつけて）`diagnostics_changed` を送ります。Claude Code 2.1.322 は、これを受け付けません（コードに出てきません）。自分で編集する前後に、`getDiagnostics` で診断を取りに来ます。ほかのクライアントは受け付けるかもしれないので、送ります。
 
 ### Claude Code が自分から送るもの
 
@@ -113,7 +111,18 @@ Claude Code 2.1.322 のコードから分かること（プログラムを読ん
 - 通知 `ide_connected`。ハンドシェイクの直後に、Claude Code のプロセスつきで来ます。
 - エディタへのツール呼び出し: `closeAllDiffTabs`（接続の直後と、差分を閉じるとき）、`openDiff` と `close_tab`（差分）、`getDiagnostics`（編集しようとするファイルについて、編集の前後と、全ファイルについて。戻ってきた `uri` が、編集したファイルと（両方を正規化したうえで）違うと、`Diagnostics file path mismatch` として結果を捨てます）、`set_permission_mode`（`{ mode: "ask" | "skip_all_permission_checks" }`。許可モードが変わるたびに）。
 - エディタからの通知で受け付けるのは、`selection_changed`、`at_mentioned`、`log_event`、MCP のログメッセージです。`getOpenEditors`、`getCurrentSelection`、`getLatestSelection`、`checkDocumentDirty`、`saveDocument`、`getWorkspaceFolders` は使いません。
-- **ハンドシェイクの直後に届いた通知は、捨てられます。** Claude Code は、接続してからしばらくあとに、通知を受け取るものを用意し、その時間は回によって違います（確認: すぐに送った `selection_changed` は一度も届かず、25 ms や 50 ms 後に送ると3回ずつ3回とも届き、100 ms と 150 ms 後は3回中2回届きました）。サーバーは、通知が受け取られたかどうかを知ることができません。通知には返事がなく、MCP の仕様（2025-11-25 の「Lifecycle」）にも、クライアントがいつ通知を受け取れるかの合図がないからです（最初の `tools/list` も、合図ではありませんでした）。そのため、記憶している状態（選択範囲）を、すぐに送る再送に加えて、ハンドシェイクの 250 ms・1 秒・3 秒後にも送り直します（`claude_state_resends`）。これで、10回中10回がモデルに届きました。あとの通知は受け付けられるので、これは接続後の数秒だけの話です。
+- **ハンドシェイクの直後に届いた通知は、捨てられます。** Claude Code は、接続してからしばらくあとに、通知を受け取るものを用意し、その時間は回によって違います（確認: すぐに送った `selection_changed` は一度も届かず、25 ms や 50 ms 後に送ると3回ずつ3回とも届き、100 ms と 150 ms 後は3回中2回届きました）。サーバーは、通知が受け取られたかどうかを知ることができません。通知には返事がなく、MCP の仕様（2025-11-25 の「Lifecycle」）にも、クライアントがいつ通知を受け取れるかの合図がないからです（最初の `tools/list` も、合図ではありませんでした）。そのため、記憶している状態（選択範囲）を、すぐに送る再送に加えて、ハンドシェイクの 250 ms・500 ms・1 秒・3 秒後にも送り直します（`claude_state_resends`）。500 ms は、VS Code の拡張機能が接続のあとに選択範囲を1回送る時刻です（コードから読みました）。250 ms・1 秒・3 秒（測定した時刻）では、10回中10回がモデルに届きました。あとの通知は受け付けられるので、これは接続後の数秒だけの話です。
+
+### VS Code の拡張機能がすること
+
+VS Code の拡張機能は、このサーバーが代わりを務める IDE 側そのものなので、そのコード（2.1.322。読んだものであって、仕様ではありません）が、エディタが何を答えるかの基準になります。このプロトコルのクライアントが当てにしてよいことは次のとおりです。
+
+- 一度に1つのクライアントだけを相手にします。新しい接続は、その前の接続を閉じます。このサーバーは複数を保ちます（「1つのワークスペースに複数の CLI」を参照）。
+- **接続したあと 500 ms 待って、最後に報告された選択範囲（`selection_changed`）と、ためておいたテレメトリのイベント（`log_event`。このサーバーには使い道がありません）を送ります。** 待つのは、接続したばかりのクライアントが、通知を受け取る準備がまだできていないためです（「Claude Code が自分から送るもの」を参照）。
+- 診断が変わるたびに、ファイルの URI をつけて `diagnostics_changed` を送ります。
+- `filePath` を受け取るツールは、相対パスも受け取り、最初のワークスペースフォルダからのパスとして扱います。結果は、インデント2つの JSON で書いたテキストで、メッセージは、上と下の表にあるものです。
+- `openFile` は、ドキュメントの先頭から単純な検索で `startText` を探し、その後ろから `endText` を探します。ドキュメントは、最後の改行のあとにもう1行あるものとして数えます。
+- Claude Code の編集の前後の診断の追跡（エディタが診断を公開するのを待ちます）は、拡張機能の内部で行い、このプロトコルは通しません。
 
 ### 遅い読み手
 
@@ -149,19 +158,19 @@ WebSocket の接続は、1 本ごとに別のクライアントです。サー�
 
 サーバー → アダプター:
 
-| メッセージ                 | 種類   | 引数 → 結果                                                                                                                |
-|-----------------------|------|------------------------------------------------------------------------------------------------------------------------|
-| `openFile`            | 要求   | `filePath`、`preview`、`startText`、`endText`、`selectToEndOfLine`、`makeFrontmost` → `{ filePath, languageId, lineCount }` |
-| `getOpenEditors`      | 要求   | → `{ tabs: [{ uri, isActive, label, languageId, isDirty }] }`                                                          |
-| `getCurrentSelection` | 要求   | → 選択範囲、または `{ success: false }`                                                                                        |
-| `getLatestSelection`  | 要求   | → 選択範囲、または `{ success: false }`                                                                                        |
-| `getDiagnostics`      | 要求   | `uri?` → `[{ uri, diagnostics: [{ message, severity, range, source }] }]`                                              |
-| `checkDocumentDirty`  | 要求   | `filePath` → `{ isDirty, isUntitled }`                                                                                 |
-| `saveDocument`        | 要求   | `filePath` → `{ saved }`                                                                                               |
-| `openDiff`            | 要求   | `oldFilePath`、`newFilePath`、`newFileContents`、`tabName` → `"saved"` か `"rejected"`。利用者が決めたときに答えます                      |
-| `closeDiff`           | 要求   | `tabName`                                                                                                              |
-| `closeAllDiffs`       | 要求   | → `{ closed: n }`                                                                                                      |
-| `shutdown`            | 通知   | サーバーが止まるとき                                                                                                             |
+| メッセージ                 | 種類   | 引数 → 結果                                                                                                                                                 |
+|-----------------------|------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `openFile`            | 要求   | `filePath`、`preview`、`startText`、`endText`、`selectToEndOfLine`、`makeFrontmost` → `{ filePath, languageId, lineCount, isDirty, isUntitled, selection? }` |
+| `getOpenEditors`      | 要求   | → `{ tabs: [{ uri, isActive, label, languageId, isDirty, ... }] }`                                                                                      |
+| `getCurrentSelection` | 要求   | → 選択範囲、または `{ success: false }`                                                                                                                         |
+| `getLatestSelection`  | 要求   | → 選択範囲、または `{ success: false }`                                                                                                                         |
+| `getDiagnostics`      | 要求   | `uri?` → `[{ uri, diagnostics: [{ message, severity, range, source }] }]`                                                                               |
+| `checkDocumentDirty`  | 要求   | `filePath` → `{ isDirty, isUntitled }`。ドキュメントが開いていなければ `{ success: false }`                                                                             |
+| `saveDocument`        | 要求   | `filePath` → `{ saved }`。ドキュメントが開いていなければ `{ success: false }`                                                                                           |
+| `openDiff`            | 要求   | `oldFilePath`、`newFilePath`、`newFileContents`、`tabName` → `"saved"` か `"rejected"`。利用者が決めたときに答えます                                                       |
+| `closeDiff`           | 要求   | `tabName`                                                                                                                                               |
+| `closeAllDiffs`       | 要求   | → `{ closed: n }`                                                                                                                                       |
+| `shutdown`            | 通知   | サーバーが止まるとき                                                                                                                                              |
 
 位置は `{ line, character }` です。`line` は 0 始まり、`character` は UTF-16 のコード単位（LSP の決まり）で、範囲の終わりは含みません。エディタ自身の単位からの変換は、アダプターが行います。**（仮定）** CLI は、選択範囲から行数を数えるだけなので、`character` を間違えても、Claude に見えるものは変わりません。
 
@@ -172,10 +181,13 @@ WebSocket の接続は、1 本ごとに別のクライアントです。サー�
 - **選択範囲** は `{ filePath, text, selection: { start, end } }` です。`start` と `end` は位置です。これが `selectionChanged` の引数で、選択範囲があるときの `getCurrentSelection` と `getLatestSelection` の答えです。ないときの答えは `{ "success": false, "message": ... }` です（`message` は省略できます）。選択のないカーソルは、`text` が空で、`start` と `end` が等しい選択範囲です。`isEmpty` は、サーバーが範囲から求めます。
 - **`atMention`** は `{ filePath, lineStart, lineEnd }` で、0 始まり、`lineEnd` は最後の行です。
 - **`filePath`** は、絶対パス（`/` で始まる）です。Claude Code は、これから、見せるものを決めます。相対パスだと、Claude Code が動いているディレクトリが基準になりますが、それはエディタのものではありません。
-- **`getOpenEditors` の答え** は `{ tabs: [ { uri, isActive, label, languageId, isDirty } ] }` で、5 つとも必須です。
+- **`getOpenEditors` への答え**は `{ tabs: [ ... ] }` です。タブには、このプロトコルのどのクライアントも受け取る5つがあり、5つとも必須です（`uri`、`isActive`、`label`、`languageId`、`isDirty`）。VS Code の拡張機能は、タブにさらに加えており、アダプタはどれを省いてもかまいません。`isPinned`、`isPreview`、`groupIndex`、`viewColumn`（そのタブがいるグループと、その列）、`isGroupActive`、`fileName`、`lineCount`、`isUntitled`、そしてアクティブなタブには `selection: { start, end, isReversed }` です。あるものはそのまま渡し、あれば検査します。
+- **`openFile` への答え**は `{ filePath, languageId, lineCount, isDirty, isUntitled }` で、`startText` が渡されたときは、さらに `selection` を持ちます。これは、テキストを探した結果で、`"text"`（`startText` のテキストを選択した）、`"range"`（`startText` から `endText` まで）、`"positioned"`（`startText` は見つかってカーソルがあるが、`endText` は見つからなかった）、`"not_found"` のどれかです。サーバーは、結果を VS Code の拡張機能と同じように書きます。`startText` が渡されたときはメッセージだけ（`Opened file and selected text "..."` など）、ファイルを最前面にするとき（`makeFrontmost`。false と書かれていなければ true）は `Opened file: <path>`、それ以外は詳細を JSON で返します。開けないファイルは、アダプタのエラー（`File not found: <path>`）で、ツール呼び出しは失敗します。絶対パスでないパスは、アダプタに聞く前に、最初のワークスペースフォルダからの絶対パスに直されるので、アダプタは絶対パスを受け取ります（VS Code の拡張機能と同じです）。
+- **`checkDocumentDirty` と `saveDocument` への答え**は、それぞれ `{ isDirty, isUntitled }` と `{ saved }` で、開いていないドキュメントには `{ "success": false }` です（サーバーは `Document not open: <path>` と言います）。`saved` は、書くものがなかった、または書けなかったときに false です。
+- **`diagnosticsChanged`** は `{ uris: [ ... ] }` で、診断が変わったファイルの URI です。これは出来事（イベント）で、それぞれがファイルを名指しし、どれもほかを置き換えず、あとから接続した Claude Code には伝えません。
 - **`getDiagnostics` の答え**（引数は `{ uri }`、すべてのファイルなら引数なし）は `[ { uri, diagnostics: [ { message, severity, range: { start, end }, source? } ] } ]` です。`severity` は、`"Error"`、`"Warning"`、`"Information"`、`"Hint"` のどれかです。空の一覧も、答えです。
 
-サーバーは、これらを Claude Code が期待する形で渡します（上の通知を参照）。`selectionChanged` は `selection_changed` になり（`fileUrl` と `isEmpty` が加わります）、`atMention` は `at_mentioned` になり、答えはツールの結果のテキストになります。あとから接続した Claude Code には、そのとき現在の `selection_changed`（最後のもの）が送られ、ユーザーがいま見ている選択範囲から始められます。最初のものが捨てられることがあるので、ハンドシェイクのあとに数回、送り直されます（「Claude Code が自分から送るもの」を参照）。
+サーバーは、これらを Claude Code が期待する形で渡します（上の通知を参照）。`selectionChanged` は `selection_changed` になり（`fileUrl` と `isEmpty` が加わります）、`atMention` は `at_mentioned` に、`diagnosticsChanged` は `diagnostics_changed` になり、答えは、VS Code の拡張機能が書く形のツールの結果のテキストになります（たとえば、`getCurrentSelection` には `success` があり、`getLatestSelection` にはありません）。あとから接続した Claude Code には、そのとき現在の `selection_changed`（最後のもの）が送られ、ユーザーがいま見ている選択範囲から始められます。最初のものが捨てられることがあるので、ハンドシェイクのあとに数回、送り直されます（「Claude Code が自分から送るもの」を参照）。
 
 `openDiff` が `"saved"` を返したとき、アダプターは、`newFileContents` を `newFilePath` に書き終えています。サーバーは、Claude に `FILE_SAVED` というテキストで答えます。`"rejected"` のときは、`DIFF_REJECTED` です。
 
