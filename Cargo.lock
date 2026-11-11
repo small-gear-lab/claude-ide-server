@@ -94,7 +94,7 @@ dependencies = [
 
 [[package]]
 name = "claude-ide-core"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "claude-ide-core",
  "claude-ide-test-support",
@@ -112,14 +112,14 @@ dependencies = [
 
 [[package]]
 name = "claude-ide-launchd"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "libc",
 ]
 
 [[package]]
 name = "claude-ide-server"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "claude-ide-core",
  "claude-ide-launchd",
@@ -135,7 +135,7 @@ dependencies = [
 
 [[package]]
 name = "claude-ide-test-support"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "claude-ide-core",
  "futures-util",
@@ -147,7 +147,7 @@ dependencies = [
 
 [[package]]
 name = "claude-ide-windows"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "tokio",
  "windows-sys",
