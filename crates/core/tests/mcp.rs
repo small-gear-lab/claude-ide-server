@@ -307,3 +307,45 @@ async fn a_client_that_has_the_token_but_never_speaks_is_disconnected() {
         ["openFile", "getOpenEditors", "getWorkspaceFolders"]
     );
 }
+
+#[tokio::test]
+async fn arguments_that_do_not_match_the_schema_fail_the_call_and_the_adapter_is_not_asked() {
+    let mut scene = scene().await;
+    let cases = [
+        (json!({}), "filePath is required"),
+        (json!({"filePath": 7}), "filePath must be a string"),
+        (
+            json!({"filePath": "/a", "preview": "yes"}),
+            "preview must be a boolean",
+        ),
+    ];
+    for (arguments, reason) in cases {
+        let answer = scene
+            .claude
+            .request(
+                "tools/call",
+                json!({"name": "openFile", "arguments": arguments}),
+            )
+            .await;
+        assert!(
+            answer.get("error").is_none(),
+            "{reason}: a failed call is still an answer"
+        );
+        assert_eq!(answer["result"]["isError"], true, "{arguments}");
+        let text = answer["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("invalid arguments for openFile"), "{text}");
+        assert!(text.contains(reason), "{text}");
+    }
+    // No arguments at all is the same as an empty object for a tool that needs none.
+    let answer = scene
+        .claude
+        .request("tools/call", json!({"name": "getWorkspaceFolders"}))
+        .await;
+    assert_eq!(answer["result"]["isError"], false);
+    assert!(
+        timeout(Duration::from_millis(200), scene.adapter.recv())
+            .await
+            .is_err(),
+        "the adapter was not asked"
+    );
+}

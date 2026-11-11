@@ -225,6 +225,13 @@ impl ToolBackend for WorkspaceTools {
             .iter()
             .find(|spec| spec.name == name && self.can_run(spec))
             .ok_or_else(|| ToolError::UnknownTool(name.to_owned()))?;
+        // What the model sends is not trusted to match the schema that it was given.
+        if let Err(reason) = check_arguments(&(spec.schema)(), &arguments) {
+            return Ok(ToolResult {
+                text: format!("invalid arguments for {name}: {reason}"),
+                is_error: true,
+            });
+        }
         Ok(match spec.backing {
             Backing::Server => ToolResult {
                 text: workspace_folders_text(&(self.folders)()),
@@ -248,6 +255,41 @@ impl ToolBackend for WorkspaceTools {
             },
         })
     }
+}
+
+/// Checks the arguments of a call against the schema of the tool: the required ones are there, and those that are
+/// given have the type that the schema says. (The schemas here are flat: a few properties of simple types.)
+fn check_arguments(schema: &Value, arguments: &Value) -> Result<(), String> {
+    let given = arguments
+        .as_object()
+        .ok_or_else(|| "the arguments must be an object".to_owned())?;
+    for key in schema["required"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+    {
+        if given.get(key).is_none_or(Value::is_null) {
+            return Err(format!("{key} is required"));
+        }
+    }
+    for (key, property) in schema["properties"].as_object().into_iter().flatten() {
+        let Some(value) = given.get(key).filter(|value| !value.is_null()) else {
+            continue;
+        };
+        let (holds, expected) = match property["type"].as_str() {
+            Some("string") => (value.is_string(), "a string"),
+            Some("boolean") => (value.is_boolean(), "a boolean"),
+            Some("number" | "integer") => (value.is_number(), "a number"),
+            Some("object") => (value.is_object(), "an object"),
+            Some("array") => (value.is_array(), "an array"),
+            _ => (true, ""),
+        };
+        if !holds {
+            return Err(format!("{key} must be {expected}"));
+        }
+    }
+    Ok(())
 }
 
 fn answer_text(answer: Answer, result: &Value) -> Result<String, ModelError> {
@@ -316,6 +358,38 @@ mod tests {
     fn a_string_result_is_used_as_it_is_and_anything_else_as_json() {
         assert_eq!(result_text(&json!("FILE_SAVED")), "FILE_SAVED");
         assert_eq!(result_text(&json!({"a": 1})), r#"{"a":1}"#);
+    }
+
+    #[test]
+    fn arguments_are_checked_against_the_schema_of_the_tool() {
+        let schema = open_file_schema();
+        assert_eq!(check_arguments(&schema, &json!({"filePath": "/a"})), Ok(()));
+        // Optional ones may be left out, or null; extra ones are allowed.
+        assert_eq!(
+            check_arguments(
+                &schema,
+                &json!({"filePath": "/a", "preview": null, "other": 1})
+            ),
+            Ok(())
+        );
+        assert_eq!(
+            check_arguments(&schema, &json!({})),
+            Err("filePath is required".to_owned())
+        );
+        assert_eq!(
+            check_arguments(&schema, &json!({"filePath": null})),
+            Err("filePath is required".to_owned())
+        );
+        assert_eq!(
+            check_arguments(&schema, &json!({"filePath": 3})),
+            Err("filePath must be a string".to_owned())
+        );
+        assert_eq!(
+            check_arguments(&schema, &json!({"filePath": "/a", "preview": "yes"})),
+            Err("preview must be a boolean".to_owned())
+        );
+        assert!(check_arguments(&schema, &json!([1])).is_err());
+        assert_eq!(check_arguments(&no_arguments(), &json!({})), Ok(()));
     }
 
     #[test]
