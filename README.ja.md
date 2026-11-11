@@ -23,7 +23,7 @@ Claude Code ──WebSocket (MCP)──▶ claude-ide-server ◀──JSON-RPC (
 
 ## インストール
 
-1. [Releases](https://github.com/small-gear-lab/claude-ide-server/releases) のページから、使うシステム向けのサーバーのアーカイブ（`claude-ide-server-<version>-<target>`）を取り、`claude-ide-server` を `PATH` の通った場所に置きます。Linux の `-musl` は、どのディストリビューションでも動く静的な 1 つのファイルで、`-gnu` は動的リンクで、glibc 2.34 以降が要ります。`SHA256SUMS` と照らし合わせて確かめてください（`gh attestation verify <file> --repo small-gear-lab/claude-ide-server` でも確かめられます）。
+1. [Releases](https://github.com/small-gear-lab/claude-ide-server/releases) のページから、使うシステム向けのサーバーのアーカイブ（`claude-ide-server-<version>-<target>`）を取り、`claude-ide-server` を `PATH` の通った場所に置きます。Linux の `-musl` は、どのディストリビューションでも動く静的な 1 つのファイルで、`-gnu` は動的リンクで、glibc 2.34 以降が要ります。`SHA256SUMS` と照らし合わせて確かめてください（`gh attestation verify <file> --repo small-gear-lab/claude-ide-server` でも確かめられます。`gh` 2.49 以降が必要です）。
 2. `claude-ide-nvim-<version>.zip` を取って展開し、そのディレクトリを Neovim のランタイムパスに加えて、`setup` を呼びます。[docs/NVIM.md](docs/ja/NVIM.md) を参照してください。
 3. Neovim が開いているディレクトリで `claude` を起動し、`/ide` で Neovim を選びます。
 

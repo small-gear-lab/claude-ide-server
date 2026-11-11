@@ -104,7 +104,7 @@ A release is made by a tag, and a person publishes it.
 1. The version is the one of `[workspace.package]` in `Cargo.toml`, the same for every crate. Change it there, run
    `cargo update --workspace` (so that `Cargo.lock` follows), and commit.
 2. Read `.github/release-notes.md`, which is the head of the notes of every release: what was tried, with which Claude Code,
-   and what was not. Change it if that has changed.
+   and what was not. Change it if that has changed. Write each paragraph and each item on one line: the page of a release shows a line break of this file as a line break.
 3. Tag the commit `v<version>` and push the tag. The workflow refuses a tag that is not the version of `Cargo.toml`.
 4. The `release` workflow (`.github/workflows/release.yml`) builds the executable for each target, packs it and the Neovim
    adapter (`tools/package-release.sh`, which can be run by hand to see what a release holds), writes `SHA256SUMS`, makes a

@@ -42,7 +42,7 @@ The first adapter is the one for Neovim, written in Lua (`editors/nvim`).
 1. From the [Releases](https://github.com/small-gear-lab/claude-ide-server/releases) page, take the archive of the server
    for your system (`claude-ide-server-<version>-<target>`; on Linux, `-musl` is one static file that runs on any
    distribution, and `-gnu` is dynamic and needs glibc 2.34 or newer), and put `claude-ide-server` on your `PATH`. Check it
-   against `SHA256SUMS` (or with `gh attestation verify <file> --repo small-gear-lab/claude-ide-server`).
+   against `SHA256SUMS` (or with `gh attestation verify <file> --repo small-gear-lab/claude-ide-server`, which needs `gh` 2.49 or newer).
 2. Take `claude-ide-nvim-<version>.zip`, unpack it, add the directory to the runtime path of Neovim, and call `setup`; see
    [docs/NVIM.md](docs/NVIM.md).
 3. Start `claude` in the directory that Neovim has open, and choose Neovim in `/ide`.
