@@ -108,7 +108,7 @@ A release is made by a tag, and a person publishes it.
 3. Tag the commit `v<version>` and push the tag. The workflow refuses a tag that is not the version of `Cargo.toml`.
 4. The `release` workflow (`.github/workflows/release.yml`) builds the executable for each target, packs it and the Neovim
    adapter (`tools/package-release.sh`, which can be run by hand to see what a release holds), writes `SHA256SUMS`, makes a
-   build provenance attestation of the files, and leaves a **draft** release (a prerelease while the version is 0.x).
+   build provenance attestation of the files, and leaves a **draft** release (a prerelease only if the version has a suffix, as in `0.2.0-rc.1`).
 5. Look at the draft: download one file, check it against `SHA256SUMS`, run it. Then publish it.
 
 *Actions, release, Run workflow* does everything except the release, and the attestation, to see what a tag would make; the
