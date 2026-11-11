@@ -69,14 +69,19 @@ impl LockDirs {
                 ));
             }
         };
-        let record_dir = match &env.xdg_runtime_dir {
-            Some(runtime) => runtime.join("claude-ide-server"),
-            None => std::env::temp_dir().join(format!("claude-ide-server-{}", env.uid)),
-        };
         Ok(Self {
             lock_dir,
-            record_dir,
+            record_dir: runtime_dir(env),
         })
+    }
+}
+
+/// The directory for what the server needs while it runs (the record of its lock files, the adapter socket):
+/// `$XDG_RUNTIME_DIR/claude-ide-server`, else a per-user directory under the temporary directory.
+pub fn runtime_dir(env: &EnvVars) -> PathBuf {
+    match &env.xdg_runtime_dir {
+        Some(runtime) => runtime.join("claude-ide-server"),
+        None => std::env::temp_dir().join(format!("claude-ide-server-{}", env.uid)),
     }
 }
 
