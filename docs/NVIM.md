@@ -15,7 +15,8 @@ real Claude Code (2.1.322).
   hand. Neovim 0.10 does not work (`vim.str_utfindex` takes other arguments there; nothing was tried beyond that).
 - Windows works too: the server runs there (see "Running the server" in [DESIGN](DESIGN.md)), and the adapter connects over its named pipe. See "Windows" below.
 - `claude-ide-server` on the `PATH` (see "Running the server" in [DESIGN](DESIGN.md)), or a supervisor that starts it at
-  the first connection. The adapter starts the executable itself if nobody is listening.
+  the first connection. The adapter starts the executable itself if nobody is listening. There is no binary to download
+  yet: `cargo install --path crates/server`, in a clone of this repository, builds it and puts it in `~/.cargo/bin`.
 
 ## Installing
 
