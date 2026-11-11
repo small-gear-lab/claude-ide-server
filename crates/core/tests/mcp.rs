@@ -10,7 +10,7 @@ use claude_ide_core::jsonrpc::RpcError;
 use common::WAIT;
 use common::claude::MockClaude;
 use common::fixture::{Fixture, registered};
-use common::scene::{Scene, call_tool, scene, scene_in};
+use common::scene::{Scene, call_tool, scene, scene_declaring, scene_in};
 use common::shape::assert_shape;
 use serde_json::{Value, json};
 use tokio::time::timeout;
@@ -152,6 +152,88 @@ async fn a_tool_that_is_not_available_is_an_error_of_the_protocol() {
             .is_err(),
         "the adapter was not asked"
     );
+}
+
+#[tokio::test]
+async fn closing_all_diffs_is_answered_even_by_an_adapter_that_shows_none() {
+    // Claude Code calls closeAllDiffTabs right after it connects, whether or not it was listed (seen with 2.1.322).
+    let mut scene = scene().await;
+    assert!(
+        !scene
+            .claude
+            .tool_names()
+            .await
+            .contains(&"closeAllDiffTabs".to_owned()),
+        "it is not offered when the adapter cannot close diffs"
+    );
+    let answer = scene
+        .claude
+        .request(
+            "tools/call",
+            json!({"name": "closeAllDiffTabs", "arguments": {}}),
+        )
+        .await;
+    assert_ne!(answer["result"]["isError"], true, "{answer}");
+    assert_eq!(answer["result"]["content"][0]["text"], "CLOSED_0_DIFF_TABS");
+    assert!(
+        timeout(Duration::from_millis(200), scene.adapter.recv())
+            .await
+            .is_err(),
+        "the adapter was not asked"
+    );
+}
+
+#[tokio::test]
+async fn the_permission_mode_that_claude_code_reports_is_answered_by_an_adapter_with_no_use_for_it()
+{
+    // Claude Code tells the editor its permission mode when it changes, whether or not the tool was listed.
+    let mut scene = scene().await;
+    let answer = scene
+        .claude
+        .request(
+            "tools/call",
+            json!({"name": "set_permission_mode", "arguments": {"mode": "ask"}}),
+        )
+        .await;
+    assert_ne!(answer["result"]["isError"], true, "{answer}");
+    assert_eq!(answer["result"]["content"][0]["text"], "OK");
+    assert!(
+        timeout(Duration::from_millis(200), scene.adapter.recv())
+            .await
+            .is_err(),
+        "the adapter was not asked"
+    );
+
+    // The arguments are still checked.
+    let answer = scene
+        .claude
+        .request(
+            "tools/call",
+            json!({"name": "set_permission_mode", "arguments": {}}),
+        )
+        .await;
+    assert_eq!(answer["result"]["isError"], true, "{answer}");
+}
+
+#[tokio::test]
+async fn closing_all_diffs_asks_the_adapter_that_shows_diffs() {
+    let mut scene = scene_declaring(&["closeAllDiffs"]).await;
+    assert!(
+        scene
+            .claude
+            .tool_names()
+            .await
+            .contains(&"closeAllDiffTabs".to_owned())
+    );
+    let (answer, (method, _)) = call_tool(
+        &mut scene,
+        "closeAllDiffTabs",
+        json!({}),
+        Ok(json!({"closed": 2})),
+    )
+    .await;
+    assert_eq!(method, "closeAllDiffs");
+    assert_ne!(answer["result"]["isError"], true, "{answer}");
 }
 
 #[tokio::test]

@@ -19,6 +19,10 @@ use crate::model::{
 enum Backing {
     /// A method of the adapter, by this name.
     Adapter(&'static str),
+    /// A method of the adapter if it has one, and otherwise this answer. For what Claude Code asks for without being
+    /// told that it can: it calls `closeAllDiffTabs` right after it connects, whether or not the tool was listed
+    /// (observed with 2.1.322), and an adapter that shows no diffs has none to close.
+    AdapterOrElse(&'static str, &'static str),
     /// The server answers it from what it knows.
     Server,
 }
@@ -82,6 +86,14 @@ fn open_diff_schema() -> Value {
     })
 }
 
+fn set_permission_mode_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": { "mode": { "type": "string", "description": "`ask`, or `skip_all_permission_checks`." } },
+        "required": ["mode"],
+    })
+}
+
 fn close_tab_schema() -> Value {
     json!({
         "type": "object",
@@ -121,10 +133,19 @@ const TOOLS: &[ToolSpec] = &[
     },
     ToolSpec {
         name: "closeAllDiffTabs",
-        backing: Backing::Adapter("closeAllDiffs"),
+        backing: Backing::AdapterOrElse("closeAllDiffs", "CLOSED_0_DIFF_TABS"),
         answer: Answer::Raw,
         description: "Close all the diffs that openDiff opened.",
         schema: no_arguments,
+    },
+    ToolSpec {
+        name: "set_permission_mode",
+        // Claude Code tells the editor how it asks for permission, whenever that changes (seen in the code of 2.1.322:
+        // `ask`, or `skip_all_permission_checks`). An editor that has no use for it need not say so.
+        backing: Backing::AdapterOrElse("setPermissionMode", "OK"),
+        answer: Answer::Raw,
+        description: "Tell the editor how Claude Code asks for permission.",
+        schema: set_permission_mode_schema,
     },
     ToolSpec {
         name: "getOpenEditors",
@@ -199,11 +220,21 @@ impl WorkspaceTools {
         }
     }
 
-    fn can_run(&self, spec: &ToolSpec) -> bool {
+    fn declared(&self, method: &str) -> bool {
+        self.methods.iter().any(|declared| declared == method)
+    }
+
+    /// Whether the tool is offered to Claude: the adapter can answer it, or the server does.
+    fn listed(&self, spec: &ToolSpec) -> bool {
         match spec.backing {
             Backing::Server => true,
-            Backing::Adapter(method) => self.methods.iter().any(|declared| declared == method),
+            Backing::Adapter(method) | Backing::AdapterOrElse(method, _) => self.declared(method),
         }
+    }
+
+    /// Whether the tool may be called. Some are called although they were not listed.
+    fn callable(&self, spec: &ToolSpec) -> bool {
+        matches!(spec.backing, Backing::AdapterOrElse(..)) || self.listed(spec)
     }
 }
 
@@ -211,7 +242,7 @@ impl ToolBackend for WorkspaceTools {
     fn tools(&self) -> Vec<ToolDefinition> {
         TOOLS
             .iter()
-            .filter(|spec| self.can_run(spec))
+            .filter(|spec| self.listed(spec))
             .map(|spec| ToolDefinition {
                 name: spec.name.to_owned(),
                 description: spec.description.to_owned(),
@@ -223,7 +254,7 @@ impl ToolBackend for WorkspaceTools {
     async fn call(&self, name: &str, arguments: Value) -> Result<ToolResult, ToolError> {
         let spec = TOOLS
             .iter()
-            .find(|spec| spec.name == name && self.can_run(spec))
+            .find(|spec| spec.name == name && self.callable(spec))
             .ok_or_else(|| ToolError::UnknownTool(name.to_owned()))?;
         // What the model sends is not trusted to match the schema that it was given.
         if let Err(reason) = check_arguments(&(spec.schema)(), &arguments) {
@@ -232,26 +263,38 @@ impl ToolBackend for WorkspaceTools {
                 is_error: true,
             });
         }
-        Ok(match spec.backing {
-            Backing::Server => ToolResult {
-                text: workspace_folders_text(&(self.folders)()),
-                is_error: false,
-            },
-            Backing::Adapter(method) => match self.adapter.request(method, arguments).await {
-                Ok(result) => match answer_text(spec.answer, &result) {
-                    Ok(text) => ToolResult {
-                        text,
+        let method = match spec.backing {
+            Backing::Server => {
+                return Ok(ToolResult {
+                    text: workspace_folders_text(&(self.folders)()),
+                    is_error: false,
+                });
+            }
+            Backing::Adapter(method) => method,
+            Backing::AdapterOrElse(method, otherwise) => {
+                if !self.declared(method) {
+                    return Ok(ToolResult {
+                        text: otherwise.to_owned(),
                         is_error: false,
-                    },
-                    Err(error) => ToolResult {
-                        text: format!("the editor's answer to {name} is not valid: {error}"),
-                        is_error: true,
-                    },
+                    });
+                }
+                method
+            }
+        };
+        Ok(match self.adapter.request(method, arguments).await {
+            Ok(result) => match answer_text(spec.answer, &result) {
+                Ok(text) => ToolResult {
+                    text,
+                    is_error: false,
                 },
                 Err(error) => ToolResult {
-                    text: error_text(&error),
+                    text: format!("the editor's answer to {name} is not valid: {error}"),
                     is_error: true,
                 },
+            },
+            Err(error) => ToolResult {
+                text: error_text(&error),
+                is_error: true,
             },
         })
     }
