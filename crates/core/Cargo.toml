@@ -3,6 +3,7 @@ name = "claude-ide-core"
 version = "0.0.0"
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 repository.workspace = true
 description = "Claude Code /ide protocol server (editor-agnostic core)"
 publish = false

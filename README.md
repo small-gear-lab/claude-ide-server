@@ -38,4 +38,9 @@ The first adapter will be for Neovim, written in Lua.
 
 ## License
 
-Not decided yet.
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT license ([LICENSE-MIT](LICENSE-MIT))
+
+at your option.
