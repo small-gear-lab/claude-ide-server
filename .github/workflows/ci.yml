@@ -50,6 +50,8 @@ jobs:
   # code; it is raised on purpose, together with the checksum (the `digest` of the asset in the release). The packages
   # of the systems are older than the adapter needs.
   test:
+    # Without a name the job is called after every value of the matrix, checksums included.
+    name: test (${{ matrix.os }}, rust ${{ matrix.toolchain }}, nvim ${{ matrix.nvim_version }})
     strategy:
       fail-fast: false
       matrix:
