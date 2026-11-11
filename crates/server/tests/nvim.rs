@@ -796,3 +796,64 @@ async fn claude_code_can_open_a_file_check_whether_it_has_changes_and_save_it() 
     .await;
     assert_eq!(again["saved"], false, "nothing to write the second time");
 }
+
+#[tokio::test]
+async fn changed_diagnostics_reach_claude_code_once_for_a_burst_of_changes() {
+    if !nvim_available() {
+        return;
+    }
+    let home = Home::new();
+    let _server = start_server(&home);
+    let _ = connect_when_ready(&home.default_socket()).await;
+
+    let first = home.dir.path().join("a.txt");
+    let second = home.dir.path().join("b.lua");
+    std::fs::write(&first, "one\n").unwrap();
+    std::fs::write(&second, "return 1\n").unwrap();
+    let listen = home.dir.path().join("nvim.sock");
+    let _nvim = start_nvim_listening(
+        &home,
+        &format!(
+            "vim.cmd('edit {a}'); vim.fn.bufload(vim.fn.bufadd('{b}')); \
+             require('claude_ide').setup({{ diagnostics_debounce_ms = 100, server = {{ autostart = false }} }})",
+            a = first.display(),
+            b = second.display()
+        ),
+        Some(&listen),
+    );
+    wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
+    let mut claude = claude_for(&home).await;
+    wait_until("nvim listens", || listen.exists()).await;
+    let uri = |path: &Path| format!("file://{}", std::fs::canonicalize(path).unwrap().display());
+
+    // The diagnostics of two files change, and the first one again, within the wait: one notification names both files,
+    // each once, in the order in which they changed.
+    send_keys(
+        &listen,
+        &format!(
+            ":lua local ns = vim.api.nvim_create_namespace('t'); \
+             local a, b = vim.fn.bufnr('{a}'), vim.fn.bufnr('{b}'); \
+             vim.diagnostic.set(ns, a, {{ {{ lnum = 0, col = 0, message = 'x' }} }}); \
+             vim.diagnostic.set(ns, b, {{ {{ lnum = 0, col = 0, message = 'y' }} }}); \
+             vim.diagnostic.set(ns, a, {{ {{ lnum = 0, col = 1, message = 'z' }} }})<CR>",
+            a = first.display(),
+            b = second.display()
+        ),
+    );
+    let changed = next_notification(&mut claude, "diagnostics_changed").await;
+    assert_eq!(
+        changed["uris"],
+        serde_json::json!([uri(&first), uri(&second)])
+    );
+
+    // A later change is another notification, with only the file that changed.
+    send_keys(
+        &listen,
+        &format!(
+            ":lua vim.diagnostic.reset(vim.api.nvim_create_namespace('t'), vim.fn.bufnr('{b}'))<CR>",
+            b = second.display()
+        ),
+    );
+    let changed = next_notification(&mut claude, "diagnostics_changed").await;
+    assert_eq!(changed["uris"], serde_json::json!([uri(&second)]));
+}

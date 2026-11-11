@@ -1,5 +1,6 @@
 --- Connects Neovim to Claude Code's `/ide` through `claude-ide-server`.
 local Session = require('claude_ide.session')
+local diagnostics = require('claude_ide.diagnostics')
 local methods = require('claude_ide.methods')
 local selection = require('claude_ide.selection')
 
@@ -14,6 +15,7 @@ local M = {}
 ---@field server claude_ide.ServerOptions Whether and how to start the server when nobody is listening.
 ---@field register_timeout_ms integer How long the server has to answer `register`.
 ---@field selection_debounce_ms integer How long the cursor must stay still before the selection is sent.
+---@field diagnostics_debounce_ms integer How long diagnostics are collected before the files that changed are reported.
 ---@field methods table<string, fun(params: any): any, table?> What the server may ask of this Neovim.
 ---@field on_registered fun(session: claude_ide.Session)? Called each time the registration has been accepted.
 local defaults = {
@@ -33,6 +35,7 @@ local defaults = {
   },
   register_timeout_ms = 5000,
   selection_debounce_ms = 100,
+  diagnostics_debounce_ms = 100,
   methods = methods.handlers,
 }
 
@@ -40,6 +43,8 @@ local defaults = {
 local session
 ---@type { flush: fun(), detach: fun() }?
 local selecting
+---@type { detach: fun() }?
+local diagnosing
 
 local group = vim.api.nvim_create_augroup('claude_ide', { clear = true })
 
@@ -67,6 +72,9 @@ function M.setup(opts)
   if selecting then
     selecting.detach()
   end
+  if diagnosing then
+    diagnosing.detach()
+  end
   vim.api.nvim_clear_autocmds({ group = group })
   local on_registered = opts.on_registered
   opts.on_registered = function(registered)
@@ -80,6 +88,7 @@ function M.setup(opts)
   end
   session = Session.new(opts)
   selecting = selection.attach(session, group, opts.selection_debounce_ms)
+  diagnosing = diagnostics.attach(session, group, opts.diagnostics_debounce_ms)
   follow_folders()
   if opts.autostart == false then
     return
