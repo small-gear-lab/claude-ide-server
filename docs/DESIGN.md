@@ -228,6 +228,12 @@ Three seams are drawn on purpose, where this design already says that something 
 Nothing else is put behind a trait in advance (TCP itself, the JSON shape of a lock file). A seam is added when
 something is known to change, not before.
 
+One thing is kept out of the seams on purpose: the source of the token. The token is the only thing that keeps the
+other processes of the machine away from a workspace, so it always comes from the operating system's random source,
+and if that fails the workspace is refused instead of getting a weaker token. It is not part of the configuration
+that a caller can change. Tests can replace it (to try the failing case, or to know the token in advance) through the
+`test-support` feature of the crate, which is on only for the crate's own tests and never in a normal build.
+
 ## Lifecycle
 
 1. The server starts and listens on the adapter socket.
