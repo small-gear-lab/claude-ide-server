@@ -10,6 +10,7 @@ use serde_json::{Value, json};
 
 use crate::adapter::{AdapterHandle, RequestError};
 use crate::mcp::{ToolBackend, ToolDefinition, ToolError, ToolResult};
+use crate::model::file_uri;
 
 /// What runs a tool.
 enum Backing {
@@ -253,32 +254,9 @@ fn workspace_folders_text(folders: &[String]) -> String {
     .to_string()
 }
 
-/// `file://` and the path, with every byte that is not safe in a URI written as `%XX` (the `/` stays).
-fn file_uri(path: &str) -> String {
-    let mut uri = String::from("file://");
-    for byte in path.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'/' => {
-                uri.push(char::from(byte));
-            }
-            other => uri.push_str(&format!("%{other:02X}")),
-        }
-    }
-    uri
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn a_file_uri_encodes_what_is_not_safe_and_keeps_the_slashes() {
-        assert_eq!(
-            file_uri("/home/u/my project"),
-            "file:///home/u/my%20project"
-        );
-        assert_eq!(file_uri("/a/日本"), "file:///a/%E6%97%A5%E6%9C%AC");
-    }
 
     #[test]
     fn the_folders_are_described_with_a_name_a_uri_and_a_path() {
