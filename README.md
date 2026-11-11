@@ -10,7 +10,9 @@ integrations behave (the VS Code extension and the JetBrains plugin), and from t
 [coder/claudecode.nvim](https://github.com/coder/claudecode.nvim/blob/main/PROTOCOL.md). It can break when Claude
 Code changes.
 
-> **Status: design stage.** There is no working code yet.
+> **Status: early development.** The core library talks to a real Claude Code (the handshake, the list of tools, tool
+> calls, notifications), and is tested with stand-ins for Claude Code and for an editor. There is no executable yet
+> (#17) and no editor adapter yet (#10).
 
 ## What it will be
 

@@ -6,7 +6,7 @@
 
 このプロトコルは、Anthropic によって文書化されていません。このプロジェクトが頼っているのは、既存の連携（VS Code の拡張と JetBrains のプラグイン）の挙動の観察と、[coder/claudecode.nvim](https://github.com/coder/claudecode.nvim/blob/main/PROTOCOL.md) の公開されている解説です。Claude Code が変わると、壊れることがあります。
 
-> **状態: 設計の段階です。** 動くコードは、まだありません。
+> **状態: 開発の初期。** コアのライブラリは、本物の Claude Code と話せます（握手、ツールの一覧、ツールの呼び出し、通知）。Claude Code とエディタの偽物を使って、テストされています。実行ファイル（#17）と、エディタのアダプター（#10）は、まだありません。
 
 ## 何になるか
 
