@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-ide-server\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-11 22:14+0900\n"
+"POT-Creation-Date: 2026-11-11 22:17+0900\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: Small Gear Lab\n"
 "Language-Team: ja <LL@li.org>\n"
@@ -52,23 +52,32 @@ msgstr ""
 
 #: ../../../README.md:13
 msgid ""
-"**Status: early development.** The core library talks to a real Claude Code "
-"(the handshake, the list of tools, tool calls, notifications), and is tested"
-" with stand-ins for Claude Code and for an editor. The server runs as an "
-"executable (`claude-ide-server`, with an example systemd socket unit under "
-"`contrib/`). The Neovim adapter does everything of the protocol except diffs"
-" (#13, #14)."
+"**Status: early development, and not published.** The server implements the "
+"whole of the protocol: the handshake, every tool of the VS Code extension "
+"that makes sense for a terminal editor (opening files, the selection, "
+"diagnostics, diffs with accept and reject), and the notifications. It was "
+"tried with a real Claude Code (2.1.322), on Linux, with the Neovim adapter. "
+"It runs as an executable (`claude-ide-server`) on Linux (systemd socket "
+"activation), macOS (launchd) and Windows (a named pipe, and a Task Scheduler"
+" task); macOS and Windows are tried in CI, with stand-ins for Claude Code, "
+"not with a Claude Code of their own. Not done: Claude Code in WSL with an "
+"editor on Windows (#24), and publishing to crates.io (#16); there are no "
+"binaries to download, so you build it yourself."
 msgstr ""
-"**状況: 開発初期。** コアライブラリは本物の Claude Code "
-"と通信できます（ハンドシェイク、ツール一覧、ツール呼び出し、通知）。テストは、Claude Code "
-"とエディタの代役を使って行っています。サーバーは実行ファイル（`claude-ide-server`。`contrib/` に systemd "
-"のソケットユニットの例があります）として動きます。Neovim アダプタは、差分を除く、プロトコルのすべてを行います（#13、#14）。"
+"**状態: 開発の初期段階で、公開はしていません。** サーバーはプロトコルの全体を実装しています。ハンドシェイク、VS Code "
+"拡張が持つツールのうち端末のエディタに意味のあるすべて（ファイルを開く、選択範囲、診断、承認と拒否のある差分）、そして通知です。実際の Claude "
+"Code（2.1.322）と Neovim アダプターで、Linux 上で試しました。実行ファイル（`claude-ide-"
+"server`）として、Linux（systemd "
+"のソケットアクティベーション）、macOS（launchd）、Windows（名前付きパイプと、タスクスケジューラのタスク）で動きます。macOS と "
+"Windows は CI で試していて、使っているのは Claude Code の代役で、本物の Claude Code "
+"ではありません。未対応は、WSL 上の Claude Code と Windows 側のエディタの組み合わせ（#24）と、crates.io "
+"への公開（#16）です。ダウンロードできるバイナリはないので、自分でビルドしてください。"
 
-#: ../../../README.md:18
-msgid "What it will be"
-msgstr "何になるか"
+#: ../../../README.md:21
+msgid "What it is"
+msgstr "これは何か"
 
-#: ../../../README.md:20
+#: ../../../README.md:23
 msgid ""
 "Claude Code connects to an IDE over a WebSocket speaking a variant of MCP "
 "(JSON-RPC 2.0). The IDE writes a lock file under `~/.claude/ide/`, and "
@@ -79,7 +88,7 @@ msgstr ""
 "`~/.claude/ide/` にロックファイルを書き、Claude Code が、それを見つけてつなぎます。このプロジェクトは、その接続の IDE "
 "側で、2 つの部分に分かれます。"
 
-#: ../../../README.md:28
+#: ../../../README.md:31
 msgid ""
 "**The server** speaks the Claude Code protocol: the WebSocket, the lock file"
 " and its token, and the MCP tools and notifications. It knows nothing about "
@@ -88,7 +97,7 @@ msgstr ""
 "**サーバー** は、Claude Code のプロトコルを話します。WebSocket、ロックファイルとそのトークン、MCP "
 "のツールと通知です。特定のエディタについては、何も知りません。"
 
-#: ../../../README.md:30
+#: ../../../README.md:33
 msgid ""
 "**An editor adapter** connects to the server, says which workspace it has, "
 "and answers the server's requests (open a file, report the selection, show a"
@@ -99,27 +108,28 @@ msgstr ""
 "は、サーバーにつないで、自分がどのワークスペースを持っているかを伝え、サーバーの要求（ファイルを開く、選択範囲を返す、差分を出す）に、JSON-RPC "
 "で答えます。アダプターが切れると、サーバーは、そのワークスペースとロックファイルを手放すので、エディタが落ちても、何も残りません。"
 
-#: ../../../README.md:34
-msgid "The first adapter will be for Neovim, written in Lua."
-msgstr "最初のアダプターは、Neovim 用で、Lua で書きます。"
+#: ../../../README.md:37
+msgid ""
+"The first adapter is the one for Neovim, written in Lua (`editors/nvim`)."
+msgstr "最初のアダプターは Neovim 用で、Lua で書かれています（`editors/nvim`）。"
 
-#: ../../../README.md:36
+#: ../../../README.md:39
 msgid "Documentation"
 msgstr "ドキュメント"
 
-#: ../../../README.md:38
+#: ../../../README.md:41
 msgid ""
 "[docs/DESIGN.md](docs/DESIGN.md): the design, the protocol between the "
 "server and an editor adapter, and the milestones."
 msgstr "[docs/DESIGN.md](docs/DESIGN.md): 設計、サーバーとエディタのアダプターの間のプロトコル、マイルストーン。"
 
-#: ../../../README.md:39
+#: ../../../README.md:42
 msgid ""
 "[docs/NVIM.md](docs/NVIM.md): the Neovim adapter: installing it, its "
 "options, and what it does."
 msgstr "[docs/NVIM.md](docs/NVIM.md): Neovim アダプタ。インストール、オプション、できること。"
 
-#: ../../../README.md:41
+#: ../../../README.md:44
 msgid ""
 "The documents are written in English and have a Japanese version "
 "(`README.ja.md`, `docs/ja/`), built from the gettext catalogs in "
@@ -128,47 +138,94 @@ msgstr ""
 "ドキュメントは英語で書いてあり、日本語版（`README.ja.md`、`docs/ja/`）があります。日本語版は、`docs/locale/ja/`"
 " の gettext のカタログから、`tools/build-docs.sh` で作ります。"
 
-#: ../../../README.md:44
-msgid "Layout (planned)"
-msgstr "構成（予定）"
+#: ../../../README.md:47
+msgid "Layout"
+msgstr "構成"
 
-#: ../../readme.md:46
+#: ../../readme.md:49
 msgid "Where"
 msgstr "場所"
 
-#: ../../readme.md:46
+#: ../../readme.md:49
 msgid "What"
 msgstr "内容"
 
-#: ../../readme.md:46
+#: ../../readme.md:49
 msgid "`crates/core/`"
 msgstr "`crates/core/`"
 
-#: ../../readme.md:48
-msgid "the server: WebSocket, lock files, authentication, MCP handling"
-msgstr "サーバー: WebSocket、ロックファイル、認証、MCP の処理"
+#: ../../readme.md:51
+msgid ""
+"the server library: WebSocket, lock files, authentication, MCP handling, the"
+" adapter protocol"
+msgstr "サーバーのライブラリ: WebSocket、ロックファイル、認証、MCP の処理、アダプターのプロトコル"
 
-#: ../../readme.md:48
+#: ../../readme.md:51
+msgid "`crates/server/`"
+msgstr "`crates/server/`"
+
+#: ../../readme.md:52
+msgid "the executable, `claude-ide-server`"
+msgstr "実行ファイル `claude-ide-server`"
+
+#: ../../readme.md:52
+msgid "`crates/launchd/`, `crates/windows/`"
+msgstr "`crates/launchd/`、`crates/windows/`"
+
+#: ../../readme.md:53
+msgid ""
+"the calls into macOS and Windows that need `unsafe`, kept apart from the "
+"rest"
+msgstr "`unsafe` が必要な macOS と Windows の呼び出し。ほかから切り離してある"
+
+#: ../../readme.md:53
+msgid "`crates/test-support/`"
+msgstr "`crates/test-support/`"
+
+#: ../../readme.md:54
+msgid ""
+"what the tests of the other crates share: stand-ins for Claude Code and for "
+"an adapter, and fixtures"
+msgstr "ほかの crate のテストが共有するもの: Claude Code とアダプターの代役、フィクスチャ"
+
+#: ../../readme.md:54
 msgid "`editors/nvim/`"
 msgstr "`editors/nvim/`"
 
-#: ../../readme.md:49
+#: ../../readme.md:55
 msgid "the Neovim adapter"
 msgstr "Neovim のアダプター"
 
-#: ../../readme.md:49
+#: ../../readme.md:55
+msgid "`contrib/`"
+msgstr "`contrib/`"
+
+#: ../../readme.md:56
+msgid "files for systemd, launchd and Task Scheduler"
+msgstr "systemd、launchd、タスクスケジューラ用のファイル"
+
+#: ../../readme.md:56
 msgid "`docs/`"
 msgstr "`docs/`"
 
-#: ../../readme.md:50
-msgid "the protocol notes and the design"
-msgstr "プロトコルのメモと、設計"
+#: ../../readme.md:57
+msgid ""
+"the design, the adapter protocol, and the notes on what Claude Code does"
+msgstr "設計、アダプターのプロトコル、Claude Code の挙動のメモ"
 
-#: ../../../README.md:52
+#: ../../readme.md:57
+msgid "`tools/`"
+msgstr "`tools/`"
+
+#: ../../readme.md:58
+msgid "the build of the Japanese documents"
+msgstr "日本語版ドキュメントのビルド"
+
+#: ../../../README.md:60
 msgid "Contributing"
 msgstr "コントリビュート"
 
-#: ../../../README.md:54
+#: ../../../README.md:62
 msgid ""
 "See [CONTRIBUTING.md](CONTRIBUTING.md): how commits and the Japanese "
 "documents are handled, how to run the checks, and why statements about "
@@ -177,25 +234,44 @@ msgstr ""
 "[CONTRIBUTING.md](CONTRIBUTING.md) を見てください。コミットと日本語版ドキュメントの扱い、チェックの走らせ方、そして "
 "Claude Code についての記述に「どこで知ったか」が添えられている理由が書いてあります。"
 
-#: ../../../README.md:57
+#: ../../../README.md:65
 msgid "License"
 msgstr "ライセンス"
 
-#: ../../../README.md:59
+#: ../../../README.md:67
 msgid "Licensed under either of"
 msgstr "次のどちらかのライセンスで使えます。"
 
-#: ../../../README.md:61
+#: ../../../README.md:69
 msgid "Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))"
 msgstr "Apache License, Version 2.0（[LICENSE-APACHE](LICENSE-APACHE)）"
 
-#: ../../../README.md:62
+#: ../../../README.md:70
 msgid "MIT license ([LICENSE-MIT](LICENSE-MIT))"
 msgstr "MIT ライセンス（[LICENSE-MIT](LICENSE-MIT)）"
 
-#: ../../../README.md:64
+#: ../../../README.md:72
 msgid "at your option."
 msgstr "どちらにするかは、使う人が選べます。"
 
 #~ msgid "**Status: design stage.** There is no working code yet."
 #~ msgstr "**状態: 設計の段階です。** 動くコードは、まだありません。"
+
+#~ msgid ""
+#~ "**Status: early development.** The core library talks to a real Claude Code "
+#~ "(the handshake, the list of tools, tool calls, notifications), and is tested"
+#~ " with stand-ins for Claude Code and for an editor. The server runs as an "
+#~ "executable (`claude-ide-server`, with an example systemd socket unit under "
+#~ "`contrib/`). The Neovim adapter does everything of the protocol except diffs"
+#~ " (#13, #14)."
+#~ msgstr ""
+#~ "**状況: 開発初期。** コアライブラリは本物の Claude Code "
+#~ "と通信できます（ハンドシェイク、ツール一覧、ツール呼び出し、通知）。テストは、Claude Code "
+#~ "とエディタの代役を使って行っています。サーバーは実行ファイル（`claude-ide-server`。`contrib/` に systemd "
+#~ "のソケットユニットの例があります）として動きます。Neovim アダプタは、差分を除く、プロトコルのすべてを行います（#13、#14）。"
+
+#~ msgid "Layout (planned)"
+#~ msgstr "構成（予定）"
+
+#~ msgid "the protocol notes and the design"
+#~ msgstr "プロトコルのメモと、設計"

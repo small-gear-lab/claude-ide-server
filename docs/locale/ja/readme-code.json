@@ -1,3 +1,3 @@
 {
-  "Claude Code ──WebSocket (MCP)──▶ claude-ide-server ◀──JSON-RPC (Unix socket)── an editor-side adapter\n": "Claude Code ──WebSocket (MCP)──▶ claude-ide-server ◀──JSON-RPC (Unix ソケット)── エディタのアダプター\n"
+  "Claude Code ──WebSocket (MCP)──▶ claude-ide-server ◀──JSON-RPC (Unix socket, or named pipe)── an editor-side adapter\n": "Claude Code ──WebSocket (MCP)──▶ claude-ide-server ◀──JSON-RPC (Unix ソケット、または名前付きパイプ)── エディタのアダプター\n"
 }

@@ -10,19 +10,22 @@ integrations behave (the VS Code extension and the JetBrains plugin), and from t
 [coder/claudecode.nvim](https://github.com/coder/claudecode.nvim/blob/main/PROTOCOL.md). It can break when Claude
 Code changes.
 
-> **Status: early development.** The core library talks to a real Claude Code (the handshake, the list of tools, tool
-> calls, notifications), and is tested with stand-ins for Claude Code and for an editor. The server runs as an
-> executable (`claude-ide-server`, with an example systemd socket unit under `contrib/`). The Neovim adapter does
-> everything of the protocol except diffs (#13, #14).
+> **Status: early development, and not published.** The server implements the whole of the protocol: the handshake, every
+> tool of the VS Code extension that makes sense for a terminal editor (opening files, the selection, diagnostics,
+> diffs with accept and reject), and the notifications. It was tried with a real Claude Code (2.1.322), on Linux, with
+> the Neovim adapter. It runs as an executable (`claude-ide-server`) on Linux (systemd socket activation), macOS (launchd)
+> and Windows (a named pipe, and a Task Scheduler task); macOS and Windows are tried in CI, with stand-ins for Claude
+> Code, not with a Claude Code of their own. Not done: Claude Code in WSL with an editor on Windows (#24), and
+> publishing to crates.io (#16); there are no binaries to download, so you build it yourself.
 
-## What it will be
+## What it is
 
 Claude Code connects to an IDE over a WebSocket speaking a variant of MCP (JSON-RPC 2.0). The IDE writes a lock
 file under `~/.claude/ide/`, and Claude Code finds it and connects. This project is the IDE side of that
 connection, split into two parts:
 
 ```
-Claude Code ──WebSocket (MCP)──▶ claude-ide-server ◀──JSON-RPC (Unix socket)── an editor-side adapter
+Claude Code ──WebSocket (MCP)──▶ claude-ide-server ◀──JSON-RPC (Unix socket, or named pipe)── an editor-side adapter
 ```
 
 - **The server** speaks the Claude Code protocol: the WebSocket, the lock file and its token, and the MCP
@@ -31,7 +34,7 @@ Claude Code ──WebSocket (MCP)──▶ claude-ide-server ◀──JSON-RPC (
   (open a file, report the selection, show a diff) over JSON-RPC. When the adapter disconnects, the server drops
   that workspace and its lock file, so a crashed editor leaves nothing behind.
 
-The first adapter will be for Neovim, written in Lua.
+The first adapter is the one for Neovim, written in Lua (`editors/nvim`).
 
 ## Documentation
 
@@ -41,13 +44,18 @@ The first adapter will be for Neovim, written in Lua.
 The documents are written in English and have a Japanese version (`README.ja.md`, `docs/ja/`), built from the
 gettext catalogs in `docs/locale/ja/` by `tools/build-docs.sh`.
 
-## Layout (planned)
+## Layout
 
 | Where | What |
 |---|---|
-| `crates/core/` | the server: WebSocket, lock files, authentication, MCP handling |
+| `crates/core/` | the server library: WebSocket, lock files, authentication, MCP handling, the adapter protocol |
+| `crates/server/` | the executable, `claude-ide-server` |
+| `crates/launchd/`, `crates/windows/` | the calls into macOS and Windows that need `unsafe`, kept apart from the rest |
+| `crates/test-support/` | what the tests of the other crates share: stand-ins for Claude Code and for an adapter, and fixtures |
 | `editors/nvim/` | the Neovim adapter |
-| `docs/` | the protocol notes and the design |
+| `contrib/` | files for systemd, launchd and Task Scheduler |
+| `docs/` | the design, the adapter protocol, and the notes on what Claude Code does |
+| `tools/` | the build of the Japanese documents |
 
 ## Contributing
 
