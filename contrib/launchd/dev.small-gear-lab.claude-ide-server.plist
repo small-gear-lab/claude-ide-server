@@ -1,14 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  NOT TESTED: written from launchd's documentation. The macOS runner of CI is where it will be tried (issue #18).
+  launchd's socket activation: launchd listens on the adapter socket, and starts claude-ide-server at the first connection
+  (an adapter that connects, or one that starts the server itself and connects to it). Nothing runs until then. With the
+  idle-timeout switch, as below, the server ends when the last adapter has been gone for that many seconds; the socket
+  stays with launchd, and the next connection starts the server again. (A comment of a property list cannot have two
+  hyphens in a row in it, so the switch is not spelt out here.)
 
-  Runs claude-ide-server at log-in and keeps it running, and the server makes its adapter socket itself. launchd's own
-  socket activation (starting the server at the first connection) is not used yet: it hands the socket over through an
-  interface of its own, which the server does not speak (see docs/DESIGN.md, "Running the server").
+  SockPathName cannot use $TMPDIR or ~, so @SOCKET@ is filled in when the file is installed, with the path that the
+  adapters look for by default, and the directory is made (launchd does not make it):
 
-    cp contrib/launchd/dev.small-gear-lab.claude-ide-server.plist ~/Library/LaunchAgents/
+    sock="$(getconf DARWIN_USER_TEMP_DIR)claude-ide-server-$(id -u)/adapter.sock"
+    mkdir -p -m 700 "$(dirname "$sock")"
+    sed "s#@SOCKET@#$sock#" contrib/launchd/dev.small-gear-lab.claude-ide-server.plist \
+      > ~/Library/LaunchAgents/dev.small-gear-lab.claude-ide-server.plist
     launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.small-gear-lab.claude-ide-server.plist
+
+  To take it out again: launchctl bootout gui/$(id -u)/dev.small-gear-lab.claude-ide-server
+
+  Change the path of the executable below to where it is. The name of the socket, "adapter", is the one that the server
+  asks launchd for.
 -->
 <plist version="1.0">
 <dict>
@@ -16,12 +27,20 @@
   <string>dev.small-gear-lab.claude-ide-server</string>
   <key>ProgramArguments</key>
   <array>
-    <!-- Change the path to where the executable is. -->
     <string>/usr/local/bin/claude-ide-server</string>
+    <string>--idle-timeout</string>
+    <string>300</string>
   </array>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>KeepAlive</key>
-  <true/>
+  <key>Sockets</key>
+  <dict>
+    <key>adapter</key>
+    <dict>
+      <key>SockPathName</key>
+      <string>@SOCKET@</string>
+      <!-- 0600, in decimal: the socket is the user's alone. -->
+      <key>SockPathMode</key>
+      <integer>384</integer>
+    </dict>
+  </dict>
 </dict>
 </plist>
