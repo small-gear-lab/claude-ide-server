@@ -211,3 +211,30 @@ async fn a_neovim_that_is_not_to_register_stays_away() {
     tokio::time::sleep(Duration::from_millis(700)).await;
     assert!(home.lock_files().is_empty());
 }
+
+#[tokio::test]
+async fn the_workspace_follows_cd() {
+    if !nvim_available() {
+        return;
+    }
+    let home = Home::new();
+    let _server = start_server(&home);
+    let _ = connect_when_ready(&home.default_socket()).await;
+
+    // Moved by `:cd` once it is registered.
+    let folder = home.dir.path().join("project");
+    std::fs::create_dir_all(&folder).unwrap();
+    let _nvim = start_nvim(
+        &home,
+        &format!(
+            "require('claude_ide').setup({{ on_registered = function() vim.cmd('cd {}') end }})",
+            folder.display()
+        ),
+    );
+    let folder = std::fs::canonicalize(&folder).unwrap();
+    wait_until("the lock file names the folder", || {
+        home.lock_files().len() == 1
+            && read_lock(&home).workspace_folders == [folder.to_string_lossy()]
+    })
+    .await;
+}

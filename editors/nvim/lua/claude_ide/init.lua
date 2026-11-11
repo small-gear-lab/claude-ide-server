@@ -28,6 +28,22 @@ local defaults = {
 ---@type claude_ide.Session?
 local session
 
+local group = vim.api.nvim_create_augroup('claude_ide', { clear = true })
+
+--- The workspace follows the working directory of the whole Neovim: `:cd`, not `:lcd` or `:tcd`, which belong to a
+--- window or a tab.
+local function follow_folders()
+  vim.api.nvim_create_autocmd('DirChanged', {
+    group = group,
+    pattern = 'global',
+    callback = function()
+      if session then
+        session:notify('workspaceFoldersChanged', { workspaceFolders = session.opts.workspace_folders() })
+      end
+    end,
+  })
+end
+
 --- Sets up and, unless `autostart = false`, starts connecting once Neovim has started.
 ---@param opts (claude_ide.Options | { autostart: boolean? })?
 function M.setup(opts)
@@ -36,6 +52,8 @@ function M.setup(opts)
     session:stop()
   end
   session = Session.new(opts)
+  vim.api.nvim_clear_autocmds({ group = group })
+  follow_folders()
   if opts.autostart == false then
     return
   end
@@ -44,7 +62,7 @@ function M.setup(opts)
   else
     vim.api.nvim_create_autocmd('VimEnter', {
       once = true,
-      group = vim.api.nvim_create_augroup('claude_ide_start', { clear = true }),
+      group = group,
       callback = M.start,
     })
   end
