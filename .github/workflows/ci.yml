@@ -43,13 +43,17 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
 
-  # The tests run on the least version that rust-version names (1.88) and on the latest stable.
+  # The tests run on the least version that rust-version names (1.88) and on the latest stable, on Linux, and on the latest
+  # stable on macOS (the other system with Unix sockets that the server runs on; it is also where launchd is tried).
   test:
     strategy:
       fail-fast: false
       matrix:
-        toolchain: ["1.88", stable]
-    runs-on: ubuntu-latest
+        include:
+          - { os: ubuntu-latest, toolchain: "1.88" }
+          - { os: ubuntu-latest, toolchain: stable }
+          - { os: macos-latest, toolchain: stable }
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
       - name: Toolchain
