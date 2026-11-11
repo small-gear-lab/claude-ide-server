@@ -149,6 +149,18 @@ impl Outbox {
     }
 }
 
+/// A Claude Code that has come or gone.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClientChange {
+    /// It has completed the handshake. Its `pid` is usually not known yet: it comes with a notification after that.
+    Connected(ClientInfo),
+    /// It is gone. This is what was known of it.
+    Disconnected(ClientInfo),
+}
+
+/// Told of every [`ClientChange`], on the task of the connection: it must not block.
+pub type Observer = Arc<dyn Fn(ClientChange) + Send + Sync>;
+
 struct ClientEntry {
     outbox: Arc<Outbox>,
     name: String,
@@ -156,11 +168,22 @@ struct ClientEntry {
     pid: Arc<Mutex<Option<u32>>>,
 }
 
+impl ClientEntry {
+    fn info(&self) -> ClientInfo {
+        ClientInfo {
+            name: self.name.clone(),
+            version: self.version.clone(),
+            pid: *self.pid.lock().expect("not poisoned"),
+        }
+    }
+}
+
 struct HubInner<B> {
     backend: B,
     server_name: String,
     server_version: String,
     handshake_timeout: Duration,
+    observer: Observer,
     /// The last notification of each method that is to reach a client that connects later too.
     remembered: Mutex<HashMap<String, Value>>,
     clients: Mutex<HashMap<u64, ClientEntry>>,
@@ -188,12 +211,14 @@ impl<B> std::fmt::Debug for McpHub<B> {
 
 impl<B: ToolBackend> McpHub<B> {
     /// A hub whose clients are told that the server is `server_name` / `server_version`. A client that has not
-    /// completed the MCP handshake within `handshake_timeout` is disconnected.
+    /// completed the MCP handshake within `handshake_timeout` is disconnected. `observer` is told when a client has
+    /// connected and when it is gone.
     pub fn new(
         backend: B,
         server_name: impl Into<String>,
         server_version: impl Into<String>,
         handshake_timeout: Duration,
+        observer: Observer,
     ) -> Self {
         Self {
             inner: Arc::new(HubInner {
@@ -201,6 +226,7 @@ impl<B: ToolBackend> McpHub<B> {
                 server_name: server_name.into(),
                 server_version: server_version.into(),
                 handshake_timeout,
+                observer,
                 remembered: Mutex::new(HashMap::new()),
                 clients: Mutex::new(HashMap::new()),
                 next_id: AtomicU64::new(1),
@@ -251,7 +277,7 @@ impl<B: ToolBackend> McpHub<B> {
                     }
                 }
             });
-            {
+            let connected = {
                 // What a client that connects now has missed (the selection that is current, for one) is queued, and the
                 // client is registered, in one step with respect to `notify_remembering` (which also holds the clients
                 // while it remembers): otherwise a state that arrives in between would reach every client but this one,
@@ -269,11 +295,17 @@ impl<B: ToolBackend> McpHub<B> {
                         pid,
                     },
                 );
-            }
+                clients[&id].info()
+            };
+            // Told with the clients no longer held: an observer that asks the hub something must not wait for itself.
+            (hub.observer)(ClientChange::Connected(connected));
             let _ = running.waiting().await;
             // The entry goes, and the outbox is closed, which ends the task that sends from it.
-            hub.clients.lock().expect("not poisoned").remove(&id);
+            let gone = hub.clients.lock().expect("not poisoned").remove(&id);
             outbox.close();
+            if let Some(entry) = gone {
+                (hub.observer)(ClientChange::Disconnected(entry.info()));
+            }
         });
     }
 
@@ -282,16 +314,7 @@ impl<B: ToolBackend> McpHub<B> {
         let clients = self.inner.clients.lock().expect("not poisoned");
         let mut infos: Vec<(u64, ClientInfo)> = clients
             .iter()
-            .map(|(id, entry)| {
-                (
-                    *id,
-                    ClientInfo {
-                        name: entry.name.clone(),
-                        version: entry.version.clone(),
-                        pid: *entry.pid.lock().expect("not poisoned"),
-                    },
-                )
-            })
+            .map(|(id, entry)| (*id, entry.info()))
             .collect();
         infos.sort_by_key(|(id, _)| *id);
         infos.into_iter().map(|(_, info)| info).collect()

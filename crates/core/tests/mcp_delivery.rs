@@ -3,9 +3,12 @@
 
 mod common;
 
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use claude_ide_core::mcp::{McpHub, ToolBackend, ToolDefinition, ToolError, ToolResult};
+use claude_ide_core::mcp::{
+    ClientChange, McpHub, ToolBackend, ToolDefinition, ToolError, ToolResult,
+};
 use claude_ide_core::ws::{self, WsServer};
 use common::claude::MockClaude;
 use serde_json::{Value, json};
@@ -30,6 +33,7 @@ impl ToolBackend for NoTools {
 
 struct Rig {
     hub: McpHub<NoTools>,
+    changes: Arc<Mutex<Vec<ClientChange>>>,
     port: u16,
     accepting: JoinHandle<()>,
 }
@@ -43,7 +47,15 @@ impl Drop for Rig {
 async fn rig() -> Rig {
     let mut server = WsServer::start(TOKEN, ws::Config::default()).await.unwrap();
     let port = server.port();
-    let hub = McpHub::new(NoTools, "test", "0", WAIT);
+    let changes = Arc::new(Mutex::new(Vec::new()));
+    let recording = changes.clone();
+    let hub = McpHub::new(
+        NoTools,
+        "test",
+        "0",
+        WAIT,
+        Arc::new(move |change| recording.lock().unwrap().push(change)),
+    );
     let attaching = hub.clone();
     let accepting = tokio::spawn(async move {
         while let Some(connection) = server.accept().await {
@@ -53,6 +65,7 @@ async fn rig() -> Rig {
     });
     Rig {
         hub,
+        changes,
         port,
         accepting,
     }
@@ -205,4 +218,67 @@ async fn a_client_that_leaves_is_forgotten_and_sending_to_nobody_is_harmless() {
     rig.wait_for_clients(0).await;
     rig.hub.notify("event", json!({ "n": 0 }));
     rig.hub.notify_remembering("state", json!({ "n": 0 }));
+}
+
+#[tokio::test]
+async fn the_observer_is_told_when_a_client_connects_and_when_it_goes() {
+    let rig = rig().await;
+    let claude = rig.client().await;
+    {
+        let changes = rig.changes.lock().unwrap();
+        assert_eq!(changes.len(), 1);
+        assert!(matches!(&changes[0], ClientChange::Connected(info) if info.name == "claude-code"));
+    }
+
+    drop(claude);
+    timeout(WAIT, async {
+        while rig.changes.lock().unwrap().len() < 2 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the disconnection is observed");
+    let changes = rig.changes.lock().unwrap();
+    // What was known of it, the process included, comes with the disconnection.
+    assert!(matches!(&changes[1], ClientChange::Disconnected(info) if info.pid.is_some()));
+}
+
+#[tokio::test]
+async fn an_observer_may_ask_the_hub_about_its_clients() {
+    use std::sync::OnceLock;
+
+    let mut server = WsServer::start(TOKEN, ws::Config::default()).await.unwrap();
+    let port = server.port();
+    let hub_cell: Arc<OnceLock<McpHub<NoTools>>> = Arc::new(OnceLock::new());
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let (cell, record) = (hub_cell.clone(), seen.clone());
+    let hub = McpHub::new(
+        NoTools,
+        "test",
+        "0",
+        WAIT,
+        Arc::new(move |change| {
+            // Called with the hub's own lock of its clients not held: this would otherwise wait for itself.
+            let count = cell.get().map_or(0, |hub| hub.clients().len());
+            record.lock().unwrap().push((change, count));
+        }),
+    );
+    hub_cell.set(hub.clone()).ok();
+    let accepting = tokio::spawn(async move {
+        while let Some(connection) = server.accept().await {
+            hub.attach(connection);
+        }
+    });
+
+    let mut claude = MockClaude::connect(port, TOKEN).await;
+    claude.handshake(4000).await;
+    timeout(WAIT, async {
+        while seen.lock().unwrap().is_empty() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the observer is told, and does not wait for itself");
+    assert_eq!(seen.lock().unwrap()[0].1, 1);
+    accepting.abort();
 }

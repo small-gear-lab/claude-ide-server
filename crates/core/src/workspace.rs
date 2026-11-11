@@ -19,7 +19,7 @@ use crate::adapter::{
     Registration,
 };
 use crate::lock::{self, EnvVars, LockContents, LockDirs, LockFile};
-use crate::mcp::{ClientInfo, McpHub};
+use crate::mcp::{ClientChange, ClientInfo, McpHub};
 use crate::model::ModelError;
 use crate::notifications::{Forward, forward};
 use crate::tools::WorkspaceTools;
@@ -29,6 +29,9 @@ use crate::ws::{self, WsServer};
 pub fn socket_path(env: &EnvVars) -> PathBuf {
     lock::runtime_dir(env).join("adapter.sock")
 }
+
+/// See [`Config::claude_observer`].
+pub type ClaudeObserver = Arc<dyn Fn(&Registration, ClientChange) + Send + Sync>;
 
 /// Settings of the workspaces.
 #[derive(Clone)]
@@ -43,6 +46,9 @@ pub struct Config {
     pub claude_handshake_timeout: Duration,
     /// Whether a process is alive; decides which leftovers of an earlier server are cleaned up at start.
     pub is_alive: Arc<dyn Fn(u32) -> bool + Send + Sync>,
+    /// Told when a Claude Code connects to a workspace and when it goes, with the registration of the workspace. It
+    /// runs on the task of the connection and must not block.
+    pub claude_observer: Option<ClaudeObserver>,
     // Where the token of each workspace comes from. The operating system's random source, and nothing else in a normal
     // build: the token is the only thing that keeps other processes of the machine out, so it is not for callers to
     // replace. Tests can, through the `test-support` feature.
@@ -58,6 +64,7 @@ impl Config {
             ws: ws::Config::default(),
             claude_handshake_timeout: Duration::from_secs(10),
             is_alive: Arc::new(lock::process_is_alive),
+            claude_observer: None,
             token_source: Arc::new(lock::generate_token),
         }
     }
@@ -309,6 +316,15 @@ async fn provision(
         "claude-ide-server",
         env!("CARGO_PKG_VERSION"),
         config.claude_handshake_timeout,
+        {
+            let observer = config.claude_observer.clone();
+            let registration = registration.clone();
+            Arc::new(move |change| {
+                if let Some(observer) = &observer {
+                    observer(&registration, change);
+                }
+            })
+        },
     );
     let workspace = Workspace {
         registration,
