@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-ide-server\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-11 15:11+0900\n"
+"POT-Creation-Date: 2026-11-11 15:35+0900\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: Small Gear Lab\n"
 "Language-Team: ja <LL@li.org>\n"
@@ -1149,14 +1149,14 @@ msgstr "未解決の問い"
 #: ../../DESIGN.md:318
 msgid ""
 "Whether to start the server on demand (systemd socket activation) or keep it"
-" running."
-msgstr "サーバーを、必要になったときに起動するか（systemd のソケットアクティベーション）、動かしたままにするか。"
+" running (issue #17)."
+msgstr "サーバーを、必要になったときに起動するか（systemd のソケットアクティベーション）、動かしたままにするか（Issue #17）。"
 
 #: ../../DESIGN.md:319
 msgid ""
 "What an adapter should do when the server is not there: retry, and for how "
-"long."
-msgstr "サーバーがいないときに、アダプターがどうするか。再試行するか、どのくらいの間か。"
+"long (issue #10)."
+msgstr "サーバーがいないときに、アダプターがどうするか。再試行するか、どのくらいの間か（Issue #10）。"
 
 #: ../../DESIGN.md:320
 msgid ""
@@ -1165,6 +1165,16 @@ msgid ""
 msgstr "CLI は文字列で比べるので、`workspaceFolders` に、パスと、シンボリックリンクを解決した形の両方を書くか。"
 
 #: ../../DESIGN.md:321
+msgid ""
+"A process id can be reused: if an unrelated process takes the id that a dead"
+" server recorded, its leftover lock files are not cleaned up until that "
+"process ends. Recording the start time of the process as well would settle "
+"it."
+msgstr ""
+"プロセスの id は、再利用されることがあります。死んだサーバーが記録した id "
+"を、関係のないプロセスが引き継ぐと、そのサーバーが残したロックファイルは、そのプロセスが終わるまで、掃除されません。プロセスの開始時刻も記録すれば、解決します。"
+
+#: ../../DESIGN.md:323
 msgid "A named-pipe transport for Windows."
 msgstr "Windows 向けの、名前付きパイプの経路。"
 

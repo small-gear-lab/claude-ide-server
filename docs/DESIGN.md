@@ -315,7 +315,9 @@ under its runtime directory and removes the ones that are still there on the nex
 
 ## Open questions
 
-- Whether to start the server on demand (systemd socket activation) or keep it running.
-- What an adapter should do when the server is not there: retry, and for how long.
+- Whether to start the server on demand (systemd socket activation) or keep it running (issue #17).
+- What an adapter should do when the server is not there: retry, and for how long (issue #10).
 - Whether to write both a path and its symlink-resolved form into `workspaceFolders`, since the CLI compares text.
+- A process id can be reused: if an unrelated process takes the id that a dead server recorded, its leftover lock
+  files are not cleaned up until that process ends. Recording the start time of the process as well would settle it.
 - A named-pipe transport for Windows.
