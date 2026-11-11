@@ -11,8 +11,9 @@ use serde_json::{Value, json};
 use crate::adapter::{AdapterHandle, RequestError};
 use crate::mcp::{ToolBackend, ToolDefinition, ToolError, ToolResult};
 use crate::model::{
-    self, ModelError, SelectionAnswer, diagnostics_to_tool_text, file_uri,
-    open_editors_to_tool_text,
+    self, ModelError, OpenFileRequest, OpenedFile, SelectionAnswer, diagnostics_to_tool_text,
+    document_state_from_adapter, document_state_to_tool_text, file_uri, open_editors_to_tool_text,
+    save_from_adapter, save_to_tool_text,
 };
 
 /// What runs a tool.
@@ -36,6 +37,9 @@ enum Answer {
     Selection,
     OpenEditors,
     Diagnostics,
+    OpenFile,
+    DocumentDirty,
+    SaveDocument,
 }
 
 struct ToolSpec {
@@ -113,7 +117,7 @@ const TOOLS: &[ToolSpec] = &[
     ToolSpec {
         name: "openFile",
         backing: Backing::Adapter("openFile"),
-        answer: Answer::Raw,
+        answer: Answer::OpenFile,
         description: "Open a file in the editor and optionally select a range of text.",
         schema: open_file_schema,
     },
@@ -185,14 +189,14 @@ const TOOLS: &[ToolSpec] = &[
     ToolSpec {
         name: "checkDocumentDirty",
         backing: Backing::Adapter("checkDocumentDirty"),
-        answer: Answer::Raw,
+        answer: Answer::DocumentDirty,
         description: "Check whether a file has unsaved changes.",
         schema: file_path_only,
     },
     ToolSpec {
         name: "saveDocument",
         backing: Backing::Adapter("saveDocument"),
-        answer: Answer::Raw,
+        answer: Answer::SaveDocument,
         description: "Save a file that has unsaved changes.",
         schema: file_path_only,
     },
@@ -263,6 +267,10 @@ impl ToolBackend for WorkspaceTools {
                 is_error: true,
             });
         }
+        // A path that is not absolute is taken from the first folder of the workspace, as the VS Code extension does, so
+        // that the adapter always gets an absolute one.
+        let mut arguments = arguments;
+        absolute_file_path(&mut arguments, &(self.folders)());
         let method = match spec.backing {
             Backing::Server => {
                 return Ok(ToolResult {
@@ -281,22 +289,24 @@ impl ToolBackend for WorkspaceTools {
                 method
             }
         };
-        Ok(match self.adapter.request(method, arguments).await {
-            Ok(result) => match answer_text(spec.answer, &result) {
-                Ok(text) => ToolResult {
-                    text,
-                    is_error: false,
+        Ok(
+            match self.adapter.request(method, arguments.clone()).await {
+                Ok(result) => match answer_text(spec.answer, &result, &arguments) {
+                    Ok(text) => ToolResult {
+                        text,
+                        is_error: false,
+                    },
+                    Err(error) => ToolResult {
+                        text: format!("the editor's answer to {name} is not valid: {error}"),
+                        is_error: true,
+                    },
                 },
                 Err(error) => ToolResult {
-                    text: format!("the editor's answer to {name} is not valid: {error}"),
+                    text: error_text(&error),
                     is_error: true,
                 },
             },
-            Err(error) => ToolResult {
-                text: error_text(&error),
-                is_error: true,
-            },
-        })
+        )
     }
 }
 
@@ -335,7 +345,13 @@ fn check_arguments(schema: &Value, arguments: &Value) -> Result<(), String> {
     Ok(())
 }
 
-fn answer_text(answer: Answer, result: &Value) -> Result<String, ModelError> {
+fn answer_text(answer: Answer, result: &Value, arguments: &Value) -> Result<String, ModelError> {
+    let file_path = || {
+        arguments
+            .get("filePath")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+    };
     Ok(match answer {
         Answer::Raw => result_text(result),
         Answer::Selection => SelectionAnswer::from_adapter(result)?.to_tool_text(),
@@ -343,7 +359,46 @@ fn answer_text(answer: Answer, result: &Value) -> Result<String, ModelError> {
             open_editors_to_tool_text(&model::open_editors_from_adapter(result)?)
         }
         Answer::Diagnostics => diagnostics_to_tool_text(&model::diagnostics_from_adapter(result)?),
+        Answer::OpenFile => {
+            let request = OpenFileRequest::from_arguments(arguments);
+            OpenedFile::from_adapter(result, request.start_text.is_some())?.to_tool_text(&request)
+        }
+        Answer::DocumentDirty => {
+            document_state_to_tool_text(file_path(), document_state_from_adapter(result)?)
+        }
+        Answer::SaveDocument => save_to_tool_text(file_path(), save_from_adapter(result)?),
     })
+}
+
+/// Makes `filePath` of the arguments absolute, if it is not, from the first folder of the workspace (and `.` and `..`
+/// in it are resolved, without looking at the file system). Left as it is if there is no folder.
+fn absolute_file_path(arguments: &mut Value, folders: &[String]) {
+    let Some(path) = arguments.get("filePath").and_then(Value::as_str) else {
+        return;
+    };
+    if path.starts_with('/') || path.is_empty() {
+        return;
+    }
+    let Some(first) = folders.first() else {
+        return;
+    };
+    let joined = join_normalized(first, path);
+    arguments["filePath"] = Value::String(joined);
+}
+
+/// `base` and `relative` joined, with `.` and `..` resolved, and no `..` going above the root.
+fn join_normalized(base: &str, relative: &str) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    for part in base.split('/').chain(relative.split('/')) {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop();
+            }
+            other => parts.push(other),
+        }
+    }
+    format!("/{}", parts.join("/"))
 }
 
 /// A string is the text as it is (for example `FILE_SAVED`); anything else is written as JSON.
@@ -433,6 +488,26 @@ mod tests {
         );
         assert!(check_arguments(&schema, &json!([1])).is_err());
         assert_eq!(check_arguments(&no_arguments(), &json!({})), Ok(()));
+    }
+
+    #[test]
+    fn a_relative_path_is_taken_from_the_first_folder() {
+        let folders = vec!["/home/u/app/".to_owned(), "/srv/www".to_owned()];
+        let mut arguments = json!({"filePath": "src/../lib/./a.lua", "preview": true});
+        absolute_file_path(&mut arguments, &folders);
+        assert_eq!(arguments["filePath"], "/home/u/app/lib/a.lua");
+        assert_eq!(arguments["preview"], true);
+        // An absolute path, an empty one, and a call without folders are left as they are.
+        for (given, folders) in [
+            ("/etc/hosts", folders.as_slice()),
+            ("", folders.as_slice()),
+            ("a.lua", &[][..]),
+        ] {
+            let mut arguments = json!({ "filePath": given });
+            absolute_file_path(&mut arguments, folders);
+            assert_eq!(arguments["filePath"], given);
+        }
+        assert_eq!(join_normalized("/a", "../../b"), "/b");
     }
 
     #[test]

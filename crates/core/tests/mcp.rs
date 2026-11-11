@@ -52,38 +52,39 @@ async fn only_the_tools_that_can_be_run_are_listed() {
 
 #[tokio::test]
 async fn a_tool_call_goes_to_the_adapter_and_its_answer_comes_back_as_text() {
-    let mut scene = scene().await;
+    // close_tab: one of the tools whose answer is passed on as it is.
+    let mut scene = scene_declaring(&["closeDiff"]).await;
     let (answer, (method, params)) = call_tool(
         &mut scene,
-        "openFile",
-        json!({"filePath": "/home/user/project/a.lua"}),
-        Ok(json!({"languageId": "lua", "lineCount": 3})),
+        "close_tab",
+        json!({"tab_name": "diff-1"}),
+        Ok(json!({"closed": 1})),
     )
     .await;
 
-    assert_eq!(method, "openFile");
-    assert_eq!(params, json!({"filePath": "/home/user/project/a.lua"}));
+    assert_eq!(method, "closeDiff");
+    assert_eq!(params, json!({"tab_name": "diff-1"}));
     assert_shape(&answer["result"], "tool_call_result.shape.json");
     assert_eq!(answer["result"]["isError"], false);
     assert_eq!(answer["result"]["content"][0]["type"], "text");
     let text = answer["result"]["content"][0]["text"].as_str().unwrap();
     assert_eq!(
         serde_json::from_str::<Value>(text).unwrap(),
-        json!({"languageId": "lua", "lineCount": 3})
+        json!({"closed": 1})
     );
 }
 
 #[tokio::test]
 async fn an_answer_that_is_a_string_is_the_text_as_it_is() {
-    let mut scene = scene().await;
+    let mut scene = scene_declaring(&["closeDiff"]).await;
     let (answer, _) = call_tool(
         &mut scene,
-        "openFile",
-        json!({"filePath": "/a"}),
-        Ok(json!("FILE_SAVED")),
+        "close_tab",
+        json!({"tab_name": "diff-1"}),
+        Ok(json!("TAB_CLOSED")),
     )
     .await;
-    assert_eq!(answer["result"]["content"][0]["text"], "FILE_SAVED");
+    assert_eq!(answer["result"]["content"][0]["text"], "TAB_CLOSED");
     assert_eq!(answer["result"]["isError"], false);
 }
 

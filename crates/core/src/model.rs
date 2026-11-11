@@ -421,6 +421,192 @@ pub(crate) fn file_uri(path: &str) -> String {
     uri
 }
 
+/// What came of looking for the text that `openFile` was given (`startText`, `endText`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextMatch {
+    /// The text of `startText` is selected (no `endText` was given).
+    Text,
+    /// The text from `startText` to `endText` is selected.
+    Range,
+    /// `startText` was found and the cursor is there, but `endText` was not found.
+    Positioned,
+    /// `startText` was not found.
+    NotFound,
+}
+
+impl TextMatch {
+    fn from_adapter(value: &Value, path: &str) -> Result<Self, ModelError> {
+        match value.as_str() {
+            Some("text") => Ok(Self::Text),
+            Some("range") => Ok(Self::Range),
+            Some("positioned") => Ok(Self::Positioned),
+            Some("not_found") => Ok(Self::NotFound),
+            _ => Err(error(
+                path,
+                "expected one of \"text\", \"range\", \"positioned\", \"not_found\"",
+            )),
+        }
+    }
+}
+
+/// What `openFile` was asked: the parts of its arguments that the text of the result depends on.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct OpenFileRequest<'a> {
+    pub start_text: Option<&'a str>,
+    pub end_text: Option<&'a str>,
+    /// Whether the file is made the active one (`makeFrontmost`, true unless it says false).
+    pub make_frontmost: bool,
+}
+
+impl<'a> OpenFileRequest<'a> {
+    /// From the arguments of the tool call. An empty text is none, as in the VS Code extension.
+    pub fn from_arguments(arguments: &'a Value) -> Self {
+        let text = |key: &str| {
+            arguments
+                .get(key)
+                .and_then(Value::as_str)
+                .filter(|text| !text.is_empty())
+        };
+        Self {
+            start_text: text("startText"),
+            end_text: text("endText"),
+            make_frontmost: arguments.get("makeFrontmost") != Some(&Value::Bool(false)),
+        }
+    }
+}
+
+/// A file that the editor opened for `openFile`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpenedFile {
+    /// The absolute path of the file.
+    pub file_path: String,
+    pub language_id: String,
+    pub line_count: u32,
+    pub is_dirty: bool,
+    pub is_untitled: bool,
+    /// What came of `startText`, if one was given.
+    pub text_match: Option<TextMatch>,
+}
+
+impl OpenedFile {
+    /// From the answer of an adapter to `openFile`:
+    /// `{ filePath, languageId, lineCount, isDirty, isUntitled, selection? }`, where `selection` says what came of `startText`
+    /// (`"text"`, `"range"`, `"positioned"` or `"not_found"`) and must be there if `startText` was given.
+    pub fn from_adapter(value: &Value, asked_for_text: bool) -> Result<Self, ModelError> {
+        let text_match = if asked_for_text {
+            Some(TextMatch::from_adapter(
+                field(value, "selection", "$")?,
+                "$.selection",
+            )?)
+        } else {
+            None
+        };
+        Ok(Self {
+            file_path: absolute_path(value, "filePath", "$")?,
+            language_id: string(value, "languageId", "$")?,
+            line_count: count(value, "lineCount", "$")?,
+            is_dirty: boolean(value, "isDirty", "$")?,
+            is_untitled: boolean(value, "isUntitled", "$")?,
+            text_match,
+        })
+    }
+
+    /// The text of the result of `openFile`, as the VS Code extension writes it: the message alone when `startText` was
+    /// given or the file is made the frontmost one, and the details as JSON when it is not.
+    pub fn to_tool_text(&self, request: &OpenFileRequest) -> String {
+        let start = request.start_text.unwrap_or_default();
+        let end = request.end_text.unwrap_or_default();
+        if let Some(text_match) = self.text_match {
+            return match text_match {
+                TextMatch::Text => format!("Opened file and selected text \"{start}\""),
+                TextMatch::Range => {
+                    format!("Opened file and selected text from \"{start}\" to \"{end}\"")
+                }
+                TextMatch::Positioned => format!(
+                    "Opened file and positioned at \"{start}\" (end text \"{end}\" not found)"
+                ),
+                TextMatch::NotFound => format!("Opened file, but text \"{start}\" not found"),
+            };
+        }
+        let message = format!("Opened file: {}", self.file_path);
+        if request.make_frontmost {
+            return message;
+        }
+        json!({
+            "success": true,
+            "filePath": self.file_path,
+            "fileUrl": file_uri(&self.file_path),
+            "message": message,
+            "languageId": self.language_id,
+            "lineCount": self.line_count,
+            "isDirty": self.is_dirty,
+            "isUntitled": self.is_untitled,
+            "isClosed": false,
+        })
+        .to_string()
+    }
+}
+
+/// Whether the answer of an adapter says that the document is not open: `{ "success": false }`, with a message that
+/// the server does not need (it says which file, since it knows).
+fn says_not_open(value: &Value) -> bool {
+    value.get("success") == Some(&Value::Bool(false))
+}
+
+/// The text of a result that says that a document is not open, as the VS Code extension writes it.
+fn not_open_text(file_path: &str) -> String {
+    json!({ "success": false, "message": format!("Document not open: {file_path}") }).to_string()
+}
+
+/// What an adapter answers to `checkDocumentDirty`: `{ isDirty, isUntitled }`, or `{ success: false }` if the document is
+/// not open. Returns `None` for a document that is not open.
+pub fn document_state_from_adapter(value: &Value) -> Result<Option<(bool, bool)>, ModelError> {
+    if says_not_open(value) {
+        return Ok(None);
+    }
+    Ok(Some((
+        boolean(value, "isDirty", "$")?,
+        boolean(value, "isUntitled", "$")?,
+    )))
+}
+
+/// The text of the result of `checkDocumentDirty` for the file `file_path` (as the caller wrote it).
+pub fn document_state_to_tool_text(file_path: &str, state: Option<(bool, bool)>) -> String {
+    match state {
+        Some((is_dirty, is_untitled)) => json!({
+            "success": true,
+            "filePath": file_path,
+            "isDirty": is_dirty,
+            "isUntitled": is_untitled,
+        })
+        .to_string(),
+        None => not_open_text(file_path),
+    }
+}
+
+/// What an adapter answers to `saveDocument`: `{ saved }`, or `{ success: false }` if the document is not open.
+/// Returns `None` for a document that is not open.
+pub fn save_from_adapter(value: &Value) -> Result<Option<bool>, ModelError> {
+    if says_not_open(value) {
+        return Ok(None);
+    }
+    Ok(Some(boolean(value, "saved", "$")?))
+}
+
+/// The text of the result of `saveDocument` for the file `file_path` (as the caller wrote it).
+pub fn save_to_tool_text(file_path: &str, saved: Option<bool>) -> String {
+    match saved {
+        Some(saved) => json!({
+            "success": true,
+            "filePath": file_path,
+            "saved": saved,
+            "message": if saved { "Document saved successfully" } else { "Document was not dirty or save failed" },
+        })
+        .to_string(),
+        None => not_open_text(file_path),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -615,5 +801,117 @@ mod tests {
             "file:///home/u/my%20project"
         );
         assert_eq!(file_uri("/a/日本"), "file:///a/%E6%97%A5%E6%9C%AC");
+    }
+
+    #[test]
+    fn an_opened_file_is_text_or_details_as_the_extension_writes_it() {
+        let answer = json!({"filePath": "/a/b.lua", "languageId": "lua", "lineCount": 12, "isDirty": false, "isUntitled": false});
+        let opened = OpenedFile::from_adapter(&answer, false).unwrap();
+        let arguments = json!({"filePath": "/a/b.lua"});
+        let frontmost = OpenFileRequest::from_arguments(&arguments);
+        assert_eq!(opened.to_tool_text(&frontmost), "Opened file: /a/b.lua");
+        let arguments = json!({"makeFrontmost": false});
+        let behind = OpenFileRequest::from_arguments(&arguments);
+        let details: Value = serde_json::from_str(&opened.to_tool_text(&behind)).unwrap();
+        assert_eq!(
+            details,
+            json!({"success": true, "filePath": "/a/b.lua", "fileUrl": "file:///a/b.lua", "message": "Opened file: /a/b.lua",
+                   "languageId": "lua", "lineCount": 12, "isDirty": false, "isUntitled": false, "isClosed": false})
+        );
+        assert_eq!(
+            OpenedFile::from_adapter(&json!({"filePath": "b.lua", "languageId": "lua", "lineCount": 1, "isDirty": false, "isUntitled": false}), false)
+                .unwrap_err()
+                .path,
+            "$.filePath"
+        );
+        assert_eq!(
+            OpenedFile::from_adapter(&json!({"filePath": "/b.lua", "languageId": "lua", "lineCount": 1, "isUntitled": false}), false)
+                .unwrap_err()
+                .path,
+            "$.isDirty"
+        );
+    }
+
+    #[test]
+    fn what_came_of_the_text_to_select_is_a_message() {
+        let with = |selection: &str| json!({"filePath": "/a.lua", "languageId": "lua", "lineCount": 3, "isDirty": false, "isUntitled": false, "selection": selection});
+        let arguments = json!({"startText": "foo", "endText": "bar"});
+        let request = OpenFileRequest::from_arguments(&arguments);
+        let text = |selection: &str| {
+            OpenedFile::from_adapter(&with(selection), true)
+                .unwrap()
+                .to_tool_text(&request)
+        };
+        assert_eq!(
+            text("range"),
+            "Opened file and selected text from \"foo\" to \"bar\""
+        );
+        assert_eq!(
+            text("positioned"),
+            "Opened file and positioned at \"foo\" (end text \"bar\" not found)"
+        );
+        assert_eq!(text("not_found"), "Opened file, but text \"foo\" not found");
+        assert_eq!(text("text"), "Opened file and selected text \"foo\"");
+        // The adapter must say what came of it when it was asked, and with one of the four words.
+        let plain = json!({"filePath": "/a.lua", "languageId": "lua", "lineCount": 3, "isDirty": false, "isUntitled": false});
+        assert_eq!(
+            OpenedFile::from_adapter(&plain, true).unwrap_err().path,
+            "$.selection"
+        );
+        assert_eq!(
+            OpenedFile::from_adapter(&with("maybe"), true)
+                .unwrap_err()
+                .path,
+            "$.selection"
+        );
+        // An empty text is none.
+        let arguments = json!({"startText": ""});
+        let empty = OpenFileRequest::from_arguments(&arguments);
+        assert!(empty.start_text.is_none());
+    }
+
+    #[test]
+    fn the_state_of_a_document_and_a_document_that_is_not_open() {
+        assert_eq!(
+            document_state_from_adapter(&json!({"isDirty": true, "isUntitled": false})),
+            Ok(Some((true, false)))
+        );
+        assert_eq!(
+            document_state_from_adapter(&json!({"success": false})),
+            Ok(None)
+        );
+        assert_eq!(
+            document_state_from_adapter(&json!({"isDirty": true}))
+                .unwrap_err()
+                .path,
+            "$.isUntitled"
+        );
+        let open: Value =
+            serde_json::from_str(&document_state_to_tool_text("/a", Some((true, false)))).unwrap();
+        assert_eq!(
+            open,
+            json!({"success": true, "filePath": "/a", "isDirty": true, "isUntitled": false})
+        );
+        let closed: Value = serde_json::from_str(&document_state_to_tool_text("/a", None)).unwrap();
+        assert_eq!(
+            closed,
+            json!({"success": false, "message": "Document not open: /a"})
+        );
+    }
+
+    #[test]
+    fn saving_a_document_and_a_document_that_is_not_open() {
+        assert_eq!(save_from_adapter(&json!({"saved": true})), Ok(Some(true)));
+        assert_eq!(save_from_adapter(&json!({"success": false})), Ok(None));
+        assert_eq!(save_from_adapter(&json!({})).unwrap_err().path, "$.saved");
+        let saved: Value = serde_json::from_str(&save_to_tool_text("/a", Some(true))).unwrap();
+        assert_eq!(
+            saved,
+            json!({"success": true, "filePath": "/a", "saved": true, "message": "Document saved successfully"})
+        );
+        let not_saved: Value = serde_json::from_str(&save_to_tool_text("/a", Some(false))).unwrap();
+        assert_eq!(not_saved["saved"], false);
+        let closed: Value = serde_json::from_str(&save_to_tool_text("/a", None)).unwrap();
+        assert_eq!(closed["message"], "Document not open: /a");
     }
 }
