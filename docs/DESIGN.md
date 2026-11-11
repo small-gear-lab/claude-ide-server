@@ -171,8 +171,29 @@ Claude with the text `FILE_SAVED`; on `"rejected"`, `DIFF_REJECTED`.
 
 ### Versioning
 
-`register` carries `protocolVersion`. The server refuses an adapter whose major version it does not know.
-Methods can be added without a major bump; an adapter lists in `methods` what it implements.
+`register` carries `protocolVersion`, an integer; the version described here is `1`. The server refuses an adapter
+whose version it does not know. Methods can be added without a bump; an adapter lists in `methods` what it
+implements.
+
+### `register` in detail
+
+- It must be the first message, and it is a request. Anything else first is answered with an error (a request) or
+  just closes the connection (a notification). `register` twice is an error.
+- Parameters: `protocolVersion` (integer), `ideName` (non-empty string), `pid` (positive integer), `workspaceFolders`
+  (a non-empty array of strings), `methods` (an array of strings). A missing or wrong parameter is an error.
+- The result is `{ "port": <integer> }`. By then the port listens and the lock file exists.
+- An adapter has 10 seconds to send it; a connection that does not is closed.
+- `workspaceFoldersChanged` takes `{ "workspaceFolders": [...] }` (non-empty). Anything else is ignored.
+- The server's methods that an adapter has not declared in `methods` are not called. A request that the server
+  does not know, sent by a registered adapter, gets `-32601`.
+
+Error codes: the JSON-RPC ones (`-32602` for bad parameters, `-32601` for an unknown method) and three of this
+protocol: `-32000` the protocol version is not supported, `-32001` the workspace could not be set up (the port or
+the lock file), `-32002` the first message was not `register`, or `register` came twice. After an error to
+`register` the server closes the connection.
+
+When the server drops a workspace it sends the notification `shutdown` and closes the connection. A request that
+is waiting for an answer when the connection ends fails.
 
 ## Structure of the core crate
 
@@ -183,10 +204,17 @@ types of the libraries below do not appear in the crate's public interface.
 Each outside library sits behind a type of the crate's own, and what lies inside knows only those types. There are
 three layers:
 
-- **The Claude side:** the WebSocket server (`ws`), the MCP handling, the lock files.
-- **The middle:** workspaces, the dispatch of tool calls, and the crate's own types for tools, selections and
-  diagnostics.
-- **The adapter side:** the adapter transport and the JSON-RPC framing.
+- **The Claude side:** the WebSocket server (`ws`), the MCP handling, the lock files (`lock`).
+- **The middle:** workspaces (`workspace`), the dispatch of tool calls, and the crate's own types for tools,
+  selections and diagnostics.
+- **The adapter side:** the adapter transport, the `register` exchange and the requests (`adapter`), and the
+  JSON-RPC framing (`jsonrpc`).
+
+The sides do not know each other. `adapter` has no port and no lock file in it: when an adapter registers, it
+hands the registration up (as a `Registering`) and waits for the answer, which is either a port or a refusal. The
+`workspace` module is where the two meet: it starts the WebSocket server and writes the lock file for each
+registration, gives the adapter its port, and ties their lifetimes together. `ws` and `lock` know nothing of
+adapters.
 
 Three seams are drawn on purpose, where this design already says that something may change:
 

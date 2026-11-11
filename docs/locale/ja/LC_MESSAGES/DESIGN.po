@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-ide-server\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-11 14:02+0900\n"
+"POT-Creation-Date: 2026-11-11 14:23+0900\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: Small Gear Lab\n"
 "Language-Team: ja <LL@li.org>\n"
@@ -660,19 +660,92 @@ msgstr "バージョン"
 
 #: ../../DESIGN.md:174
 msgid ""
-"`register` carries `protocolVersion`. The server refuses an adapter whose "
-"major version it does not know. Methods can be added without a major bump; "
-"an adapter lists in `methods` what it implements."
+"`register` carries `protocolVersion`, an integer; the version described here"
+" is `1`. The server refuses an adapter whose version it does not know. "
+"Methods can be added without a bump; an adapter lists in `methods` what it "
+"implements."
 msgstr ""
-"`register` は、`protocolVersion` "
-"を持ちます。サーバーは、知らないメジャーバージョンのアダプターを断ります。メソッドは、メジャーバージョンを上げずに足せます。アダプターは、実装しているものを"
-" `methods` に並べます。"
+"`register` は、整数の `protocolVersion` を持ちます。ここに書いてある版は `1` "
+"です。サーバーは、知らない版のアダプターを断ります。メソッドは、版を上げずに足せます。アダプターは、実装しているものを `methods` に並べます。"
 
-#: ../../DESIGN.md:177
+#: ../../DESIGN.md:178
+msgid "`register` in detail"
+msgstr "`register` の詳細"
+
+#: ../../DESIGN.md:180
+msgid ""
+"It must be the first message, and it is a request. Anything else first is "
+"answered with an error (a request) or just closes the connection (a "
+"notification). `register` twice is an error."
+msgstr ""
+"`register` "
+"は、最初のメッセージで、要求でなければなりません。ほかのものが最初に来たときは、要求ならエラーで答え、通知なら、接続を閉じるだけです。`register`"
+" を 2 回送るのも、エラーです。"
+
+#: ../../DESIGN.md:182
+msgid ""
+"Parameters: `protocolVersion` (integer), `ideName` (non-empty string), `pid`"
+" (positive integer), `workspaceFolders` (a non-empty array of strings), "
+"`methods` (an array of strings). A missing or wrong parameter is an error."
+msgstr ""
+"引数は、`protocolVersion`（整数）、`ideName`（空でない文字列）、`pid`（正の整数）、`workspaceFolders`（空でない文字列の配列）、`methods`（文字列の配列）です。足りない引数や、型が違う引数は、エラーです。"
+
+#: ../../DESIGN.md:184
+#, python-brace-format
+msgid ""
+"The result is `{ \"port\": <integer> }`. By then the port listens and the "
+"lock file exists."
+msgstr "結果は `{ \"port\": <整数> }` です。この時点で、そのポートは待ち受けていて、ロックファイルもあります。"
+
+#: ../../DESIGN.md:185
+msgid ""
+"An adapter has 10 seconds to send it; a connection that does not is closed."
+msgstr "アダプターは、10 秒以内に送らなければなりません。送らない接続は、閉じられます。"
+
+#: ../../DESIGN.md:186
+#, python-brace-format
+msgid ""
+"`workspaceFoldersChanged` takes `{ \"workspaceFolders\": [...] }` (non-"
+"empty). Anything else is ignored."
+msgstr ""
+"`workspaceFoldersChanged` の引数は、`{ \"workspaceFolders\": [...] "
+"}`（空でない）です。それ以外は、無視されます。"
+
+#: ../../DESIGN.md:187
+msgid ""
+"The server's methods that an adapter has not declared in `methods` are not "
+"called. A request that the server does not know, sent by a registered "
+"adapter, gets `-32601`."
+msgstr ""
+"アダプターが `methods` で宣言していないメソッドは、呼ばれません。登録したアダプターが、サーバーの知らない要求を送ると、`-32601` "
+"が返ります。"
+
+#: ../../DESIGN.md:190
+msgid ""
+"Error codes: the JSON-RPC ones (`-32602` for bad parameters, `-32601` for an"
+" unknown method) and three of this protocol: `-32000` the protocol version "
+"is not supported, `-32001` the workspace could not be set up (the port or "
+"the lock file), `-32002` the first message was not `register`, or `register`"
+" came twice. After an error to `register` the server closes the connection."
+msgstr ""
+"エラーコードは、JSON-RPC のもの（引数が悪いときは `-32602`、知らないメソッドは `-32601`）と、このプロトコルの 3 "
+"つです。`-32000` はプロトコルの版に未対応、`-32001` はワークスペースを用意できなかった（ポートかロックファイル）、`-32002` "
+"は最初のメッセージが `register` ではなかった、または `register` が 2 回来た、です。`register` "
+"へのエラーのあと、サーバーは、接続を閉じます。"
+
+#: ../../DESIGN.md:195
+msgid ""
+"When the server drops a workspace it sends the notification `shutdown` and "
+"closes the connection. A request that is waiting for an answer when the "
+"connection ends fails."
+msgstr ""
+"サーバーがワークスペースを手放すときは、通知 `shutdown` を送って、接続を閉じます。接続が終わったときに、答えを待っている要求は、失敗します。"
+
+#: ../../DESIGN.md:198
 msgid "Structure of the core crate"
 msgstr "core クレートの構成"
 
-#: ../../DESIGN.md:179
+#: ../../DESIGN.md:200
 msgid ""
 "The crate runs on tokio: its `async` functions must be called inside a tokio"
 " runtime, and tokio's I/O traits (`AsyncRead`, `AsyncWrite`) are the common "
@@ -683,35 +756,56 @@ msgstr ""
 " の I/O のトレイト（`AsyncRead`、`AsyncWrite`）を使います。それ以外の tokio "
 "の型（チャネル、タスク）と、下の層のライブラリの型は、このクレートの公開されたインターフェースに出しません。"
 
-#: ../../DESIGN.md:183
+#: ../../DESIGN.md:204
 msgid ""
 "Each outside library sits behind a type of the crate's own, and what lies "
 "inside knows only those types. There are three layers:"
 msgstr "外のライブラリは、それぞれ、このクレート自身の型の後ろに置きます。内側は、その型だけを知っています。層は 3 つです。"
 
-#: ../../DESIGN.md:186
+#: ../../DESIGN.md:207
 msgid ""
 "**The Claude side:** the WebSocket server (`ws`), the MCP handling, the lock"
-" files."
-msgstr "**Claude 側:** WebSocket サーバー（`ws`）、MCP の処理、ロックファイル。"
+" files (`lock`)."
+msgstr "**Claude 側:** WebSocket サーバー（`ws`）、MCP の処理、ロックファイル（`lock`）。"
 
-#: ../../DESIGN.md:187
+#: ../../DESIGN.md:208
 msgid ""
-"**The middle:** workspaces, the dispatch of tool calls, and the crate's own "
-"types for tools, selections and diagnostics."
-msgstr "**中間:** ワークスペース、ツール呼び出しの振り分け、ツール・選択範囲・診断についての、このクレート自身の型。"
+"**The middle:** workspaces (`workspace`), the dispatch of tool calls, and "
+"the crate's own types for tools, selections and diagnostics."
+msgstr ""
+"**中間:** ワークスペース（`workspace`）、ツール呼び出しの振り分け、ツール・選択範囲・診断についての、このクレート自身の型。"
 
-#: ../../DESIGN.md:189
-msgid "**The adapter side:** the adapter transport and the JSON-RPC framing."
-msgstr "**アダプター側:** アダプターとの通信路と、JSON-RPC の区切り。"
+#: ../../DESIGN.md:210
+msgid ""
+"**The adapter side:** the adapter transport, the `register` exchange and the"
+" requests (`adapter`), and the JSON-RPC framing (`jsonrpc`)."
+msgstr ""
+"**アダプター側:** アダプターとの通信路、`register` のやりとり、要求（`adapter`）と、JSON-RPC "
+"の区切り（`jsonrpc`）。"
 
-#: ../../DESIGN.md:191
+#: ../../DESIGN.md:213
+msgid ""
+"The sides do not know each other. `adapter` has no port and no lock file in "
+"it: when an adapter registers, it hands the registration up (as a "
+"`Registering`) and waits for the answer, which is either a port or a "
+"refusal. The `workspace` module is where the two meet: it starts the "
+"WebSocket server and writes the lock file for each registration, gives the "
+"adapter its port, and ties their lifetimes together. `ws` and `lock` know "
+"nothing of adapters."
+msgstr ""
+"各側は、互いを知りません。`adapter` "
+"には、ポートもロックファイルも出てきません。アダプターが登録すると、登録の内容を上へ渡し（`Registering`）、答え（ポートか、拒否）を待ちます。両者が出会うのは"
+" `workspace` モジュールです。登録ごとに、WebSocket "
+"サーバーを起動し、ロックファイルを書き、アダプターにポートを渡し、それぞれの寿命を結びつけます。`ws` と `lock` "
+"は、アダプターのことを何も知りません。"
+
+#: ../../DESIGN.md:219
 msgid ""
 "Three seams are drawn on purpose, where this design already says that "
 "something may change:"
 msgstr "この設計がすでに「変わるかもしれない」と言っている所に、3 つの境界を、わざと引いています。"
 
-#: ../../DESIGN.md:193
+#: ../../DESIGN.md:221
 msgid ""
 "**The adapter transport.** A Unix socket now, a named pipe later. Everything"
 " above it works with a duplex byte stream that a listener accepts, not with "
@@ -720,7 +814,7 @@ msgstr ""
 "**アダプターとの通信路。** 今は Unix ソケット、あとで名前付きパイプ。これより上は、Unix "
 "ソケットの型ではなく、待ち受けが受け付ける、双方向のバイトストリームを使います。"
 
-#: ../../DESIGN.md:195
+#: ../../DESIGN.md:223
 msgid ""
 "**The MCP SDK.** If `rmcp` is used, its types stay inside the Claude side. "
 "The middle and the adapter side use the crate's own types, so that a new "
@@ -729,7 +823,7 @@ msgstr ""
 "**MCP の SDK。** `rmcp` を使うなら、その型は、Claude "
 "側の中にとどめます。中間とアダプター側は、このクレート自身の型を使います。SDK の新しい版や、別の SDK に替えても、1 つの層だけで済みます。"
 
-#: ../../DESIGN.md:197
+#: ../../DESIGN.md:225
 msgid ""
 "**The file system and the environment.** The lock file directory, the "
 "runtime directory and the check that a `pid` is alive are passed in as "
@@ -738,7 +832,7 @@ msgstr ""
 "**ファイルシステムと環境。** ロックファイルのディレクトリ、実行時のディレクトリ、`pid` "
 "が生きているかの確認は、設定として外から渡します。テストでは、一時ディレクトリを渡します。"
 
-#: ../../DESIGN.md:200
+#: ../../DESIGN.md:228
 msgid ""
 "Nothing else is put behind a trait in advance (TCP itself, the JSON shape of"
 " a lock file). A seam is added when something is known to change, not "
@@ -747,19 +841,19 @@ msgstr ""
 "それ以外は、前もってトレイトの後ろには置きません（TCP そのもの、ロックファイルの JSON "
 "の形）。境界は、変わることが分かったときに足します。その前には足しません。"
 
-#: ../../DESIGN.md:203
+#: ../../DESIGN.md:231
 msgid "Lifecycle"
 msgstr "起動から終了までの流れ"
 
-#: ../../DESIGN.md:205
+#: ../../DESIGN.md:233
 msgid "The server starts and listens on the adapter socket."
 msgstr "サーバーが起動して、アダプターのソケットで待ち受けます。"
 
-#: ../../DESIGN.md:206
+#: ../../DESIGN.md:234
 msgid "An adapter connects and sends `register`."
 msgstr "アダプターが接続して、`register` を送ります。"
 
-#: ../../DESIGN.md:207
+#: ../../DESIGN.md:235
 msgid ""
 "The server picks a free port on `127.0.0.1`, generates a 128-bit token from "
 "the OS CSPRNG, writes the lock file atomically (write to a temporary name, "
@@ -768,7 +862,7 @@ msgstr ""
 "サーバーは、`127.0.0.1` の空いているポートを選び、OS の暗号論的乱数から 128 "
 "ビットのトークンを作り、ロックファイルを原子的に書き（一時的な名前で書いてから、名前を変える）、ポートを返します。"
 
-#: ../../DESIGN.md:209
+#: ../../DESIGN.md:237
 msgid ""
 "The CLI finds the lock file, connects, and authenticates. Selection and "
 "diagnostics flow to it; its tool calls become adapter requests."
@@ -776,19 +870,19 @@ msgstr ""
 "CLI が、ロックファイルを見つけて、つないで、認証します。選択範囲と診断は、CLI へ流れます。CLI "
 "のツール呼び出しは、アダプターへの要求になります。"
 
-#: ../../DESIGN.md:211
+#: ../../DESIGN.md:239
 msgid ""
 "The adapter disconnects (or crashes): the server closes the workspace's "
 "connections, removes the lock file, and fails any pending requests."
 msgstr "アダプターが切れる（か、落ちる）と、サーバーは、そのワークスペースの接続を閉じ、ロックファイルを消し、保留中の要求を失敗にします。"
 
-#: ../../DESIGN.md:213
+#: ../../DESIGN.md:241
 msgid ""
 "On shutdown the server sends `shutdown` to adapters and removes every lock "
 "file it wrote."
 msgstr "終了するとき、サーバーは、アダプターに `shutdown` を送り、自分が書いたロックファイルをすべて消します。"
 
-#: ../../DESIGN.md:215
+#: ../../DESIGN.md:243
 msgid ""
 "If the server itself is killed, its lock files are left behind. The server "
 "records the lock files it wrote under its runtime directory and removes the "
@@ -796,18 +890,18 @@ msgid ""
 msgstr ""
 "サーバー自身が強制終了されると、ロックファイルが残ります。サーバーは、自分が書いたロックファイルを、実行時のディレクトリに記録しておき、次の起動で、まだ残っているものを消します。"
 
-#: ../../DESIGN.md:218
+#: ../../DESIGN.md:246
 msgid "Security"
 msgstr "セキュリティ"
 
-#: ../../DESIGN.md:220
+#: ../../DESIGN.md:248
 msgid ""
 "Every listener is on `127.0.0.1`. The adapter socket is in a 0700 directory "
 "and is itself 0600."
 msgstr ""
 "待ち受けは、すべて `127.0.0.1` です。アダプターのソケットは、モード 0700 のディレクトリの中にあり、ソケット自身も 0600 です。"
 
-#: ../../DESIGN.md:221
+#: ../../DESIGN.md:249
 msgid ""
 "The token is checked on every WebSocket upgrade. A web page cannot set that "
 "header, so a browser cannot talk to the port."
@@ -815,13 +909,13 @@ msgstr ""
 "トークンは、WebSocket へのアップグレードのたびに確かめます。Web "
 "ページは、そのヘッダーを付けられないので、ブラウザーは、そのポートと話せません。"
 
-#: ../../DESIGN.md:223
+#: ../../DESIGN.md:251
 msgid ""
 "Frame and message sizes are capped. A malformed message closes that "
 "connection and nothing else."
 msgstr "フレームとメッセージの大きさには、上限があります。壊れたメッセージは、その接続だけを閉じます。"
 
-#: ../../DESIGN.md:224
+#: ../../DESIGN.md:252
 msgid ""
 "Paths from Claude are used as given by the adapter; the server never reads "
 "or writes project files itself. Writing a file after an accepted diff is the"
@@ -830,11 +924,11 @@ msgstr ""
 "Claude "
 "からのパスは、アダプターが渡したとおりに使います。サーバー自身は、プロジェクトのファイルを読み書きしません。差分が承認されたあとの、ファイルの書き込みは、アダプターの仕事です。"
 
-#: ../../DESIGN.md:227
+#: ../../DESIGN.md:255
 msgid "Testing"
 msgstr "テスト"
 
-#: ../../DESIGN.md:229
+#: ../../DESIGN.md:257
 msgid ""
 "A mock Claude client (WebSocket) and a mock adapter (Unix socket) run in the"
 " same test process. Tests cover the handshake, authentication, every tool, "
@@ -843,23 +937,23 @@ msgstr ""
 "偽の Claude クライアント（WebSocket）と、偽のアダプター（Unix "
 "ソケット）を、同じテストのプロセスで動かします。テストは、握手、認証、すべてのツール、通知、差分、切断、後始末を扱います。"
 
-#: ../../DESIGN.md:231
+#: ../../DESIGN.md:259
 msgid ""
 "The expected shapes of tool results come from the observed behaviour above, "
 "written down as fixtures."
 msgstr "ツールの結果の期待する形は、上に書いた、観察した挙動から取り、フィクスチャとして書き残します。"
 
-#: ../../DESIGN.md:232
+#: ../../DESIGN.md:260
 msgid ""
 "Each adapter has its own tests; the Neovim one runs headless Neovim against "
 "a real server."
 msgstr "アダプターごとに、自分のテストを持ちます。Neovim のものは、ヘッドレスの Neovim を、本物のサーバーにつないで動かします。"
 
-#: ../../DESIGN.md:234
+#: ../../DESIGN.md:262
 msgid "Milestones"
 msgstr "マイルストーン"
 
-#: ../../DESIGN.md:236
+#: ../../DESIGN.md:264
 msgid ""
 "**M0, server skeleton.** WebSocket server, lock file, token, `initialize`, "
 "`tools/list`. A mock adapter."
@@ -867,7 +961,7 @@ msgstr ""
 "**M0、サーバーの骨組み。** WebSocket "
 "サーバー、ロックファイル、トークン、`initialize`、`tools/list`。偽のアダプター。"
 
-#: ../../DESIGN.md:237
+#: ../../DESIGN.md:265
 msgid ""
 "**M1, read-only tools.** `getOpenEditors`, `getWorkspaceFolders`, "
 "`getCurrentSelection`, `getLatestSelection`, `getDiagnostics`; "
@@ -876,14 +970,14 @@ msgstr ""
 "**M1、読み取りだけのツール。** "
 "`getOpenEditors`、`getWorkspaceFolders`、`getCurrentSelection`、`getLatestSelection`、`getDiagnostics`。`selection_changed`、`at_mentioned`。"
 
-#: ../../DESIGN.md:239
+#: ../../DESIGN.md:267
 msgid ""
 "**M2, Neovim adapter.** Lua, over `vim.lsp.rpc`. Registers the main windows "
 "only."
 msgstr ""
 "**M2、Neovim のアダプター。** Lua で、`vim.lsp.rpc` の上に作ります。登録するのは、メインのウィンドウだけです。"
 
-#: ../../DESIGN.md:240
+#: ../../DESIGN.md:268
 msgid ""
 "**M3, actions.** `openFile`, `checkDocumentDirty`, `saveDocument`, "
 "`diagnostics_changed`."
@@ -891,7 +985,7 @@ msgstr ""
 "**M3、操作。** "
 "`openFile`、`checkDocumentDirty`、`saveDocument`、`diagnostics_changed`。"
 
-#: ../../DESIGN.md:241
+#: ../../DESIGN.md:269
 msgid ""
 "**M4, diffs.** `openDiff`, `close_tab`, `closeAllDiffTabs`, and an "
 "accept/reject flow in the Neovim adapter."
@@ -899,29 +993,29 @@ msgstr ""
 "**M4、差分。** `openDiff`、`close_tab`、`closeAllDiffTabs`。それと、Neovim "
 "のアダプターの、承認と拒否の流れ。"
 
-#: ../../DESIGN.md:243
+#: ../../DESIGN.md:271
 msgid "Open questions"
 msgstr "未解決の問い"
 
-#: ../../DESIGN.md:245
+#: ../../DESIGN.md:273
 msgid ""
 "Whether to start the server on demand (systemd socket activation) or keep it"
 " running."
 msgstr "サーバーを、必要になったときに起動するか（systemd のソケットアクティベーション）、動かしたままにするか。"
 
-#: ../../DESIGN.md:246
+#: ../../DESIGN.md:274
 msgid ""
 "What an adapter should do when the server is not there: retry, and for how "
 "long."
 msgstr "サーバーがいないときに、アダプターがどうするか。再試行するか、どのくらいの間か。"
 
-#: ../../DESIGN.md:247
+#: ../../DESIGN.md:275
 msgid ""
 "Whether to write both a path and its symlink-resolved form into "
 "`workspaceFolders`, since the CLI compares text."
 msgstr "CLI は文字列で比べるので、`workspaceFolders` に、パスと、シンボリックリンクを解決した形の両方を書くか。"
 
-#: ../../DESIGN.md:248
+#: ../../DESIGN.md:276
 msgid "A named-pipe transport for Windows."
 msgstr "Windows 向けの、名前付きパイプの経路。"
 
