@@ -99,25 +99,36 @@ cargo +1.88 test --workspace --locked                           # the least vers
 
 ## Releasing
 
-A release is made by a tag, and a person publishes it.
+A release is made by a tag. **Nothing waits for a person after the tag is pushed**, so what has to be looked at is looked at
+before it.
+
+Before the tag:
 
 1. The version is the one of `[workspace.package]` in `Cargo.toml`, the same for every crate; the three crates that ask for each
    other's version in `[workspace.dependencies]` (the same file) say it too. Change all four, run `cargo update --workspace`
    (so that `Cargo.lock` follows), and commit. The workflow stops if they differ.
 2. Read `.github/release-notes.md`, which is the head of the notes of every release: what was tried, with which Claude Code,
-   and what was not. Change it if that has changed. Write each paragraph and each item on one line: the page of a release shows a line break of this file as a line break.
-3. Tag the commit `v<version>` and push the tag. The workflow refuses a tag that is not the version of `Cargo.toml`.
-4. The `release` workflow (`.github/workflows/release.yml`) builds the executable for each target, packs it and the Neovim
-   adapter (`tools/package-release.sh`, which can be run by hand to see what a release holds), writes `SHA256SUMS`, makes a
-   build provenance attestation of the files, and leaves a **draft** release (a prerelease only if the version has a suffix, as in `0.2.0-rc.1`).
-5. Look at the draft: download one file, check it against `SHA256SUMS`, run it. Then publish it.
-6. The same run waits for your approval (the environment `crates-io`), and then publishes the crates to crates.io with
-   `cargo publish --workspace`, by trusted publishing: there is no token to keep. A published version cannot be replaced or
-   taken back (it can only be yanked), so look at the packages before you approve (`cargo publish --workspace --dry-run`).
-   If a run stops half way, a crate that is already published stays, and the rest has to be published by hand.
+   and what was not. Change it if that has changed. Write each paragraph and each item on one line: the page of a release
+   shows a line break of this file as a line break.
+3. Push the commit, and see that the `ci` and `docs` workflows are green on it.
+4. Run `cargo publish --workspace --dry-run --locked`: it packs the four crates and builds them from their packages. A published
+   version of a crate cannot be replaced or taken back (it can only be yanked).
+5. If you want to see what a tag would make, *Actions, release, Run workflow* does everything except the release, the
+   attestation and the publication; the files are kept for a week as the artifact `dist`.
 
-*Actions, release, Run workflow* does everything except the release, the attestation and the publication, to see what a tag
-would make; the files are kept for a week as the artifact `dist`.
+The tag:
+
+6. Tag the commit `v<version>` and push the tag. The workflow refuses a tag that is not the version of `Cargo.toml`.
+
+What the workflow (`.github/workflows/release.yml`) does then, with nobody to ask:
+
+- builds the executable for each target and starts it once, packs it and the Neovim adapter (`tools/package-release.sh`, which can
+  be run by hand to see what a release holds), and writes `SHA256SUMS`;
+- makes a build provenance attestation of the files, and a **release** of them (a prerelease only if the version has a suffix, as in `0.2.0-rc.1`);
+- publishes the crates to crates.io with `cargo publish --workspace`, by trusted publishing: there is no token to keep.
+
+After it, look at the release page (the notes can be edited, and files replaced, afterwards), and try `cargo install claude-ide-server`.
+If the publication stops half way, a crate that is already published stays, and the rest has to be published by hand.
 
 The crates are `claude-ide-launchd`, `claude-ide-windows`, `claude-ide-core` and `claude-ide-server`, owned by the team
 `github:small-gear-lab:maintainers`. Trusted publishing is set for each of them on crates.io (this repository, the workflow

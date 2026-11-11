@@ -1,9 +1,9 @@
 name: release
 
-# A tag `v<version>` (the version of Cargo.toml) builds the executable for each system, packs it with the Neovim adapter, and
-# leaves a draft release for a person to look at and publish; and, once a person has approved it, publishes the crates to
-# crates.io. A run by hand (`workflow_dispatch`) does everything but the release and the publication, to see what a release
-# would hold.
+# A tag `v<version>` (the version of Cargo.toml) builds the executable for each system, packs it with the Neovim adapter, makes
+# a release of the files, and publishes the crates to crates.io. Nothing waits for a person: what is checked is checked before
+# the tag is pushed (see "Releasing" in CONTRIBUTING.md). A run by hand (`workflow_dispatch`) does everything but the release
+# and the publication, to see what a release would hold.
 on:
   push:
     tags: ["v*"]
@@ -144,8 +144,8 @@ jobs:
 
   # The crates, to crates.io, from the same commit as the files of the release. Trusted publishing: the job gives crates.io what
   # GitHub says of this run (the repository, this workflow, the environment) and gets a token that lasts a few minutes, so there
-  # is no secret to keep. A publication cannot be taken back, so the environment `crates-io` waits for a person to approve it, and
-  # is open to the runs of tags only (both are set in the settings of the repository).
+  # is no secret to keep. The environment `crates-io` is open to the runs of tags only (it is set in the settings of the
+  # repository), and crates.io is told of that too: a publication cannot be taken back, and nobody is asked before it.
   publish:
     if: github.ref_type == 'tag'
     needs: package
@@ -175,14 +175,14 @@ jobs:
         with:
           name: dist
           path: dist
-      # A draft, so that a person reads it before it is public. A prerelease only if the version says so (`0.2.0-rc.1`): 0.x is
-      # a release, and the latest one, which is what `gh release download` and `cargo binstall` look for.
-      - name: Draft release
+      # A prerelease only if the version says so (`0.2.0-rc.1`): 0.x is a release, and the latest one, which is what
+      # `gh release download` and `cargo binstall` look for.
+      - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           version="${{ needs.package.outputs.version }}"
-          flags="--draft"
-          case "$version" in *-*) flags="$flags --prerelease" ;; esac
+          flags=""
+          case "$version" in *-*) flags="--prerelease" ;; esac
           gh release create "$GITHUB_REF_NAME" $flags --verify-tag --title "$GITHUB_REF_NAME" \
             --notes-file .github/release-notes.md --generate-notes dist/*
