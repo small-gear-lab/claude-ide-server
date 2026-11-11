@@ -4,9 +4,6 @@
 //! so that a machine without Neovim can still run the other tests and a CI run cannot pass by skipping these.
 
 // The stand-in for Claude Code is the core's own.
-// The Neovim adapter's side of a Windows pipe is the question of issue #10; until it is answered these run on Unix only.
-#![cfg(unix)]
-
 #[path = "../../core/tests/common/mod.rs"]
 mod common;
 mod support;
@@ -17,6 +14,7 @@ use std::time::Duration;
 
 use claude_ide_core::lock::LockContents;
 use common::claude::MockClaude;
+use common::connect_to_adapters;
 use serde_json::Value;
 use support::{Home, Server, WAIT, connect_when_ready};
 use tokio::time::timeout;
@@ -62,6 +60,60 @@ fn adapter_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../editors/nvim")
 }
 
+/// A path as text inside a Lua string in single quotes: a backslash, which Windows paths are full of, begins an escape in Lua
+/// (`\U` is a `U`, and the path is wrong without a message), so it is written twice.
+fn lua_path(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "\\\\")
+}
+
+/// The executable of the server, for a Lua string.
+fn server_exe() -> String {
+    lua_path(Path::new(env!("CARGO_BIN_EXE_claude-ide-server")))
+}
+
+/// The real path of a file, the way Neovim names it: with links resolved, and on Windows without the `\\?\` that `canonicalize`
+/// puts in front.
+fn real_path(path: &Path) -> PathBuf {
+    let real = std::fs::canonicalize(path).unwrap();
+    #[cfg(windows)]
+    if let Some(plain) = real.to_str().and_then(|text| text.strip_prefix(r"\\?\")) {
+        return PathBuf::from(plain);
+    }
+    real
+}
+
+/// The `file://` URI of a real path, as `vim.uri_from_fname` writes it: on Windows `file:///C:/Users/...`.
+fn uri_of(real: &Path) -> String {
+    #[cfg(unix)]
+    {
+        format!("file://{}", real.display())
+    }
+    #[cfg(windows)]
+    {
+        format!("file:///{}", real.to_string_lossy().replace('\\', "/"))
+    }
+}
+
+/// Whether the Neovim that was told to listen on `listen` does (a socket file on Unix; a pipe, which has no file to look for,
+/// on Windows, where it is asked).
+fn listens(listen: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        listen.exists()
+    }
+    #[cfg(windows)]
+    {
+        Command::new("nvim")
+            .arg("--server")
+            .arg(listen)
+            .args(["--remote-expr", "1"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|status| status.success())
+    }
+}
+
 /// Starts Neovim, which runs `lua` after the adapter is on its runtime path. Nothing of the user's own is read or
 /// written: no configuration, no shada, and the directories of the XDG variables are under the test's directory.
 fn start_nvim(home: &Home, lua: &str) -> Nvim {
@@ -95,6 +147,9 @@ fn start_nvim_in(home: &Home, cwd: &Path, lua: &str, listen: Option<&Path>) -> N
         .env("XDG_DATA_HOME", root.join("data"))
         .env("XDG_STATE_HOME", root.join("state"))
         .env("HOME", root)
+        .env("USERPROFILE", root)
+        .env_remove("CLAUDE_IDE_SERVER_SOCKET")
+        .envs(socket_environment(home))
         .current_dir(cwd)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -102,6 +157,16 @@ fn start_nvim_in(home: &Home, cwd: &Path, lua: &str, listen: Option<&Path>) -> N
         .spawn()
         .unwrap();
     Nvim(child)
+}
+
+/// What tells the adapter, and a server that it starts, where to connect: on Windows the pipe of this test (the default pipe is
+/// the user's, and every test would share it); on Unix nothing, so that the default is what is tried.
+fn socket_environment(home: &Home) -> Vec<(&'static str, PathBuf)> {
+    if cfg!(windows) {
+        vec![("CLAUDE_IDE_SERVER_SOCKET", home.socket())]
+    } else {
+        Vec::new()
+    }
 }
 
 #[test]
@@ -208,9 +273,9 @@ async fn it_connects_again_when_the_server_restarts() {
     wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
 
     // The server is told to stop: it tells the adapter, and removes the lock file.
-    server.terminate();
+    server.stop();
     server.wait().await;
-    assert!(home.lock_files().is_empty());
+    wait_until("the lock file is removed", || home.lock_files().is_empty()).await;
 
     let _second = start_server(&home);
     wait_until("the adapter registers with the server that follows", || {
@@ -254,10 +319,10 @@ async fn the_workspace_follows_cd() {
         &home,
         &format!(
             "require('claude_ide').setup({{ server = {{ autostart = false }}, on_registered = function() vim.cmd('cd {}') end }})",
-            folder.display()
+            lua_path(&folder)
         ),
     );
-    let folder = std::fs::canonicalize(&folder).unwrap();
+    let folder = real_path(&folder);
     wait_until("the lock file names the folder", || {
         home.lock_files().len() == 1
             && read_lock(&home).workspace_folders == [folder.to_string_lossy()]
@@ -290,12 +355,12 @@ async fn the_selection_reaches_claude_code_when_it_connects_and_when_the_cursor_
 
     let file = home.dir.path().join("a.txt");
     std::fs::write(&file, "aé😀b\nsecond line\n").unwrap();
-    let listen = home.dir.path().join("nvim.sock");
+    let listen = home.nvim_listen();
     let _nvim = start_nvim_listening(
         &home,
         &format!(
             "vim.cmd('edit {}'); require('claude_ide').setup({{ selection_debounce_ms = 20, server = {{ autostart = false }} }})",
-            file.display()
+            lua_path(&file)
         ),
         Some(&listen),
     );
@@ -314,14 +379,14 @@ async fn the_selection_reaches_claude_code_when_it_connects_and_when_the_cursor_
     let first = next_notification(&mut claude, "selection_changed").await;
     // The real path of the file: Neovim names a file by it, and on macOS the temporary directory is under a link
     // (`/var` is `/private/var`).
-    let real = std::fs::canonicalize(&file).unwrap();
+    let real = real_path(&file);
     assert_eq!(first["filePath"], real.to_string_lossy().as_ref());
     assert_eq!(first["selection"]["isEmpty"], true);
     assert_eq!(first["selection"]["start"]["character"], 0);
 
     // Two characters to the right: past `a` and `é`, onto the emoji. The column is counted in UTF-16 code units, not
     // in bytes (the emoji starts at byte 3).
-    wait_until("nvim listens", || listen.exists()).await;
+    wait_until("nvim listens", || listens(&listen)).await;
     let sent = Command::new("nvim")
         .arg("--server")
         .arg(&listen)
@@ -329,9 +394,20 @@ async fn the_selection_reaches_claude_code_when_it_connects_and_when_the_cursor_
         .status()
         .unwrap();
     assert!(sent.success());
-    let moved = next_notification(&mut claude, "selection_changed").await;
+    // The server sends the selection that it remembers again a few times after the handshake (the first may be thrown
+    // away), and a notification of that kind may come before the one of the move: they are of the cursor where it was.
+    let moved = timeout(WAIT, async {
+        loop {
+            let notification = next_notification(&mut claude, "selection_changed").await;
+            if notification["selection"]["start"]["character"] == 2 {
+                return notification;
+            }
+            assert_eq!(notification["selection"]["start"]["character"], 0);
+        }
+    })
+    .await
+    .expect("the selection after the move arrives");
     assert_eq!(moved["selection"]["start"]["line"], 0);
-    assert_eq!(moved["selection"]["start"]["character"], 2);
 }
 
 /// The adapter set to start the real executable, which ends one second after the last adapter has gone.
@@ -339,7 +415,7 @@ fn starts_the_server() -> String {
     format!(
         "require('claude_ide').setup({{ reconnect = {{ initial_ms = 50, max_ms = 200 }}, \
          server = {{ command = '{}', args = {{ '--idle-timeout', '1' }} }} }})",
-        env!("CARGO_BIN_EXE_claude-ide-server")
+        server_exe()
     )
 }
 
@@ -358,9 +434,7 @@ async fn wait_for_the_server_to_end(home: &Home) {
 }
 
 async fn nobody_listens(home: &Home) -> bool {
-    tokio::net::UnixStream::connect(home.default_socket())
-        .await
-        .is_err()
+    connect_to_adapters(&home.default_socket()).await.is_err()
 }
 
 #[tokio::test]
@@ -421,7 +495,7 @@ async fn the_first_connection_after_a_start_does_not_wait_for_the_usual_first_re
         &format!(
             "require('claude_ide').setup({{ reconnect = {{ initial_ms = 3000, max_ms = 6000 }}, \
              server = {{ command = '{}', args = {{ '--idle-timeout', '1' }} }} }})",
-            env!("CARGO_BIN_EXE_claude-ide-server")
+            server_exe()
         ),
     );
     let started = std::time::Instant::now();
@@ -450,8 +524,8 @@ async fn a_server_that_the_adapter_started_and_that_does_not_understand_its_argu
             "vim.notify = function(message) local file = io.open('{}', 'a'); file:write(message, '\\n'); file:close() end; \
              require('claude_ide').setup({{ reconnect = {{ initial_ms = 50, max_ms = 200 }}, \
              server = {{ command = '{}', args = {{ '--no-such-switch' }} }} }})",
-            messages.display(),
-            env!("CARGO_BIN_EXE_claude-ide-server")
+            lua_path(&messages),
+            server_exe()
         ),
     );
     wait_until("the user is told", || {
@@ -526,8 +600,8 @@ async fn claude_code_can_ask_for_the_open_editors_and_the_selection() {
         &format!(
             "vim.cmd('edit {}'); vim.cmd('badd {}'); \
              require('claude_ide').setup({{ selection_debounce_ms = 20, server = {{ autostart = false }} }})",
-            first.display(),
-            second.display()
+            lua_path(&first),
+            lua_path(&second)
         ),
     );
     wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
@@ -550,11 +624,11 @@ async fn claude_code_can_ask_for_the_open_editors_and_the_selection() {
     let editors = call(&mut claude, "getOpenEditors").await;
     let tabs = editors["tabs"].as_array().unwrap();
     assert_eq!(tabs.len(), 2, "{editors}");
-    let real_first = std::fs::canonicalize(&first).unwrap();
+    let real_first = real_path(&first);
     let active: Vec<_> = tabs.iter().filter(|tab| tab["isActive"] == true).collect();
     assert_eq!(active.len(), 1, "{editors}");
     assert_eq!(active[0]["label"], "a.txt");
-    assert_eq!(active[0]["uri"], format!("file://{}", real_first.display()));
+    assert_eq!(active[0]["uri"], uri_of(&real_first));
     assert_eq!(active[0]["languageId"], "plaintext");
     assert_eq!(active[0]["isDirty"], false);
     // What the extension adds to a tab: where it is shown, and what the document is.
@@ -613,14 +687,14 @@ async fn claude_code_can_ask_for_the_diagnostics_of_a_file_and_of_all() {
              vim.diagnostic.set(vim.api.nvim_create_namespace('test'), 0, {{ {{ lnum = 0, col = 3, end_lnum = 0, end_col = 7, \
              severity = vim.diagnostic.severity.ERROR, message = 'boom', source = 'lint' }} }}); \
              require('claude_ide').setup({{ server = {{ autostart = false }} }})",
-            first.display(),
-            second.display()
+            lua_path(&first),
+            lua_path(&second)
         ),
     );
     wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
     let mut claude = claude_for(&home).await;
-    let real_first = std::fs::canonicalize(&first).unwrap();
-    let first_uri = format!("file://{}", real_first.display());
+    let real_first = real_path(&first);
+    let first_uri = uri_of(&real_first);
 
     // Of all the files: only the one that has some.
     let all = call(&mut claude, "getDiagnostics").await;
@@ -645,7 +719,7 @@ async fn claude_code_can_ask_for_the_diagnostics_of_a_file_and_of_all() {
     let none = call_with(
         &mut claude,
         "getDiagnostics",
-        serde_json::json!({ "uri": format!("file://{}", std::fs::canonicalize(&second).unwrap().display()) }),
+        serde_json::json!({ "uri": uri_of(&real_path(&second)) }),
     )
     .await;
     assert_eq!(none[0]["diagnostics"], serde_json::json!([]));
@@ -680,19 +754,19 @@ async fn a_file_or_some_of_its_lines_can_be_mentioned_to_claude_code() {
 
     let file = home.dir.path().join("a.txt");
     std::fs::write(&file, "one\ntwo\nthree\nfour\n").unwrap();
-    let listen = home.dir.path().join("nvim.sock");
+    let listen = home.nvim_listen();
     let _nvim = start_nvim_listening(
         &home,
         &format!(
             "vim.cmd('edit {}'); require('claude_ide').setup({{ server = {{ autostart = false }} }})",
-            file.display()
+            lua_path(&file)
         ),
         Some(&listen),
     );
     wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
     let mut claude = claude_for(&home).await;
-    wait_until("nvim listens", || listen.exists()).await;
-    let real = std::fs::canonicalize(&file).unwrap();
+    wait_until("nvim listens", || listens(&listen)).await;
+    let real = real_path(&file);
 
     // The whole file: from the first line to the last (0-based, the last one included).
     send_keys(&listen, ":ClaudeIdeMention<CR>");
@@ -722,7 +796,7 @@ async fn claude_code_can_open_a_file_check_whether_it_has_changes_and_save_it() 
     std::fs::write(project.join("lib/a.lua"), "one\ntwo\nthree\n").unwrap();
     std::fs::write(project.join("b.txt"), "other\n").unwrap();
     // The workspace of the adapter is the project: it starts there, and a relative path is taken from it.
-    let listen = home.dir.path().join("nvim.sock");
+    let listen = home.nvim_listen();
     let _nvim = start_nvim_in(
         &home,
         &project,
@@ -731,8 +805,8 @@ async fn claude_code_can_open_a_file_check_whether_it_has_changes_and_save_it() 
     );
     wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
     let mut claude = claude_for(&home).await;
-    let real = std::fs::canonicalize(&project).unwrap();
-    let a = real.join("lib/a.lua");
+    let real = real_path(&project);
+    let a = real.join("lib").join("a.lua");
 
     // Not open yet.
     let state = call_with(
@@ -812,7 +886,7 @@ async fn claude_code_can_open_a_file_check_whether_it_has_changes_and_save_it() 
     assert_eq!(details["lineCount"], 2);
 
     // A change that is not written is told, and is written by saveDocument.
-    wait_until("nvim listens", || listen.exists()).await;
+    wait_until("nvim listens", || listens(&listen)).await;
     send_keys(&listen, "<Esc>ggdd");
     let mut dirty = Value::Null;
     for _ in 0..100 {
@@ -862,21 +936,21 @@ async fn changed_diagnostics_reach_claude_code_once_for_a_burst_of_changes() {
     let second = home.dir.path().join("b.lua");
     std::fs::write(&first, "one\n").unwrap();
     std::fs::write(&second, "return 1\n").unwrap();
-    let listen = home.dir.path().join("nvim.sock");
+    let listen = home.nvim_listen();
     let _nvim = start_nvim_listening(
         &home,
         &format!(
             "vim.cmd('edit {a}'); vim.fn.bufload(vim.fn.bufadd('{b}')); \
              require('claude_ide').setup({{ diagnostics_debounce_ms = 100, server = {{ autostart = false }} }})",
-            a = first.display(),
-            b = second.display()
+            a = lua_path(&first),
+            b = lua_path(&second)
         ),
         Some(&listen),
     );
     wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
     let mut claude = claude_for(&home).await;
-    wait_until("nvim listens", || listen.exists()).await;
-    let uri = |path: &Path| format!("file://{}", std::fs::canonicalize(path).unwrap().display());
+    wait_until("nvim listens", || listens(&listen)).await;
+    let uri = |path: &Path| uri_of(&real_path(path));
 
     // The diagnostics of two files change, and the first one again, within the wait: one notification names both files,
     // each once, in the order in which they changed.
@@ -888,8 +962,8 @@ async fn changed_diagnostics_reach_claude_code_once_for_a_burst_of_changes() {
              vim.diagnostic.set(ns, a, {{ {{ lnum = 0, col = 0, message = 'x' }} }}); \
              vim.diagnostic.set(ns, b, {{ {{ lnum = 0, col = 0, message = 'y' }} }}); \
              vim.diagnostic.set(ns, a, {{ {{ lnum = 0, col = 1, message = 'z' }} }})<CR>",
-            a = first.display(),
-            b = second.display()
+            a = lua_path(&first),
+            b = lua_path(&second)
         ),
     );
     let changed = next_notification(&mut claude, "diagnostics_changed").await;
@@ -903,25 +977,44 @@ async fn changed_diagnostics_reach_claude_code_once_for_a_burst_of_changes() {
         &listen,
         &format!(
             ":lua vim.diagnostic.reset(vim.api.nvim_create_namespace('t'), vim.fn.bufnr('{b}'))<CR>",
-            b = second.display()
+            b = lua_path(&second)
         ),
     );
     let changed = next_notification(&mut claude, "diagnostics_changed").await;
     assert_eq!(changed["uris"], serde_json::json!([uri(&second)]));
 }
 
-/// The number of tab pages that a Neovim has.
+/// The number of tab pages that a Neovim has. The answer is written to a file and read from it: a Neovim on Windows does not
+/// print the result of `--remote-expr` to a pipe.
 fn tab_pages(listen: &Path) -> u32 {
+    // A name for this Neovim alone (the tests run together).
+    let unique: String = listen
+        .to_string_lossy()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect();
+    let answer = std::env::temp_dir().join(format!("claude-ide-tabs-{unique}.txt"));
+    let _ = std::fs::remove_file(&answer);
     let output = Command::new("nvim")
         .arg("--server")
         .arg(listen)
-        .args(["--remote-expr", "tabpagenr('$')"])
+        .arg("--remote-expr")
+        // A string in single quotes in Vim script has no escapes, so the path is as it is (with `/`, which Windows takes too).
+        .arg(format!(
+            "writefile([tabpagenr('$')], '{}')",
+            answer.to_string_lossy().replace('\\', "/")
+        ))
         .output()
         .unwrap();
-    String::from_utf8_lossy(&output.stdout)
-        .trim()
-        .parse()
-        .unwrap_or_else(|_| panic!("{}", String::from_utf8_lossy(&output.stderr)))
+    let text = std::fs::read_to_string(&answer).unwrap_or_else(|error| {
+        panic!(
+            "no answer ({error}): {}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        )
+    });
+    let _ = std::fs::remove_file(&answer);
+    text.trim().parse().unwrap_or_else(|_| panic!("{text:?}"))
 }
 
 async fn wait_for_tab_pages(listen: &Path, expected: u32) {
@@ -974,18 +1067,18 @@ async fn claude_code_can_propose_a_change_that_the_user_accepts_edits_or_rejects
 
     let file = home.dir.path().join("a.lua");
     std::fs::write(&file, "return 1\n").unwrap();
-    let listen = home.dir.path().join("nvim.sock");
+    let listen = home.nvim_listen();
     let _nvim = start_nvim_listening(
         &home,
         &format!(
             "vim.cmd('edit {}'); require('claude_ide').setup({{ server = {{ autostart = false }} }})",
-            file.display()
+            lua_path(&file)
         ),
         Some(&listen),
     );
     wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
     let claude = claude_for(&home).await;
-    wait_until("nvim listens", || listen.exists()).await;
+    wait_until("nvim listens", || listens(&listen)).await;
     let arguments = |tab_name: &str| {
         serde_json::json!({
             "old_file_path": file.to_string_lossy(),
@@ -1079,12 +1172,12 @@ async fn diagnostics_asked_for_right_after_a_file_was_written_are_those_of_the_n
                vim.defer_fn(function() vim.diagnostic.set(ns, args.buf, {{ {{ lnum = 0, col = 0, message = 'about: ' .. text }} }}) end, 150) \
              end }}); \
              require('claude_ide').setup({{ server = {{ autostart = false }} }})",
-            file.display()
+            lua_path(&file)
         ),
     );
     wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
     let mut claude = claude_for(&home).await;
-    let uri = format!("file://{}", std::fs::canonicalize(&file).unwrap().display());
+    let uri = uri_of(&real_path(&file));
 
     // Claude Code writes the file, and asks for the diagnostics of it at once: they are of the text that it wrote.
     std::fs::write(&file, "after the edit\n").unwrap();
@@ -1100,6 +1193,7 @@ async fn diagnostics_asked_for_right_after_a_file_was_written_are_those_of_the_n
     );
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn a_file_is_asked_for_by_a_path_through_a_link_and_answered_under_the_uri_that_was_asked_for()
  {
@@ -1122,7 +1216,7 @@ async fn a_file_is_asked_for_by_a_path_through_a_link_and_answered_under_the_uri
             "vim.cmd('edit {}'); \
              vim.diagnostic.set(vim.api.nvim_create_namespace('t'), 0, {{ {{ lnum = 0, col = 0, message = 'there' }} }}); \
              require('claude_ide').setup({{ server = {{ autostart = false }} }})",
-            real.join("a.lua").display()
+            lua_path(&real.join("a.lua"))
         ),
     );
     wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
