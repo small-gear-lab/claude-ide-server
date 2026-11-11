@@ -1,0 +1,9 @@
+{
+  "tools": [
+    {
+      "name": "<string>",
+      "description": "<string>",
+      "inputSchema": { "type": "object" }
+    }
+  ]
+}

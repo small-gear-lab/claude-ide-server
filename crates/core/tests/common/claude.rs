@@ -117,21 +117,7 @@ impl MockClaude {
         let answer = self
             .request(
                 "initialize",
-                json!({
-                    "protocolVersion": "2025-11-25",
-                    "capabilities": {
-                        "roots": { "listChanged": true },
-                        "elicitation": {},
-                        "extensions": { "io.modelcontextprotocol/tasks": {} },
-                    },
-                    "clientInfo": {
-                        "name": "claude-code",
-                        "title": "Claude Code",
-                        "version": "2.1.322",
-                        "description": "Anthropic's agentic coding tool",
-                        "websiteUrl": "https://claude.com/claude-code",
-                    },
-                }),
+                super::shape::fixture("claude_initialize.json"),
             )
             .await;
         self.notify("notifications/initialized", json!({})).await;

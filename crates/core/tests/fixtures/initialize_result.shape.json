@@ -1,0 +1,5 @@
+{
+  "protocolVersion": "<string>",
+  "capabilities": { "tools": "<object>" },
+  "serverInfo": { "name": "<string>", "version": "<string>" }
+}

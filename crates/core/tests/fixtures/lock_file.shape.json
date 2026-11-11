@@ -1,0 +1,8 @@
+{
+  "pid": "<number>",
+  "workspaceFolders": [ "<string>" ],
+  "ideName": "<string>",
+  "transport": "ws",
+  "runningInWindows": "<bool>",
+  "authToken": "<string>"
+}

@@ -11,6 +11,7 @@ use common::WAIT;
 use common::claude::MockClaude;
 use common::fixture::{Fixture, registered};
 use common::scene::{Scene, call_tool, scene, scene_in};
+use common::shape::assert_shape;
 use serde_json::{Value, json};
 use tokio::time::timeout;
 
@@ -23,6 +24,7 @@ async fn the_handshake_negotiates_the_version_and_says_what_the_server_is() {
 
     let answer = claude.handshake(4321).await;
 
+    assert_shape(&answer["result"], "initialize_result.shape.json");
     assert_eq!(answer["result"]["protocolVersion"], "2025-11-25");
     assert!(answer["result"]["capabilities"]["tools"].is_object());
     assert_eq!(answer["result"]["serverInfo"]["name"], "claude-ide-server");
@@ -42,9 +44,9 @@ async fn only_the_tools_that_can_be_run_are_listed() {
     );
 
     let answer = scene.claude.request("tools/list", json!({})).await;
+    assert_shape(&answer["result"], "tools_list_result.shape.json");
     for tool in answer["result"]["tools"].as_array().unwrap() {
         assert!(!tool["description"].as_str().unwrap().is_empty());
-        assert_eq!(tool["inputSchema"]["type"], "object");
     }
 }
 
@@ -61,6 +63,7 @@ async fn a_tool_call_goes_to_the_adapter_and_its_answer_comes_back_as_text() {
 
     assert_eq!(method, "openFile");
     assert_eq!(params, json!({"filePath": "/home/user/project/a.lua"}));
+    assert_shape(&answer["result"], "tool_call_result.shape.json");
     assert_eq!(answer["result"]["isError"], false);
     assert_eq!(answer["result"]["content"][0]["type"], "text");
     let text = answer["result"]["content"][0]["text"].as_str().unwrap();
@@ -94,6 +97,7 @@ async fn a_failed_tool_call_is_an_answer_with_the_error_flag() {
         Err(RpcError::new(-1, "no such file")),
     )
     .await;
+    assert_shape(&answer["result"], "tool_call_result.shape.json");
     assert_eq!(answer["result"]["isError"], true);
     assert_eq!(answer["result"]["content"][0]["text"], "no such file");
     assert!(answer.get("error").is_none());

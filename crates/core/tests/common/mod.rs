@@ -6,6 +6,7 @@
 pub mod claude;
 pub mod fixture;
 pub mod scene;
+pub mod shape;
 
 use std::time::Duration;
 

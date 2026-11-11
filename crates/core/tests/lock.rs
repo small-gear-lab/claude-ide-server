@@ -10,6 +10,9 @@ use claude_ide_core::lock::{
 };
 use tempfile::TempDir;
 
+mod common;
+use common::shape::assert_shape;
+
 const SERVER_PID: u32 = 4242;
 
 fn dirs(root: &TempDir) -> LockDirs {
@@ -56,8 +59,9 @@ fn the_file_has_the_name_the_contents_and_the_modes_that_the_cli_expects() {
     assert_eq!(mode(&dirs.lock_dir), 0o700);
     assert_eq!(mode(&dirs.record_dir), 0o700);
 
-    // The keys, exactly as the CLI reads them.
+    // The keys and their types, as the CLI reads them (and nothing besides them).
     let json: serde_json::Value = serde_json::from_slice(&fs::read(lock.path()).unwrap()).unwrap();
+    assert_shape(&json, "lock_file.shape.json");
     let mut keys: Vec<&str> = json
         .as_object()
         .unwrap()
