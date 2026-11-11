@@ -18,6 +18,7 @@ pub mod jsonrpc;
 pub mod lock;
 pub mod mcp;
 pub mod model;
+mod notifications;
 mod tools;
 #[cfg(unix)]
 pub mod workspace;

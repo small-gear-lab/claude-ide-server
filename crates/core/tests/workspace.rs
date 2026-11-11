@@ -99,9 +99,9 @@ async fn changed_folders_rewrite_the_lock_file_and_reach_the_events() {
         .notify("workspaceFoldersChanged", json!({"workspaceFolders": []}))
         .await;
     client
-        .notify("selectionChanged", json!({"filePath": "/a/x"}))
+        .notify("diagnosticsChanged", json!({"uris": []}))
         .await;
-    for expected in ["workspaceFoldersChanged", "selectionChanged"] {
+    for expected in ["workspaceFoldersChanged", "diagnosticsChanged"] {
         match timeout(WAIT, workspace.next_event()).await.unwrap() {
             Some(WorkspaceEvent::Notification { method, .. }) => assert_eq!(method, expected),
             other => panic!("unexpected {other:?}"),

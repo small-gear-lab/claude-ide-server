@@ -12,18 +12,20 @@ What the other side is expected to say, written down from what was observed, as 
   - `initialize_result.shape.json`, `tools_list_result.shape.json`, `tool_call_result.shape.json`: the results of the
     MCP requests that Claude Code makes.
 
-  - `get_selection_result.shape.json`, `get_selection_none_result.shape.json`, `get_open_editors_result.shape.json`,
-    `get_diagnostics_result.shape.json`: the results of `getCurrentSelection` / `getLatestSelection`, `getOpenEditors`
-    and `getDiagnostics`.
+  - `selection_changed.shape.json`, `at_mentioned.shape.json`, `get_selection_result.shape.json`,
+    `get_selection_none_result.shape.json`, `get_open_editors_result.shape.json`, `get_diagnostics_result.shape.json`:
+    what the server sends for the selection, a mentioned file, and the results of `getCurrentSelection` /
+    `getLatestSelection`, `getOpenEditors` and `getDiagnostics`.
 
 ## Where each shape comes from
 
 - The handshake, the lock file: seen with a real Claude Code 2.1.322 (the handshake) and with the existing IDE
   integrations (the lock file).
-- The shapes of the results of the read-only tools were **not** seen from a real Claude Code.
+- The shapes of the notifications and of the results of the read-only tools were **not** seen from a real Claude Code.
   They follow the public protocol notes of other implementations and the behaviour of the existing IDE integrations
   (`getCurrentSelection` as `{ success, text, filePath, selection }`, or `{ success: false, message }`; `getOpenEditors`
-  as `{ tabs: [...] }`; `getDiagnostics` as a list of `{ uri, diagnostics }`). To be checked against a real CLI with a real adapter (issue #10), and corrected
+  as `{ tabs: [...] }`; `getDiagnostics` as a list of `{ uri, diagnostics }`; `selection_changed` with `fileUrl`;
+  `at_mentioned` with 0-based lines). To be checked against a real CLI with a real adapter (issue #10), and corrected
   here if they differ. The diagnostics shape asks for `range.start` and `range.end`; the integrations seen send at
   least `range.start`.
 

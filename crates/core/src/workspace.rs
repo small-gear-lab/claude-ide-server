@@ -20,6 +20,8 @@ use crate::adapter::{
 };
 use crate::lock::{self, EnvVars, LockContents, LockDirs, LockFile};
 use crate::mcp::{ClientInfo, McpHub};
+use crate::model::ModelError;
+use crate::notifications::{Forward, forward};
 use crate::tools::WorkspaceTools;
 use crate::ws::{self, WsServer};
 
@@ -95,8 +97,12 @@ impl std::fmt::Debug for Config {
 #[non_exhaustive]
 pub enum WorkspaceEvent {
     /// A notification from the adapter (`selectionChanged`, `diagnosticsChanged`, ...). `workspaceFoldersChanged`
-    /// has already been applied to the lock file when it arrives here.
+    /// has already been applied to the lock file, and `selectionChanged` and `atMention` have already been passed on
+    /// to Claude Code, when it arrives here.
     Notification { method: String, params: Value },
+    /// A notification from the adapter that is not what it should be (a missing field, a wrong type); it was not passed
+    /// on. The adapter has a bug.
+    MalformedNotification { method: String, error: ModelError },
 }
 
 /// The part of a workspace that its task and the [`Workspace`] share.
@@ -388,6 +394,18 @@ async fn run(running: Running) {
                 let Some(Notification { method, params }) = notification else { break };
                 if method == "workspaceFoldersChanged" {
                     apply_folders_changed(&params, &mut lock, &shared);
+                }
+                match forward(&method, &params) {
+                    Forward::Nothing => {}
+                    Forward::Notify { method, params, remember: true } => claude.notify_remembering(method, params),
+                    Forward::Notify { method, params, remember: false } => claude.notify(method, params),
+                    Forward::Malformed(error) => {
+                        let event = WorkspaceEvent::MalformedNotification { method: method.clone(), error };
+                        if !publish(&events, &dropped, event) {
+                            owner_closed = true;
+                            break;
+                        }
+                    }
                 }
                 if !publish(&events, &dropped, WorkspaceEvent::Notification { method, params }) {
                     owner_closed = true;

@@ -5,6 +5,9 @@ mod common;
 
 use std::time::Duration;
 
+use claude_ide_core::workspace::WorkspaceEvent;
+use common::WAIT;
+use common::claude::MockClaude;
 use common::scene::{Scene, call_tool, result_json, scene_declaring};
 use common::shape::assert_shape;
 use serde_json::{Value, json};
@@ -165,6 +168,149 @@ async fn a_malformed_answer_is_a_failed_call_that_says_where() {
     }
 }
 
+/// The adapter reports a selection; Claude Code is told, in the shape that it expects.
+#[tokio::test]
+async fn a_selection_that_the_adapter_reports_reaches_claude_as_selection_changed() {
+    let mut scene = scene_declaring(&READ_ONLY).await;
+    scene
+        .adapter
+        .notify(
+            "selectionChanged",
+            selection("local x = 1", (0, 0), (0, 11)),
+        )
+        .await;
+
+    let message = scene.claude.recv_json().await.expect("a notification");
+    assert_eq!(message["method"], "selection_changed");
+    assert!(message.get("id").is_none());
+    assert_shape(&message["params"], "selection_changed.shape.json");
+    let params = &message["params"];
+    assert_eq!(params["filePath"], "/home/user/project/a.lua");
+    assert_eq!(params["fileUrl"], "file:///home/user/project/a.lua");
+    assert_eq!(params["text"], "local x = 1");
+    assert_eq!(params["selection"]["isEmpty"], false);
+
+    // The workspace's owner sees it as well, after it was passed on.
+    match timeout(WAIT, scene.workspace.next_event()).await.unwrap() {
+        Some(WorkspaceEvent::Notification { method, .. }) => assert_eq!(method, "selectionChanged"),
+        other => panic!("unexpected {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn a_cursor_without_a_selection_is_an_empty_selection() {
+    let mut scene = scene_declaring(&READ_ONLY).await;
+    scene
+        .adapter
+        .notify("selectionChanged", selection("", (7, 4), (7, 4)))
+        .await;
+    let message = scene.claude.recv_json().await.expect("a notification");
+    assert_eq!(message["params"]["selection"]["isEmpty"], true);
+    assert_eq!(message["params"]["text"], "");
+}
+
+#[tokio::test]
+async fn a_mentioned_file_reaches_claude_as_at_mentioned() {
+    let mut scene = scene_declaring(&READ_ONLY).await;
+    scene
+        .adapter
+        .notify(
+            "atMention",
+            json!({"filePath": "/home/user/project/a.lua", "lineStart": 4, "lineEnd": 9}),
+        )
+        .await;
+    let message = scene.claude.recv_json().await.expect("a notification");
+    assert_eq!(message["method"], "at_mentioned");
+    assert_shape(&message["params"], "at_mentioned.shape.json");
+    assert_eq!(message["params"]["lineStart"], 4);
+    assert_eq!(message["params"]["lineEnd"], 9);
+}
+
+#[tokio::test]
+async fn a_malformed_notification_is_not_passed_on_and_the_owner_is_told() {
+    let mut scene = scene_declaring(&READ_ONLY).await;
+    scene
+        .adapter
+        .notify("selectionChanged", json!({"filePath": "/a", "text": 1}))
+        .await;
+    scene
+        .adapter
+        .notify("atMention", json!({"filePath": "/a"}))
+        .await;
+
+    for expected_path in ["$.text", "$.lineStart"] {
+        match timeout(WAIT, scene.workspace.next_event()).await.unwrap() {
+            Some(WorkspaceEvent::MalformedNotification { error, .. }) => {
+                assert_eq!(error.path, expected_path);
+            }
+            other => panic!("expected a malformed notification, got {other:?}"),
+        }
+        // The notification itself still reaches the owner.
+        assert!(matches!(
+            timeout(WAIT, scene.workspace.next_event()).await.unwrap(),
+            Some(WorkspaceEvent::Notification { .. })
+        ));
+    }
+    // Nothing went to Claude Code: the next message that it gets is for the request that it makes now.
+    let answer = scene.claude.request("ping", json!({})).await;
+    assert_eq!(answer["result"], json!({}));
+}
+
+#[tokio::test]
+async fn a_claude_code_that_connects_later_is_told_the_selection_that_is_current() {
+    let mut scene = scene_declaring(&READ_ONLY).await;
+
+    // Before there is a selection, a new client is told nothing.
+    let port = scene.workspace.port();
+    let token = scene.fixture.read_lock(port).auth_token;
+    let mut early = MockClaude::connect(port, &token).await;
+    early.handshake(4322).await;
+    let answer = early.request("ping", json!({})).await;
+    assert_eq!(answer["result"], json!({}));
+
+    // The selection changes twice; the second one is the current one.
+    scene
+        .adapter
+        .notify("selectionChanged", selection("first", (0, 0), (0, 5)))
+        .await;
+    scene
+        .adapter
+        .notify("selectionChanged", selection("second", (1, 0), (1, 6)))
+        .await;
+    // (A selection that is replaced before it is sent is not sent; the one that is current always is.)
+    loop {
+        let message = scene.claude.recv_json().await.expect("a notification");
+        if message["params"]["text"] == "second" {
+            break;
+        }
+    }
+
+    let mut late = MockClaude::connect(port, &token).await;
+    late.handshake(4323).await;
+    let message = late.recv_json().await.expect("the current selection");
+    assert_eq!(message["method"], "selection_changed");
+    assert_eq!(message["params"]["text"], "second");
+}
+
+#[tokio::test]
+async fn a_selection_is_sent_to_every_connected_client() {
+    let mut scene = scene_declaring(&READ_ONLY).await;
+    let port = scene.workspace.port();
+    let token = scene.fixture.read_lock(port).auth_token;
+    let mut second = MockClaude::connect(port, &token).await;
+    second.handshake(4322).await;
+    second.tool_names().await;
+
+    scene
+        .adapter
+        .notify("selectionChanged", selection("x", (0, 0), (0, 1)))
+        .await;
+    for claude in [&mut scene.claude, &mut second] {
+        let message = claude.recv_json().await.expect("a notification");
+        assert_eq!(message["method"], "selection_changed");
+    }
+}
+
 #[tokio::test]
 async fn a_tool_that_the_adapter_did_not_declare_is_not_offered() {
     // Only getOpenEditors is declared: the other read-only tools are neither listed nor callable.
@@ -187,4 +333,99 @@ async fn a_tool_that_the_adapter_did_not_declare_is_not_offered() {
             .is_err(),
         "the adapter was not asked"
     );
+}
+
+#[tokio::test]
+async fn a_file_path_that_is_not_absolute_is_not_passed_on() {
+    let mut scene = scene_declaring(&READ_ONLY).await;
+    let mut relative = selection("x", (0, 0), (0, 1));
+    relative["filePath"] = json!("src/a.lua");
+    scene.adapter.notify("selectionChanged", relative).await;
+    match timeout(WAIT, scene.workspace.next_event()).await.unwrap() {
+        Some(WorkspaceEvent::MalformedNotification { error, .. }) => {
+            assert_eq!(error.path, "$.filePath");
+            assert!(error.reason.contains("absolute"), "{error}");
+        }
+        other => panic!("expected a malformed notification, got {other:?}"),
+    }
+    let answer = scene.claude.request("ping", json!({})).await;
+    assert_eq!(answer["result"], json!({}));
+}
+
+/// The owner of the workspace does not have to read the events: Claude Code still gets every selection, and the
+/// workspace goes on serving (tool calls, new clients).
+#[tokio::test]
+async fn an_owner_that_does_not_read_the_events_does_not_stall_the_workspace() {
+    let mut scene = scene_declaring(&READ_ONLY).await;
+    // More than the queue of events holds, and nobody calls next_event().
+    for index in 0..600 {
+        scene
+            .adapter
+            .notify(
+                "selectionChanged",
+                selection(&format!("s{index}"), (index, 0), (index, 1)),
+            )
+            .await;
+    }
+    // Claude Code reads only now. A selection is a state: it has been given the current one, and the ones that it was
+    // too slow for were replaced, not queued (and the last one is never the one that was lost).
+    let mut last = Value::Null;
+    let mut received = 0;
+    while last["params"]["text"] != "s599" {
+        last = scene.claude.recv_json().await.expect("a notification");
+        received += 1;
+    }
+    assert!(received <= 600);
+    assert!(
+        scene.workspace.dropped_events() > 0,
+        "the events that were not read were dropped, not waited for"
+    );
+
+    // The workspace still answers.
+    let (answer, _) = call_tool(
+        &mut scene,
+        "getOpenEditors",
+        json!({}),
+        Ok(json!({"tabs": []})),
+    )
+    .await;
+    assert_eq!(answer["result"]["isError"], false);
+}
+
+/// A Claude Code that does not read what it is sent must not hold up the others.
+#[tokio::test]
+async fn a_client_that_does_not_keep_up_does_not_hold_up_the_others() {
+    let mut scene = scene_declaring(&READ_ONLY).await;
+    let port = scene.workspace.port();
+    let token = scene.fixture.read_lock(port).auth_token;
+    // Connects, completes the handshake, and then never reads again.
+    let mut stalled = MockClaude::connect(port, &token).await;
+    stalled.handshake(4399).await;
+    stalled.tool_names().await;
+
+    // Large selections, many of them: far more than the buffers between here and the stalled client can hold.
+    let big = "x".repeat(8 * 1024);
+    let count = 2000;
+    for index in 0..count {
+        scene
+            .adapter
+            .notify("selectionChanged", selection(&big, (index, 0), (index, 1)))
+            .await;
+        // The healthy client reads as it goes.
+        let message = scene.claude.recv_json().await.expect("a notification");
+        assert_eq!(
+            message["method"], "selection_changed",
+            "notification {index}"
+        );
+    }
+    // And the workspace still answers.
+    let (answer, _) = call_tool(
+        &mut scene,
+        "getOpenEditors",
+        json!({}),
+        Ok(json!({"tabs": []})),
+    )
+    .await;
+    assert_eq!(answer["result"]["isError"], false);
+    drop(stalled);
 }
