@@ -118,7 +118,7 @@ mod unix {
     }
 }
 
-/// An in-memory listener, for tests and for embedding: [`MemoryConnector::connect`] makes the other end.
+/// An in-memory listener, for tests and for embedding: [`MemoryConnector::connect`](memory::MemoryConnector::connect) makes the other end.
 pub mod memory {
     use super::{Listener, io};
     use tokio::io::DuplexStream;
