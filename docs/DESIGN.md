@@ -104,8 +104,8 @@ smaller set than the VS Code extension.
 | MCP tool | Adapter method | Notes |
 |---|---|---|
 | `openFile` | `openFile` | optional selection by `startText` / `endText` |
-| `openDiff` | `openDiff` | blocks until the user accepts or rejects |
-| `close_tab` | `closeDiff` | by `tab_name`, the one given to `openDiff` |
+| `openDiff` | `openDiff` | blocks until the user accepts or rejects; answers `FILE_SAVED` and the contents, or `DIFF_REJECTED` and the tab name |
+| `close_tab` | `closeDiff` | by `tab_name`, the one given to `openDiff`; answers `TAB_CLOSED`, also if there is no such tab or no adapter method |
 | `closeAllDiffTabs` | `closeAllDiffs` | answers `CLOSED_<n>_DIFF_TABS`; `CLOSED_0_DIFF_TABS` if the adapter has none |
 | `set_permission_mode` | `setPermissionMode` | `{ mode }`; answers `OK` if the adapter has none |
 | `getOpenEditors` | `getOpenEditors` | |
@@ -124,8 +124,9 @@ only when it has.
 
 How a call turns out:
 
-- The answer to a tool call is one text content. If the adapter answers with a string, that string is the text as it
-  is (for example `FILE_SAVED`); anything else is written as JSON.
+- The answer to a tool call is a text content, and for `openDiff` two (`FILE_SAVED` and then the contents of the file).
+  For the tools whose answer the server does not turn into a text of the VS Code extension (only `set_permission_mode`
+  is left), a string from the adapter is the text as it is; anything else is written as JSON.
 - A call that fails (the adapter answers with an error, does not answer in time, or is gone) is still an answer: the
   result carries `isError: true` and the reason as its text. Claude gets to see why.
 - The arguments are checked against the schema of the tool before the adapter is asked: a required argument that is
@@ -253,8 +254,8 @@ Server → adapter:
 | `getDiagnostics` | request | `uri?` → `[{ uri, diagnostics: [{ message, severity, range, source }] }]` |
 | `checkDocumentDirty` | request | `filePath` → `{ isDirty, isUntitled }`, or `{ success: false }` if the document is not open |
 | `saveDocument` | request | `filePath` → `{ saved }`, or `{ success: false }` if the document is not open |
-| `openDiff` | request | `oldFilePath`, `newFilePath`, `newFileContents`, `tabName` → `"saved"` or `"rejected"`, answered when the user decides |
-| `closeDiff` | request | `tabName` |
+| `openDiff` | request | `oldFilePath`, `newFilePath`, `newFileContents`, `tabName`, `diffId` → `{ accepted: true, contents }` or `{ accepted: false }`, answered when the user decides |
+| `closeDiff` | request | `tabName`, and `diffId` if only that diff is to be closed → anything |
 | `closeAllDiffs` | request | → `{ closed: n }` |
 | `shutdown` | notification | the server is stopping |
 
@@ -307,8 +308,21 @@ that the VS Code extension writes (for example, `getCurrentSelection` has `succe
 (the last one), so that it starts from the selection that the user has now; it is sent again a few times after the
 handshake, because the first may be thrown away (see "What Claude Code sends on its own").
 
-On `"saved"` from `openDiff`, the adapter has written `newFileContents` to `newFilePath`. The server answers
-Claude with the text `FILE_SAVED`; on `"rejected"`, `DIFF_REJECTED`.
+**Diffs.** The editor does not write the file: Claude Code does, with the contents that the editor gives back (the VS Code
+extension answers `FILE_SAVED` and then the contents of the file as they are when the user accepts, which may have been
+edited in the diff; Claude Code reads that second text and uses it, and takes anything else than `FILE_SAVED` as not
+accepted). So:
+
+- `openDiff` is answered when the user decides, and until then it is not answered: the server does not put a time limit on
+  it (the adapter's other requests have one), and nothing else waits for it. The answer is `{ accepted: true, contents }`
+  (without `contents` it is refused: Claude Code could not write the file) or `{ accepted: false }`. The server turns them
+  into `FILE_SAVED` and the contents, and `DIFF_REJECTED` and the name of the tab.
+- The server gives each diff a number, `diffId`. A new `openDiff` of the name of a diff that is shown replaces that diff: the
+  adapter ends the older one, rejected. If the Claude Code that asked for a diff cancels the call or goes away, the server
+  sends `closeDiff` with the `tabName` and that `diffId`, so that the diff does not stay on the screen with nobody to ask,
+  and the adapter closes it only if it is the diff that is shown under that name (a newer one is left alone). `close_tab`
+  from Claude Code has no `diffId`: it closes whichever diff has the name.
+- `closeAllDiffs` is answered with how many diffs it closed (`{ closed: n }`).
 
 ### Versioning
 
@@ -463,7 +477,8 @@ same moment are safe, because a second server on the same socket refuses to star
    `getLatestSelection`, `getDiagnostics`; `selection_changed`, `at_mentioned`.
 3. **M2, Neovim adapter.** The server executable (`crates/server`), and a Lua adapter, over `vim.lsp.rpc`. Registers the main windows only.
 4. **M3, actions.** `openFile`, `checkDocumentDirty`, `saveDocument`, `diagnostics_changed`.
-5. **M4, diffs.** `openDiff`, `close_tab`, `closeAllDiffTabs`, and an accept/reject flow in the Neovim adapter.
+5. **M4, diffs.** `openDiff`, `close_tab`, `closeAllDiffTabs`, and an accept/reject flow in the Neovim adapter, with a provider that
+   shows the diff and can be replaced.
 
 ## Open questions
 

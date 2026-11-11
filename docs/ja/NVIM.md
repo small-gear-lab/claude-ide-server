@@ -2,7 +2,7 @@
 
 Neovim 側の接続部分です。Neovim を `claude-ide-server` に登録して、Claude Code の `/ide` から見つけられるようにします。アダプタは、このリポジトリの `editors/nvim/` ディレクトリにあり、Lua で書かれています。
 
-**いま動くこと:** 差分を除く、プロトコルのすべて。サーバーへの接続（サーバーがいないときや、いなくなったときの再接続を含む）、ワークスペースの登録、`:cd` への追従、選択範囲と、変わった診断の送信、ファイルや行を Claude Code にメンションすること、そして、開いているエディタ・選択範囲・診断、およびファイルを開く・確認する・保存することについての Claude Code のリクエストへの応答。本物の Claude Code（2.1.322）で試しました。**まだ動かないこと:** 差分（Issue #13、#14）。
+**いま動くこと:** プロトコルのすべて。サーバーへの接続（サーバーがいないときや、いなくなったときの再接続を含む）、ワークスペースの登録、`:cd` への追従、選択範囲と、変わった診断の送信、ファイルや行を Claude Code にメンションすること、開いているエディタ・選択範囲・診断、およびファイルを開く・確認する・保存することについての Claude Code のリクエストへの応答、そして、提案された変更を、ユーザーが承認か却下できるように表示すること。本物の Claude Code（2.1.322）で試しました。
 
 ## 必要なもの
 
@@ -42,6 +42,8 @@ require('claude_ide').setup({
   selection_debounce_ms = 100,
   -- How long diagnostics are collected before the files that changed are reported (once, for all of them).
   diagnostics_debounce_ms = 100,
+  -- How the changes that Claude Code proposes are shown. See "Diffs"; `false` leaves them out.
+  diff = { provider = 'tab', keys = {} },
   -- Called each time the registration has been accepted.
   on_registered = nil,
 })
@@ -89,6 +91,44 @@ require('claude_ide').setup({
 - `getDiagnostics`: `vim.diagnostic` の診断。`uri` のファイル、またはその診断を持つ開いているすべてのファイルについて。重大度は `Error`、`Warning`、`Information`、`Hint`、列は UTF-16 コードユニット単位です。
 
 Claude Code 2.1.322 は、自分で編集する前後に `getDiagnostics` を頼み、ほかのものは使いません。[DESIGN](DESIGN.md) の「Claude Code が自分から送るもの」を参照してください。
+
+## 差分
+
+Claude Code がファイルへの変更を提案すると、アダプタは、専用のタブページに表示します。左は、いまのファイル（開いているバッファがあれば、書いていない変更を含むそのバッファ）、右は、Claude Code の提案で、編集できます。2つは Neovim の差分モードになります。
+
+- **右側での `:write` が承認です。** そのときの内容で承認されます（別のものを承認したいときは、先に編集してください）。アダプタは、ファイルには何も書きません。ファイルを書くのは Claude Code で、その内容を使います。
+- **`:ClaudeIdeDiffReject` が却下です。** タブページや右のウィンドウを閉じても却下になります。`:ClaudeIdeDiffAccept` は `:write` と同じです。コマンドは、現在のバッファの差分、待っている差分が1つだけならそれ、名前を指定したもの（`:ClaudeIdeDiffReject edit-1`）に対して働きます。
+- Claude Code が閉じる差分（ユーザーがターミナルで決めたときに、そう頼みます）は、画面から消えます。Claude Code がいなくなった差分も同じです。
+- 表示中の差分と同じ名前の新しい差分は、それを置き換えます。
+
+キーを指定でき、差分の2つのバッファの両方に割り当てられます（`diff.keys`）。
+
+```lua
+require('claude_ide').setup({
+  diff = { keys = { accept = '<leader>da', reject = '<leader>dr' } },
+})
+```
+
+**差分をどこに表示するかは、提供元（provider）の仕事で、設定から置き換えられます。** アダプタが流れ（待っているリクエスト、名前、置き換え、閉じること）を持ち、提供元は、差分を表示することと、画面から外すことだけをします。
+
+```lua
+require('claude_ide').setup({
+  diff = {
+    provider = {
+      -- Show `diff` ({ tab_name, old_path, new_path, new_contents }). Call finish(true, contents) when the user accepts
+      -- (with the contents of the file as they are then), finish(false) when they reject. Return a table: a handle for `close`
+      -- (put in it whatever you need), in which `accept()` and `reject()` serve the two commands.
+      open = function(diff, finish) ... return { } end,
+      -- Take the diff that `open` gave this handle off the screen.
+      close = function(handle) ... end,
+    },
+  },
+})
+```
+
+`diff = false` にすると、差分を省きます。アダプタは差分を宣言せず、Claude Code は、変更をターミナルに表示します。
+
+差分は、本物の Claude Code（2.1.322）を、ターミナルで動かし、アダプタを headless の Neovim に入れて試しました。Claude Code が差分を求めるのは、ファイルを編集してよいかをユーザーに尋ねるときだけです（許可モードが、尋ねるもので、`auto` や `accept edits` ではないとき）。そのとき `Opened changes in Neovim` と表示され、ユーザーは、Neovim でもターミナルでも決められます。確認できたこと: 右側での `:write` で、編集は先へ進み、Claude Code は、右側のそのときの内容でファイルを書きます（ユーザーが内容を編集していれば、モデルには、提案をユーザーが変更してから承認したことが伝わります）。`:ClaudeIdeDiffReject` では `User rejected update` となり、ファイルは変わりません。ターミナルで決めたときは、差分が Neovim の画面から消えます。
 
 ## Claude Code へのメンション
 

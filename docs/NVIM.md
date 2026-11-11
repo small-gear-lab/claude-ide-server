@@ -3,11 +3,11 @@
 The Neovim side of the connection: it registers a Neovim with `claude-ide-server`, so that Claude Code's `/ide`
 finds it. The adapter is the directory `editors/nvim/` of this repository, written in Lua.
 
-**What works now:** everything of the protocol except diffs: connecting to the server (and again when it is not there or
-goes away), registering the workspace, following `:cd`, sending the selection and the diagnostics that change,
-mentioning a file or some lines to Claude Code, and answering its requests for the open editors, the selection, the
-diagnostics, and for opening, checking and saving a file. It was tried with a real Claude Code (2.1.322). **What does
-not yet:** diffs (issues #13 and #14).
+**What works now:** the whole of the protocol: connecting to the server (and again when it is not there or goes away),
+registering the workspace, following `:cd`, sending the selection and the diagnostics that change, mentioning a file or
+some lines to Claude Code, answering its requests for the open editors, the selection, the diagnostics, and for opening,
+checking and saving a file, and showing the changes that it proposes for the user to accept or reject. It was tried with a
+real Claude Code (2.1.322).
 
 ## Requirements
 
@@ -50,6 +50,8 @@ require('claude_ide').setup({
   selection_debounce_ms = 100,
   -- How long diagnostics are collected before the files that changed are reported (once, for all of them).
   diagnostics_debounce_ms = 100,
+  -- How the changes that Claude Code proposes are shown. See "Diffs"; `false` leaves them out.
+  diff = { provider = 'tab', keys = {} },
   -- Called each time the registration has been accepted.
   on_registered = nil,
 })
@@ -135,6 +137,56 @@ replace them or add to them with the `methods` option):
 
 Claude Code 2.1.322 asks for `getDiagnostics` itself, around its own edits, and does not use the others. See "What
 Claude Code sends on its own" in [DESIGN](DESIGN.md).
+
+## Diffs
+
+When Claude Code proposes a change to a file, the adapter shows it in a tab page of its own: on the left the file as it is now
+(the open buffer, with changes that were not written, if there is one), on the right what Claude Code proposes, which can be
+edited, with the two in Neovim's diff mode.
+
+- **`:write` on the right side accepts it**, with the contents as they are then (edit them first to accept something else).
+  Nothing is written to the file by the adapter: Claude Code writes the file, with those contents.
+- **`:ClaudeIdeDiffReject` rejects it**, and so does closing the tab page, or the right window. `:ClaudeIdeDiffAccept` is the
+  same as `:write`. The commands act on the diff of the current buffer, or on the only one that waits, or on the one that is
+  named (`:ClaudeIdeDiffReject edit-1`).
+- A diff that Claude Code closes (it asks for that when the user decides in the terminal) goes from the screen, and so does
+  one whose Claude Code has gone away.
+- A new diff of the name of one that is shown replaces it.
+
+Keys can be given, mapped in both buffers of a diff, with `diff.keys`:
+
+```lua
+require('claude_ide').setup({
+  diff = { keys = { accept = '<leader>da', reject = '<leader>dr' } },
+})
+```
+
+**Where a diff is shown is the job of a provider**, which a configuration can replace. The adapter has the flow (the request
+that waits, the names, the replacing, the closing); a provider only shows a diff and takes it off the screen:
+
+```lua
+require('claude_ide').setup({
+  diff = {
+    provider = {
+      -- Show `diff` ({ tab_name, old_path, new_path, new_contents }). Call finish(true, contents) when the user accepts
+      -- (with the contents of the file as they are then), finish(false) when they reject. Return a table: a handle for `close`
+      -- (put in it whatever you need), in which `accept()` and `reject()` serve the two commands.
+      open = function(diff, finish) ... return { } end,
+      -- Take the diff that `open` gave this handle off the screen.
+      close = function(handle) ... end,
+    },
+  },
+})
+```
+
+`diff = false` leaves diffs out: the adapter does not declare them, and Claude Code shows its changes in the terminal.
+
+The diffs were tried with a real Claude Code (2.1.322) in a terminal, with the adapter in a headless Neovim. Claude Code asks
+for a diff only when it asks the user's leave to edit a file (its permission mode is the one that asks, not `auto` or
+`accept edits`), and then says `Opened changes in Neovim`; the user may decide in Neovim or in the terminal. What was seen:
+`:write` on the right side lets the edit go on, and Claude Code writes the file with the contents of the right side as they are
+(if the user edited them, the model is told that the user changed the proposal before accepting it); `:ClaudeIdeDiffReject`
+gives `User rejected update`, and the file is not changed; and deciding in the terminal takes the diff off Neovim's screen.
 
 ## Mentioning to Claude Code
 

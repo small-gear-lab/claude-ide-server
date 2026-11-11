@@ -65,20 +65,20 @@ Claude Code 2.1.322 で、インストールされた CLI を読んで分かっ�
 
 ツールの集合は、VS Code の拡張が登録しているものです。サーバーが公開するのは、アダプターが登録のときに宣言したメソッド（下の `register` を参照）に裏付けられたツールだけです。JetBrains のプラグインが、VS Code の拡張より小さい集合を公開しているのと同じ考え方です。
 
-| MCP のツール              | アダプターのメソッド            | 備考                                                            |
-|-----------------------|-----------------------|---------------------------------------------------------------|
-| `openFile`            | `openFile`            | `startText` / `endText` で、範囲を選ぶこともできます                        |
-| `openDiff`            | `openDiff`            | 利用者が承認か拒否をするまで待ちます                                            |
-| `close_tab`           | `closeDiff`           | `tab_name`（`openDiff` に渡したもの）で指定します                           |
-| `closeAllDiffTabs`    | `closeAllDiffs`       | `CLOSED_<n>_DIFF_TABS` を答える。アダプタに差分がなければ `CLOSED_0_DIFF_TABS` |
-| `set_permission_mode` | `setPermissionMode`   | `{ mode }`。アダプタに対応するメソッドがなければ `OK` を答える                       |
-| `getOpenEditors`      | `getOpenEditors`      |                                                               |
-| `getCurrentSelection` | `getCurrentSelection` |                                                               |
-| `getLatestSelection`  | `getLatestSelection`  | 最後の選択範囲です。エディタのフォーカスが外れていても返します                               |
-| `getWorkspaceFolders` | （サーバーが答えます）           | 登録の内容から返します                                                   |
-| `getDiagnostics`      | `getDiagnostics`      | 1 つの URI か、すべて                                                |
-| `checkDocumentDirty`  | `checkDocumentDirty`  |                                                               |
-| `saveDocument`        | `saveDocument`        |                                                               |
+| MCP のツール              | アダプターのメソッド            | 備考                                                                              |
+|-----------------------|-----------------------|---------------------------------------------------------------------------------|
+| `openFile`            | `openFile`            | `startText` / `endText` で、範囲を選ぶこともできます                                          |
+| `openDiff`            | `openDiff`            | ユーザーが承認か却下をするまで待つ。`FILE_SAVED` と内容、または `DIFF_REJECTED` と タブ名を答える                |
+| `close_tab`           | `closeDiff`           | `tab_name`（`openDiff` に渡したもの）で指定する。`TAB_CLOSED` を答える。そのタブがなくても、アダプタにメソッドがなくても同じ |
+| `closeAllDiffTabs`    | `closeAllDiffs`       | `CLOSED_<n>_DIFF_TABS` を答える。アダプタに差分がなければ `CLOSED_0_DIFF_TABS`                   |
+| `set_permission_mode` | `setPermissionMode`   | `{ mode }`。アダプタに対応するメソッドがなければ `OK` を答える                                         |
+| `getOpenEditors`      | `getOpenEditors`      |                                                                                 |
+| `getCurrentSelection` | `getCurrentSelection` |                                                                                 |
+| `getLatestSelection`  | `getLatestSelection`  | 最後の選択範囲です。エディタのフォーカスが外れていても返します                                                 |
+| `getWorkspaceFolders` | （サーバーが答えます）           | 登録の内容から返します                                                                     |
+| `getDiagnostics`      | `getDiagnostics`      | 1 つの URI か、すべて                                                                  |
+| `checkDocumentDirty`  | `checkDocumentDirty`  |                                                                                 |
+| `saveDocument`        | `saveDocument`        |                                                                                 |
 
 `executeCode`（Jupyter だけ）は、対象外です。
 
@@ -86,7 +86,7 @@ Claude Code 2.1.322 で、インストールされた CLI を読んで分かっ�
 
 ツール呼び出しの結末は、次のとおりです。
 
-- ツール呼び出しの答えは、1 つのテキストです。アダプターが文字列で答えたときは、その文字列が、そのままテキストになります（たとえば `FILE_SAVED`）。それ以外は、JSON として書きます。
+- ツール呼び出しの答えは、テキストの内容1つで、`openDiff` だけは2つです（`FILE_SAVED` と、そのあとにファイルの内容）。サーバーが VS Code の拡張機能のテキストに変換しないツール（残っているのは `set_permission_mode` だけ）では、アダプタが文字列を答えれば、それがそのままテキストになり、それ以外は JSON として書かれます。
 - 失敗した呼び出し（アダプターがエラーで答える、時間内に答えない、いなくなった）も、答えのうちです。結果に `isError: true` と、理由のテキストが入ります。Claude は、理由を見られます。
 - ツールの引数は、アダプターに聞く前に、そのツールのスキーマで検査します。必須の引数がない、または型が違うと、呼び出しは失敗し（`invalid arguments for openFile: filePath is required`）、アダプターには聞きません。モデルが送るものが、渡したスキーマに合っているとは、信用しません。
 - 使えないツール（知らないもの、アダプターが宣言していないもの）の呼び出しは、プロトコルのエラー（コード `-32602`）で、アダプターには何も送りません。
@@ -167,8 +167,8 @@ WebSocket の接続は、1 本ごとに別のクライアントです。サー�
 | `getDiagnostics`      | 要求   | `uri?` → `[{ uri, diagnostics: [{ message, severity, range, source }] }]`                                                                               |
 | `checkDocumentDirty`  | 要求   | `filePath` → `{ isDirty, isUntitled }`。ドキュメントが開いていなければ `{ success: false }`                                                                             |
 | `saveDocument`        | 要求   | `filePath` → `{ saved }`。ドキュメントが開いていなければ `{ success: false }`                                                                                           |
-| `openDiff`            | 要求   | `oldFilePath`、`newFilePath`、`newFileContents`、`tabName` → `"saved"` か `"rejected"`。利用者が決めたときに答えます                                                       |
-| `closeDiff`           | 要求   | `tabName`                                                                                                                                               |
+| `openDiff`            | 要求   | `oldFilePath`、`newFilePath`、`newFileContents`、`tabName`、`diffId` → `{ accepted: true, contents }` か `{ accepted: false }`。ユーザーが決めたときに答える                |
+| `closeDiff`           | 要求   | `tabName`。そのタブのうち、その差分だけを閉じたいときは `diffId` も → 何でもよい                                                                                                     |
 | `closeAllDiffs`       | 要求   | → `{ closed: n }`                                                                                                                                       |
 | `shutdown`            | 通知   | サーバーが止まるとき                                                                                                                                              |
 
@@ -189,7 +189,11 @@ WebSocket の接続は、1 本ごとに別のクライアントです。サー�
 
 サーバーは、これらを Claude Code が期待する形で渡します（上の通知を参照）。`selectionChanged` は `selection_changed` になり（`fileUrl` と `isEmpty` が加わります）、`atMention` は `at_mentioned` に、`diagnosticsChanged` は `diagnostics_changed` になり、答えは、VS Code の拡張機能が書く形のツールの結果のテキストになります（たとえば、`getCurrentSelection` には `success` があり、`getLatestSelection` にはありません）。あとから接続した Claude Code には、そのとき現在の `selection_changed`（最後のもの）が送られ、ユーザーがいま見ている選択範囲から始められます。最初のものが捨てられることがあるので、ハンドシェイクのあとに数回、送り直されます（「Claude Code が自分から送るもの」を参照）。
 
-`openDiff` が `"saved"` を返したとき、アダプターは、`newFileContents` を `newFilePath` に書き終えています。サーバーは、Claude に `FILE_SAVED` というテキストで答えます。`"rejected"` のときは、`DIFF_REJECTED` です。
+**差分。** ファイルを書くのは、エディタではなく Claude Code です。エディタは、書く内容を答えとして返します（VS Code の拡張機能は、ユーザーが承認したとき、`FILE_SAVED` と、そのときのファイルの内容を答えます。内容は、差分の中で編集されたものかもしれません。Claude Code は、2つ目のテキストを読んで使い、`FILE_SAVED` 以外は、承認されなかったものとして扱います）。そのため、次のようになります。
+
+- `openDiff` は、ユーザーが決めたときに答えます。それまでは答えません。サーバーは、これに時間制限を設けません（アダプタへのほかのリクエストには制限があります）し、ほかのものがこれを待つこともありません。答えは `{ accepted: true, contents }`（`contents` がなければ、受け付けません。Claude Code がファイルを書けないからです）か `{ accepted: false }` です。サーバーは、これらを、`FILE_SAVED` と内容、`DIFF_REJECTED` と タブ名に変えます。
+- サーバーは、差分ごとに番号 `diffId` を振ります。表示中の差分と同じ名前の新しい `openDiff` は、その差分を置き換えます。アダプタは、古いほうを、却下として終わらせます。差分を頼んだ Claude Code が、呼び出しを取り消したり、いなくなったりしたら、サーバーは、`tabName` とその `diffId` をつけて `closeDiff` を送ります。誰にも聞けない差分が、画面に残らないようにするためです。アダプタは、その名前で表示されているのがその差分のときだけ閉じます（新しいものには触りません）。Claude Code からの `close_tab` には `diffId` がなく、その名前の差分なら、どれでも閉じます。
+- `closeAllDiffs` には、いくつ閉じたかを答えます（`{ closed: n }`）。
 
 ### バージョン
 
@@ -283,7 +287,7 @@ WebSocket の接続は、1 本ごとに別のクライアントです。サー�
 2. **M1、読み取りだけのツール。** `getOpenEditors`、`getWorkspaceFolders`、`getCurrentSelection`、`getLatestSelection`、`getDiagnostics`。`selection_changed`、`at_mentioned`。
 3. **M2、Neovim アダプタ。** サーバーの実行ファイル（`crates/server`）と、`vim.lsp.rpc` 上の Lua アダプタ。メインのウィンドウだけを登録する。
 4. **M3、操作。** `openFile`、`checkDocumentDirty`、`saveDocument`、`diagnostics_changed`。
-5. **M4、差分。** `openDiff`、`close_tab`、`closeAllDiffTabs`。それと、Neovim のアダプターの、承認と拒否の流れ。
+5. **M4、差分。** `openDiff`、`close_tab`、`closeAllDiffTabs`、そして Neovim アダプタでの承認・却下の流れ。差分を見せる提供元は、差し替えられる。
 
 ## 未解決の問い
 
