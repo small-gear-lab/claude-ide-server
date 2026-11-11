@@ -31,3 +31,14 @@ end, {
   end,
   desc = 'Claude Code /ide connection',
 })
+
+-- `:ClaudeIdeMention` mentions the current file to Claude Code; `:'<,'>ClaudeIdeMention` the lines that are selected.
+vim.api.nvim_create_user_command('ClaudeIdeMention', function(command)
+  local sent, why = require('claude_ide').mention(command.range > 0 and command.line1 or nil, command.range > 0 and command.line2 or nil)
+  if not sent then
+    vim.notify('claude-ide: ' .. why, vim.log.levels.WARN)
+  end
+end, {
+  range = true,
+  desc = 'Mention the file, or the lines, to Claude Code',
+})

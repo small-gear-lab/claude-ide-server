@@ -47,6 +47,8 @@ local function file_of(buf)
   return vim.fn.fnamemodify(name, ':p')
 end
 
+M.file_of = file_of
+
 --- The open files: every listed buffer that is a file. The active one is the buffer of the current window, or, if that
 --- is not a file, the file that the last selection was in.
 ---@return { tabs: table[] }

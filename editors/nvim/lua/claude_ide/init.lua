@@ -95,6 +95,26 @@ function M.setup(opts)
   end
 end
 
+--- Mentions the current file to Claude Code (an @-mention): the lines `first` to `last` (1-based, as in `:help
+--- :range`), or the whole file. Returns whether Claude Code was told, and if not, why.
+---@param first integer?
+---@param last integer?
+---@return boolean sent
+---@return string? why
+function M.mention(first, last)
+  local buf = vim.api.nvim_get_current_buf()
+  local path = methods.file_of(buf)
+  if not path then
+    return false, 'this buffer is not a file'
+  end
+  first = first or 1
+  last = last or vim.api.nvim_buf_line_count(buf)
+  if not session or not session:notify('atMention', { filePath = path, lineStart = first - 1, lineEnd = last - 1 }) then
+    return false, 'Neovim is not connected to the server'
+  end
+  return true
+end
+
 --- Starts connecting. Returns false if this Neovim is not to register (`should_register`).
 ---@return boolean
 function M.start()

@@ -69,7 +69,9 @@ fn start_nvim(home: &Home, lua: &str) -> Nvim {
 fn start_nvim_listening(home: &Home, lua: &str, listen: Option<&Path>) -> Nvim {
     let root = home.dir.path();
     let mut command = Command::new("nvim");
-    command.args(["--headless", "-u", "NONE", "-i", "NONE"]);
+    // `-u NORC` and not `-u NONE`: no configuration is read, but the plugins on the runtime path are loaded, as they
+    // are for a user (the adapter's commands are in its `plugin` directory).
+    command.args(["--headless", "-u", "NORC", "-i", "NONE"]);
     if let Some(listen) = listen {
         command.arg("--listen").arg(listen);
     }
@@ -575,4 +577,54 @@ async fn claude_code_can_ask_for_the_diagnostics_of_a_file_and_of_all() {
     )
     .await;
     assert_eq!(unknown, serde_json::json!([]));
+}
+
+/// Types `keys` into a Neovim that listens on `listen`.
+fn send_keys(listen: &Path, keys: &str) {
+    let sent = Command::new("nvim")
+        .arg("--server")
+        .arg(listen)
+        .args(["--remote-send", keys])
+        .status()
+        .unwrap();
+    assert!(sent.success());
+}
+
+#[tokio::test]
+async fn a_file_or_some_of_its_lines_can_be_mentioned_to_claude_code() {
+    if !nvim_available() {
+        return;
+    }
+    let home = Home::new();
+    let _server = start_server(&home);
+    let _ = connect_when_ready(&home.default_socket()).await;
+
+    let file = home.dir.path().join("a.txt");
+    std::fs::write(&file, "one\ntwo\nthree\nfour\n").unwrap();
+    let listen = home.dir.path().join("nvim.sock");
+    let _nvim = start_nvim_listening(
+        &home,
+        &format!(
+            "vim.cmd('edit {}'); require('claude_ide').setup({{ server = {{ autostart = false }} }})",
+            file.display()
+        ),
+        Some(&listen),
+    );
+    wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
+    let mut claude = claude_for(&home).await;
+    wait_until("nvim listens", || listen.exists()).await;
+    let real = std::fs::canonicalize(&file).unwrap();
+
+    // The whole file: from the first line to the last (0-based, the last one included).
+    send_keys(&listen, ":ClaudeIdeMention<CR>");
+    let whole = next_notification(&mut claude, "at_mentioned").await;
+    assert_eq!(whole["filePath"], real.to_string_lossy().as_ref());
+    assert_eq!(whole["lineStart"], 0);
+    assert_eq!(whole["lineEnd"], 3);
+
+    // Some lines: the ones of the range of the command (1-based there, 0-based here).
+    send_keys(&listen, ":2,3ClaudeIdeMention<CR>");
+    let lines = next_notification(&mut claude, "at_mentioned").await;
+    assert_eq!(lines["lineStart"], 1);
+    assert_eq!(lines["lineEnd"], 2);
 }
