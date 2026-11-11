@@ -6,98 +6,23 @@ mod common;
 use std::fs;
 use std::time::Duration;
 
-use claude_ide_core::adapter::memory::{MemoryConnector, listener};
+use claude_ide_core::adapter::memory::listener;
 use claude_ide_core::adapter::{self, RequestError, error_code};
 use claude_ide_core::jsonrpc::Message;
 use claude_ide_core::lock::{EnvVars, LockContents, LockDirs};
-use claude_ide_core::workspace::{Config, Workspace, WorkspaceEvent, WorkspaceServer, socket_path};
-use claude_ide_core::ws::AUTH_HEADER;
+use claude_ide_core::workspace::{Config, WorkspaceEvent, WorkspaceServer, socket_path};
+use common::claude::MockClaude;
+use common::fixture::{Fixture, claude_connect, registered};
 use common::{Client, WAIT, registration};
 use serde_json::json;
 use tempfile::TempDir;
 use tokio::io::DuplexStream;
 use tokio::time::timeout;
-use tokio_tungstenite::tungstenite::Error as WsError;
-use tokio_tungstenite::tungstenite::client::IntoClientRequest;
-
-struct Fixture {
-    // Held so that the temporary directory lives as long as the fixture.
-    _root: TempDir,
-    dirs: LockDirs,
-    connector: MemoryConnector,
-    server: WorkspaceServer,
-}
-
-impl Fixture {
-    fn new() -> Self {
-        let root = TempDir::new().unwrap();
-        let dirs = LockDirs {
-            lock_dir: root.path().join("ide"),
-            record_dir: root.path().join("run"),
-        };
-        Self::in_dirs(root, dirs)
-    }
-
-    fn in_dirs(root: TempDir, dirs: LockDirs) -> Self {
-        let (listener, connector) = listener();
-        let server = WorkspaceServer::start(
-            listener,
-            adapter::Config::default(),
-            Config::new(dirs.clone(), std::process::id()),
-        );
-        Self {
-            _root: root,
-            dirs,
-            connector,
-            server,
-        }
-    }
-
-    async fn client(&self) -> Client<DuplexStream> {
-        Client::new(self.connector.connect().await.unwrap())
-    }
-
-    fn lock_files(&self) -> Vec<String> {
-        let Ok(entries) = fs::read_dir(&self.dirs.lock_dir) else {
-            return Vec::new();
-        };
-        let mut names: Vec<String> = entries
-            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
-            .collect();
-        names.sort();
-        names
-    }
-
-    fn read_lock(&self, port: u16) -> LockContents {
-        serde_json::from_slice(&fs::read(self.dirs.lock_dir.join(format!("{port}.lock"))).unwrap())
-            .unwrap()
-    }
-}
-
-async fn registered(fixture: &mut Fixture) -> (Client<DuplexStream>, Workspace, u16) {
-    let mut client = fixture.client().await;
-    let port = client.register(registration()).await.unwrap();
-    let workspace = timeout(WAIT, fixture.server.accept())
-        .await
-        .unwrap()
-        .expect("a workspace");
-    (client, workspace, port)
-}
-
-async fn claude_connect(port: u16, token: &str) -> Result<(), WsError> {
-    let mut request = format!("ws://127.0.0.1:{port}/")
-        .into_client_request()
-        .unwrap();
-    request
-        .headers_mut()
-        .insert(AUTH_HEADER, token.parse().unwrap());
-    tokio_tungstenite::connect_async(request).await.map(|_| ())
-}
 
 #[tokio::test]
 async fn registering_gives_a_port_a_lock_file_and_a_workspace() {
     let mut fixture = Fixture::new();
-    let (_client, mut workspace, port) = registered(&mut fixture).await;
+    let (_client, workspace, port) = registered(&mut fixture).await;
 
     assert_eq!(workspace.port(), port);
     let registration = workspace.registration();
@@ -114,13 +39,15 @@ async fn registering_gives_a_port_a_lock_file_and_a_workspace() {
     assert_eq!(lock.workspace_folders, ["/home/user/project"]);
     assert_eq!(lock.auth_token.len(), 32);
 
-    // Claude Code can connect with the token from the lock file, and is told about it.
+    // Claude Code can connect with the token from the lock file, and then is a client of the workspace.
     assert!(claude_connect(port, "wrong").await.is_err());
-    claude_connect(port, &lock.auth_token).await.unwrap();
-    match timeout(WAIT, workspace.next_event()).await.unwrap() {
-        Some(WorkspaceEvent::ClaudeConnected(_)) => {}
-        other => panic!("expected a Claude connection, got {other:?}"),
-    }
+    let mut claude = MockClaude::connect(port, &lock.auth_token).await;
+    claude.handshake(4321).await;
+    claude.tool_names().await; // by now the handshake has been served
+    let clients = workspace.claude_clients();
+    assert_eq!(clients.len(), 1);
+    assert_eq!(clients[0].name, "claude-code");
+    assert_eq!(clients[0].version, "2.1.322");
 }
 
 #[tokio::test]
@@ -366,35 +293,25 @@ async fn expect_shutdown_then_end(client: &mut Client<DuplexStream>) {
 #[tokio::test]
 async fn the_connections_of_claude_are_closed_when_the_adapter_goes_away() {
     let mut fixture = Fixture::new();
-    let (client, mut workspace, port) = registered(&mut fixture).await;
+    let (client, workspace, port) = registered(&mut fixture).await;
     let token = fixture.read_lock(port).auth_token;
 
-    // Claude Code connects, and the connection is handed to whoever owns the workspace.
-    let mut request = format!("ws://127.0.0.1:{port}/")
-        .into_client_request()
-        .unwrap();
-    request
-        .headers_mut()
-        .insert(AUTH_HEADER, token.parse().unwrap());
-    let (mut claude, _) = tokio_tungstenite::connect_async(request).await.unwrap();
-    let mut connection = match timeout(WAIT, workspace.next_event()).await.unwrap() {
-        Some(WorkspaceEvent::ClaudeConnected(connection)) => connection,
-        other => panic!("expected a Claude connection, got {other:?}"),
-    };
+    let mut claude = MockClaude::connect(port, &token).await;
+    claude.handshake(4321).await;
+    claude.tool_names().await;
+    assert_eq!(workspace.claude_clients().len(), 1);
 
     drop(client); // the adapter goes away
 
-    // The owner still holds the connection, but it has been closed under it.
-    assert!(timeout(WAIT, connection.recv()).await.unwrap().is_none());
-    match timeout(WAIT, futures_util::StreamExt::next(&mut claude))
-        .await
-        .unwrap()
-    {
-        Some(Ok(tokio_tungstenite::tungstenite::Message::Close(Some(frame)))) => {
-            assert_eq!(u16::from(frame.code), 1001);
+    // Claude Code is told that the server is going away, and the client leaves the workspace.
+    assert_eq!(claude.close_code().await, Some(1001));
+    timeout(WAIT, async {
+        while !workspace.claude_clients().is_empty() {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
         }
-        other => panic!("expected a close frame, got {other:?}"),
-    }
+    })
+    .await
+    .expect("the client is removed");
 }
 
 #[tokio::test]

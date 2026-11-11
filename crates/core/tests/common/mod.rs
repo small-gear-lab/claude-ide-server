@@ -3,6 +3,9 @@
 // Each test file uses some of these, not all.
 #![allow(dead_code)]
 
+pub mod claude;
+pub mod fixture;
+
 use std::time::Duration;
 
 use claude_ide_core::adapter::PROTOCOL_VERSION;

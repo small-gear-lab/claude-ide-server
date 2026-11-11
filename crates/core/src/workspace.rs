@@ -17,7 +17,9 @@ use crate::adapter::{
     Registration,
 };
 use crate::lock::{self, EnvVars, LockContents, LockDirs, LockFile};
-use crate::ws::{self, Connection, WsServer};
+use crate::mcp::{ClientInfo, McpHub};
+use crate::tools::WorkspaceTools;
+use crate::ws::{self, WsServer};
 
 /// Where the adapter socket goes by default: `adapter.sock` in the runtime directory (see [`lock::runtime_dir`]).
 pub fn socket_path(env: &EnvVars) -> PathBuf {
@@ -84,12 +86,11 @@ impl std::fmt::Debug for Config {
 
 /// What happens in a workspace, in the order it happens.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum WorkspaceEvent {
     /// A notification from the adapter (`selectionChanged`, `diagnosticsChanged`, ...). `workspaceFoldersChanged`
     /// has already been applied to the lock file when it arrives here.
     Notification { method: String, params: Value },
-    /// Claude Code connected to the workspace's port, with the right token.
-    ClaudeConnected(Connection),
 }
 
 /// The part of a workspace that its task and the [`Workspace`] share.
@@ -107,6 +108,7 @@ pub struct Workspace {
     port: u16,
     shared: Arc<Shared>,
     handle: AdapterHandle,
+    claude: McpHub<WorkspaceTools>,
     events: mpsc::Receiver<WorkspaceEvent>,
     finished: oneshot::Receiver<()>,
 }
@@ -127,6 +129,17 @@ impl Workspace {
     /// A way to send requests and notifications to the adapter.
     pub fn handle(&self) -> AdapterHandle {
         self.handle.clone()
+    }
+
+    /// The Claude Code clients that are connected to this workspace and have completed their handshake.
+    pub fn claude_clients(&self) -> Vec<ClientInfo> {
+        self.claude.clients()
+    }
+
+    /// Sends a notification (`selection_changed`, `at_mentioned`, `diagnostics_changed`, ...) to every connected Claude
+    /// Code.
+    pub async fn notify_claude(&self, method: &str, params: Value) {
+        self.claude.notify(method, params).await;
     }
 
     /// The next event. `None` once the adapter is gone and everything has been cleaned up.
@@ -265,11 +278,20 @@ async fn provision(
     });
     let (events_tx, events) = mpsc::channel(256);
     let (finished_tx, finished) = oneshot::channel();
+    let claude = McpHub::new(
+        WorkspaceTools::new(registration.methods.clone(), session.handle(), {
+            let shared = shared.clone();
+            Arc::new(move || shared.folders.lock().expect("not poisoned").clone())
+        }),
+        "claude-ide-server",
+        env!("CARGO_PKG_VERSION"),
+    );
     let workspace = Workspace {
         registration,
         port,
         shared: shared.clone(),
         handle: session.handle(),
+        claude: claude.clone(),
         events,
         finished,
     };
@@ -278,6 +300,7 @@ async fn provision(
         ws_server,
         lock,
         shared,
+        claude,
         events: events_tx,
         finished: finished_tx,
         stop,
@@ -313,6 +336,7 @@ struct Running {
     ws_server: WsServer,
     lock: LockFile,
     shared: Arc<Shared>,
+    claude: McpHub<WorkspaceTools>,
     events: mpsc::Sender<WorkspaceEvent>,
     finished: oneshot::Sender<()>,
     stop: watch::Receiver<bool>,
@@ -328,6 +352,7 @@ async fn run(running: Running) {
         mut ws_server,
         mut lock,
         shared,
+        claude,
         events,
         finished,
         mut stop,
@@ -349,10 +374,8 @@ async fn run(running: Running) {
             }
             connection = ws_server.accept() => {
                 let Some(connection) = connection else { break };
-                if events.send(WorkspaceEvent::ClaudeConnected(connection)).await.is_err() {
-                    owner_closed = true;
-                    break;
-                }
+                // The MCP handshake and the tool calls are served in a task of their own.
+                claude.attach(connection);
             }
             () = events.closed() => {
                 owner_closed = true;
