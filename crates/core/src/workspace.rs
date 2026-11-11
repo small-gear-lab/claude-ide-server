@@ -44,9 +44,11 @@ pub struct Config {
     pub ws: ws::Config,
     /// How long a Claude Code that has connected may take to complete the MCP handshake.
     pub claude_handshake_timeout: Duration,
-    /// When, counted from its handshake, the selection that was last reported is sent to a Claude Code again. Claude
-    /// Code sets up what receives notifications some time after the handshake, and throws away those that come before;
-    /// how long it takes varies from one start to the next, so the selection is sent a few times. Empty for none.
+    /// When, counted from its connection, the selection that was last reported is sent to a Claude Code again. Claude
+    /// Code sets up what receives notifications some time after it is connected, and throws away those that come before;
+    /// how long that takes varies from one start to the next. The VS Code extension sends the selection once, 500 ms
+    /// after a connection, and that is one of these; the others are for a Claude Code that is slower (ten runs out of ten
+    /// reached Claude Code with 250 ms, 1 s and 3 s). Empty for none.
     pub claude_state_resends: Vec<Duration>,
     /// Whether a process is alive; decides which leftovers of an earlier server are cleaned up at start.
     pub is_alive: Arc<dyn Fn(u32) -> bool + Send + Sync>,
@@ -69,6 +71,7 @@ impl Config {
             claude_handshake_timeout: Duration::from_secs(10),
             claude_state_resends: vec![
                 Duration::from_millis(250),
+                Duration::from_millis(500),
                 Duration::from_millis(1000),
                 Duration::from_millis(3000),
             ],
