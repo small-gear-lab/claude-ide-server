@@ -1,0 +1,42 @@
+name: docs
+
+on:
+  push:
+    branches: [main]
+    paths: ["docs/**", "README.md", "tools/build-docs.sh", ".github/workflows/docs.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.2
+        with:
+          # The default globs search the whole tree, and tests/fixtures holds symbolic link loops.
+          cache-dependency-glob: docs/requirements.txt
+      - run: tools/build-docs.sh
+      - name: Verify the checked-in Japanese Markdown is current
+        run: git diff --exit-code -- docs/ja README.ja.md
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs/_build/html
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

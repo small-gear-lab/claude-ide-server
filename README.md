@@ -1,5 +1,7 @@
 # claude-ide-server
 
+[日本語](README.ja.md)
+
 An **unofficial** IDE integration server for [Claude Code](https://code.claude.com/docs/en/overview)'s `/ide`
 protocol. It is not affiliated with or endorsed by Anthropic.
 
@@ -27,6 +29,13 @@ Claude Code ──WebSocket (MCP)──▶ claude-ide-server ◀──JSON-RPC (
   that workspace and its lock file, so a crashed editor leaves nothing behind.
 
 The first adapter will be for Neovim, written in Lua.
+
+## Documentation
+
+- [docs/DESIGN.md](docs/DESIGN.md): the design, the protocol between the server and an editor adapter, and the milestones.
+
+The documents are written in English and have a Japanese version (`README.ja.md`, `docs/ja/`), built from the
+gettext catalogs in `docs/locale/ja/` by `tools/build-docs.sh`.
 
 ## Layout (planned)
 

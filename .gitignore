@@ -1,1 +1,4 @@
 /target
+/docs/_build/
+*.mo
+__pycache__/
