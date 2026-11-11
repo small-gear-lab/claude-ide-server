@@ -230,6 +230,27 @@ check('a window was added for the file', #vim.api.nvim_tabpage_list_wins(0), bef
 check('and the terminal is still shown', vim.fn.bufwinid(terminal_buf) ~= -1, true)
 check('saving a file that is not open', actions.saveDocument({ filePath = dir .. '/other.lua' }), { success = false })
 
+-- A file that is asked for by a path through a link: it is found, and answered under the uri that it was asked for (Claude Code
+-- compares that uri with the path of the file that it edited, and does not resolve links).
+local real_dir = vim.fn.resolve(dir) .. '/real'
+vim.fn.mkdir(real_dir, 'p')
+local link_dir = vim.fn.resolve(dir) .. '/link'
+vim.uv.fs_symlink(real_dir, link_dir)
+local linked_real = real_dir .. '/linked.lua'
+vim.fn.writefile({ 'x' }, linked_real)
+vim.cmd.edit(linked_real)
+vim.diagnostic.set(vim.api.nvim_create_namespace('link'), vim.fn.bufnr(linked_real), { { lnum = 0, col = 0, message = 'via the link' } })
+local via_link = 'file://' .. link_dir .. '/linked.lua'
+local found = methods.handlers.getDiagnostics({ uri = via_link })
+check('found by a path through a link', found[1] and found[1].diagnostics[1].message, 'via the link')
+check('and answered under the uri that was asked for', found[1] and found[1].uri, via_link)
+local unlinked = methods.handlers.getDiagnostics({ uri = vim.uri_from_fname(linked_real) })
+check('by the real path too', unlinked[1] and unlinked[1].uri, vim.uri_from_fname(linked_real))
+check('a file that is not open has none', methods.handlers.getDiagnostics({ uri = 'file://' .. dir .. '/never-opened.lua' }), {})
+local everyone = methods.handlers.getDiagnostics()
+check('without a uri, the uri of the real path', everyone[1] and everyone[1].uri, vim.uri_from_fname(linked_real))
+vim.cmd('bwipeout! ' .. vim.fn.bufnr(linked_real))
+
 -- Diffs. A request waits (a coroutine, as the requests of the server are), and the user decides in the tab that is shown.
 local diff = require('claude_ide.diff')
 local function open_diff(name, contents, id)

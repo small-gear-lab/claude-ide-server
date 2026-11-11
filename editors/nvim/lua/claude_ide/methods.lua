@@ -129,8 +129,9 @@ end
 --- The diagnostics of a buffer, as the server takes them: `{ uri, diagnostics }`.
 ---@param buf integer
 ---@param path string
+---@param uri string? The `uri` that the file is to go by: the one that was asked for, else the one of the real path.
 ---@return table
-local function diagnostics_of(buf, path)
+local function diagnostics_of(buf, path, uri)
   local function line_of(lnum)
     return vim.api.nvim_buf_get_lines(buf, lnum, lnum + 1, false)[1] or ''
   end
@@ -138,18 +139,30 @@ local function diagnostics_of(buf, path)
   for _, diagnostic in ipairs(vim.diagnostic.get(buf)) do
     table.insert(found, M.to_server_diagnostic(diagnostic, line_of))
   end
-  return { uri = vim.uri_from_fname(path), diagnostics = found }
+  return { uri = uri or vim.uri_from_fname(path), diagnostics = found }
 end
 
 --- The diagnostics of one file (`params.uri`), or of every open file that has some.
 ---@param params { uri: string? }?
 ---@return table[]
 function handlers.getDiagnostics(params)
-  local wanted = type(params) == 'table' and type(params.uri) == 'string' and vim.uri_to_fname(params.uri) or nil
+  local wanted = type(params) == 'table' and type(params.uri) == 'string' and params.uri or nil
+  if wanted then
+    -- One file: found by its real path (the path that was asked for may go through a link), and answered under the `uri`
+    -- that it was asked for, as it is spelt there. Claude Code compares that `uri` with the path of the file that it edited
+    -- (it does not resolve links) and drops what does not match it, so what it gave is what it must get back.
+    local path = vim.uri_to_fname(wanted)
+    -- A file that is in the list is answered, with no diagnostics if it has none, whether or not its text is loaded yet.
+    local buf = files.buffer_for(path)
+    if not buf then
+      return {}
+    end
+    return { diagnostics_of(buf, file_of(buf) or path, wanted) }
+  end
   local result = {}
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
     local path = file_of(buf)
-    if path and (wanted and path == wanted or (not wanted and #vim.diagnostic.get(buf) > 0)) then
+    if path and #vim.diagnostic.get(buf) > 0 then
       table.insert(result, diagnostics_of(buf, path))
     end
   end

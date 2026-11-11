@@ -1053,3 +1053,43 @@ async fn claude_code_can_propose_a_change_that_the_user_accepts_edits_or_rejects
 async fn another_claude_for(home: &Home) -> MockClaude {
     claude_for(home).await
 }
+
+#[tokio::test]
+async fn a_file_is_asked_for_by_a_path_through_a_link_and_answered_under_the_uri_that_was_asked_for()
+ {
+    if !nvim_available() {
+        return;
+    }
+    let home = Home::new();
+    let _server = start_server(&home);
+    let _ = connect_when_ready(&home.default_socket()).await;
+
+    // The workspace is under a link: `link` is where Claude Code is, and `real` is where the file is.
+    let real = std::fs::canonicalize(home.dir.path()).unwrap().join("real");
+    std::fs::create_dir_all(&real).unwrap();
+    let link = real.parent().unwrap().join("link");
+    std::os::unix::fs::symlink(&real, &link).unwrap();
+    std::fs::write(real.join("a.lua"), "return 1\n").unwrap();
+    let _nvim = start_nvim(
+        &home,
+        &format!(
+            "vim.cmd('edit {}'); \
+             vim.diagnostic.set(vim.api.nvim_create_namespace('t'), 0, {{ {{ lnum = 0, col = 0, message = 'there' }} }}); \
+             require('claude_ide').setup({{ server = {{ autostart = false }} }})",
+            real.join("a.lua").display()
+        ),
+    );
+    wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
+    let mut claude = claude_for(&home).await;
+
+    // Claude Code edited `link/a.lua`: that is the uri that it asks about, and the one that must come back.
+    let asked = format!("file://{}/a.lua", link.display());
+    let answer = call_with(
+        &mut claude,
+        "getDiagnostics",
+        serde_json::json!({ "uri": asked }),
+    )
+    .await;
+    assert_eq!(answer[0]["uri"], asked.as_str(), "{answer}");
+    assert_eq!(answer[0]["diagnostics"][0]["message"], "there");
+}
