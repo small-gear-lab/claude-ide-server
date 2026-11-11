@@ -13,7 +13,9 @@ use std::process::Stdio;
 use common::claude::MockClaude;
 use common::{Client, registration};
 use serde_json::json;
-use support::{Home, Server, connect_when_ready, token_of, wait_for_log};
+#[cfg(unix)]
+use support::wait_for_log;
+use support::{Home, Server, connect_when_ready, token_of};
 
 /// What an adapter does: registers, and gets the port of the workspace.
 async fn register(socket: &Path) -> (Client<common::AdapterStream>, u16) {
@@ -78,11 +80,10 @@ async fn it_serves_an_adapter_and_a_claude_code_and_leaves_nothing_when_terminat
 }
 
 /// Windows has no `SIGTERM` for a service to be asked with: a task that is ended, like a process that is killed, gets no
-/// chance to clean up. What is left (the lock file) is removed by the next server, which finds that the process that wrote
-/// it is gone.
+/// chance to clean up. The lock file is deleted all the same, when the system closes the handle that the server kept on it.
 #[cfg(windows)]
 #[tokio::test]
-async fn a_server_that_is_killed_leaves_its_lock_file_and_the_next_server_removes_it() {
+async fn a_server_that_is_killed_leaves_no_lock_file_behind() {
     let home = Home::new();
     let mut server = Server(
         home.command()
@@ -111,20 +112,14 @@ async fn a_server_that_is_killed_leaves_its_lock_file_and_the_next_server_remove
     server.kill();
     server.wait().await;
     drop(claude);
-    assert_eq!(home.lock_files().len(), 1, "nothing was cleaned up");
-
-    // The pipe is free again (it went with the process), and the next server clears what was left.
-    let mut next = Server(
-        home.command()
-            .arg("--socket")
-            .arg(home.socket())
-            .spawn()
-            .unwrap(),
-    );
-    wait_for_log(&home, "removed the lock file of an earlier server").await;
-    assert!(home.lock_files().is_empty());
-    next.kill();
-    next.wait().await;
+    // The system closes the handles of a process that has ended, and the files that were to go with them go.
+    tokio::time::timeout(support::WAIT, async {
+        while !home.lock_files().is_empty() {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("the lock file is deleted");
 }
 
 #[tokio::test]

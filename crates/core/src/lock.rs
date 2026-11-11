@@ -130,6 +130,10 @@ struct Record {
 }
 
 /// A lock file that this server wrote. Dropping it removes the file and its record.
+///
+/// On Windows the files also go when the process does, however it ends (Task Scheduler ends a task by killing the process,
+/// which gives it no chance to clean up): the server keeps a handle on each that says "delete when closed", and the system
+/// closes it when the process is gone.
 #[derive(Debug)]
 pub struct LockFile {
     path: PathBuf,
@@ -137,6 +141,9 @@ pub struct LockFile {
     contents: LockContents,
     server_pid: u32,
     closed: bool,
+    /// The handles that delete the lock file and its record when they are closed (Windows).
+    #[cfg(windows)]
+    delete_on_close: Vec<fs::File>,
 }
 
 impl LockFile {
@@ -166,12 +173,23 @@ impl LockFile {
             let _ = fs::remove_file(&record_path);
             return Err(error);
         }
+        #[cfg(windows)]
+        let delete_on_close = match (delete_when_closed(&record_path), delete_when_closed(&path)) {
+            (Ok(record), Ok(lock)) => vec![record, lock],
+            (Err(error), _) | (_, Err(error)) => {
+                let _ = fs::remove_file(&path);
+                let _ = fs::remove_file(&record_path);
+                return Err(error);
+            }
+        };
         Ok(Self {
             path,
             record_path,
             contents,
             server_pid,
             closed: false,
+            #[cfg(windows)]
+            delete_on_close,
         })
     }
 
@@ -191,6 +209,14 @@ impl LockFile {
         updated.workspace_folders = folders;
         write_atomically(&self.path, &to_json(&updated)?, self.server_pid)?;
         self.contents = updated;
+        // The file that is there now is a new one (the old one was replaced): it needs its own handle. The record is the
+        // same file as before.
+        #[cfg(windows)]
+        {
+            let lock = delete_when_closed(&self.path)?;
+            self.delete_on_close.truncate(1);
+            self.delete_on_close.push(lock);
+        }
         Ok(())
     }
 
@@ -200,6 +226,9 @@ impl LockFile {
             return Ok(());
         }
         self.closed = true;
+        // The files go when their handles are closed; the removal below is for what is left of them, if anything.
+        #[cfg(windows)]
+        self.delete_on_close.clear();
         let lock = remove_if_exists(&self.path);
         let record = remove_if_exists(&self.record_path);
         lock.and(record)
@@ -210,6 +239,22 @@ impl Drop for LockFile {
     fn drop(&mut self) {
         let _ = self.close();
     }
+}
+
+/// Opens `path` with a handle that deletes the file when it is closed, and that lets everyone else go on reading, writing,
+/// renaming and deleting it (a reader, such as Claude Code, does not hold the file back, and the file can be replaced).
+/// The handle is kept for as long as the file is to be there; the system closes it when the process ends.
+#[cfg(windows)]
+fn delete_when_closed(path: &Path) -> io::Result<fs::File> {
+    use std::os::windows::fs::OpenOptionsExt;
+    const DELETE: u32 = 0x0001_0000;
+    const FILE_SHARE_READ_WRITE_DELETE: u32 = 0x1 | 0x2 | 0x4;
+    const FILE_FLAG_DELETE_ON_CLOSE: u32 = 0x0400_0000;
+    fs::OpenOptions::new()
+        .access_mode(DELETE)
+        .share_mode(FILE_SHARE_READ_WRITE_DELETE)
+        .custom_flags(FILE_FLAG_DELETE_ON_CLOSE)
+        .open(path)
 }
 
 /// Removes the lock files that a server which is no longer alive left behind, and their records. Returns the lock
