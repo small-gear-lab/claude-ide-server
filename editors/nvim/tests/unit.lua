@@ -115,7 +115,11 @@ check('no filetype', methods.language_id(''), 'plaintext')
 -- `register` declares the names in this table: nothing else may be in it.
 local declared = vim.tbl_keys(methods.handlers)
 table.sort(declared)
-check('the requests that are answered', declared, { 'getCurrentSelection', 'getLatestSelection', 'getOpenEditors' })
+check(
+  'the requests that are answered',
+  declared,
+  { 'getCurrentSelection', 'getDiagnostics', 'getLatestSelection', 'getOpenEditors' }
+)
 
 vim.cmd.edit(scratch)
 local in_file = methods.handlers.getCurrentSelection()
@@ -128,6 +132,32 @@ local active = vim.tbl_filter(function(tab)
 end, methods.handlers.getOpenEditors().tabs)
 check('in a terminal the file that the user was in is the active one', #active, 1)
 check('and it is that file', active[1] and active[1].uri, vim.uri_from_fname(path))
+
+-- A diagnostic: the columns are UTF-16 code units, and the severity has a name.
+local lines = { 'aé😀b', 'second' }
+local function line_of(lnum)
+  return lines[lnum + 1] or ''
+end
+check(
+  'a diagnostic after an emoji',
+  methods.to_server_diagnostic(
+    { lnum = 0, col = 7, end_lnum = 1, end_col = 3, severity = vim.diagnostic.severity.WARN, message = 'm', source = 's' },
+    line_of
+  ),
+  { message = 'm', severity = 'Warning', source = 's', range = { start = { line = 0, character = 4 }, ['end'] = { line = 1, character = 3 } } }
+)
+check(
+  'a diagnostic without an end or a source is empty at its start',
+  methods.to_server_diagnostic({ lnum = 1, col = 2, severity = vim.diagnostic.severity.ERROR, message = 'x' }, line_of),
+  { message = 'x', severity = 'Error', range = { start = { line = 1, character = 2 }, ['end'] = { line = 1, character = 2 } } }
+)
+check(
+  'the severities',
+  vim.tbl_map(function(severity)
+    return methods.to_server_diagnostic({ lnum = 0, col = 0, severity = severity, message = '' }, line_of).severity
+  end, { 1, 2, 3, 4 }),
+  { 'Error', 'Warning', 'Information', 'Hint' }
+)
 
 if failures > 0 then
   io.stderr:write(('%d checks failed\n'):format(failures))

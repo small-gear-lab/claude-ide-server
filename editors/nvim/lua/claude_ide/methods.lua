@@ -97,4 +97,64 @@ function handlers.getLatestSelection()
   return answer(selection.available())
 end
 
+local severities = {
+  [vim.diagnostic.severity.ERROR] = 'Error',
+  [vim.diagnostic.severity.WARN] = 'Warning',
+  [vim.diagnostic.severity.INFO] = 'Information',
+  [vim.diagnostic.severity.HINT] = 'Hint',
+}
+
+--- A diagnostic of Neovim in the form that the server takes. Neovim's positions are 0-based and count bytes, and the end
+--- of its range is exclusive; the server's are 0-based and count UTF-16 code units, the end being exclusive too.
+---@param diagnostic vim.Diagnostic
+---@param line_of fun(lnum: integer): string The text of a line (0-based).
+---@return table
+function M.to_server_diagnostic(diagnostic, line_of)
+  local end_lnum = diagnostic.end_lnum or diagnostic.lnum
+  local end_col = diagnostic.end_col or diagnostic.col
+  local result = {
+    message = diagnostic.message,
+    -- Neovim has no fifth level: anything that is not known counts as the least.
+    severity = severities[diagnostic.severity] or 'Hint',
+    range = {
+      start = { line = diagnostic.lnum, character = selection.utf16_col(line_of(diagnostic.lnum), diagnostic.col) },
+      ['end'] = { line = end_lnum, character = selection.utf16_col(line_of(end_lnum), end_col) },
+    },
+  }
+  if diagnostic.source then
+    result.source = diagnostic.source
+  end
+  return result
+end
+
+--- The diagnostics of a buffer, as the server takes them: `{ uri, diagnostics }`.
+---@param buf integer
+---@param path string
+---@return table
+local function diagnostics_of(buf, path)
+  local function line_of(lnum)
+    return vim.api.nvim_buf_get_lines(buf, lnum, lnum + 1, false)[1] or ''
+  end
+  local found = {}
+  for _, diagnostic in ipairs(vim.diagnostic.get(buf)) do
+    table.insert(found, M.to_server_diagnostic(diagnostic, line_of))
+  end
+  return { uri = vim.uri_from_fname(path), diagnostics = found }
+end
+
+--- The diagnostics of one file (`params.uri`), or of every open file that has some.
+---@param params { uri: string? }?
+---@return table[]
+function handlers.getDiagnostics(params)
+  local wanted = type(params) == 'table' and type(params.uri) == 'string' and vim.uri_to_fname(params.uri) or nil
+  local result = {}
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    local path = file_of(buf)
+    if path and (wanted and path == wanted or (not wanted and #vim.diagnostic.get(buf) > 0)) then
+      table.insert(result, diagnostics_of(buf, path))
+    end
+  end
+  return result
+end
+
 return M

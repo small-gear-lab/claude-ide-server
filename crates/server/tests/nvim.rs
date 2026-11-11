@@ -433,10 +433,14 @@ async fn claude_for(home: &Home) -> MockClaude {
 /// `tools/call`, and the JSON in the text of the result. The server has checked it against its own types, so a shape
 /// that it does not accept is an error here, with the place of the fault.
 async fn call(claude: &mut MockClaude, name: &str) -> Value {
+    call_with(claude, name, serde_json::json!({})).await
+}
+
+async fn call_with(claude: &mut MockClaude, name: &str, arguments: Value) -> Value {
     let answer = claude
         .request(
             "tools/call",
-            serde_json::json!({ "name": name, "arguments": {} }),
+            serde_json::json!({ "name": name, "arguments": arguments }),
         )
         .await;
     assert_ne!(answer["result"]["isError"], true, "{name}: {answer}");
@@ -504,4 +508,71 @@ async fn claude_code_can_ask_for_the_open_editors_and_the_selection() {
         assert_eq!(selection["selection"]["isEmpty"], true);
         assert_eq!(selection["selection"]["start"]["line"], 0);
     }
+}
+
+#[tokio::test]
+async fn claude_code_can_ask_for_the_diagnostics_of_a_file_and_of_all() {
+    if !nvim_available() {
+        return;
+    }
+    let home = Home::new();
+    let _server = start_server(&home);
+    let _ = connect_when_ready(&home.default_socket()).await;
+
+    let first = home.dir.path().join("a.txt");
+    let second = home.dir.path().join("b.lua");
+    std::fs::write(&first, "aé😀b\nsecond line\n").unwrap();
+    std::fs::write(&second, "return 1\n").unwrap();
+    // One diagnostic in the first file, on the emoji: bytes 3 to 7 of the first line, which are the columns 2 to 4 in
+    // UTF-16 code units.
+    let _nvim = start_nvim(
+        &home,
+        &format!(
+            "vim.cmd('edit {}'); vim.cmd('badd {}'); \
+             vim.diagnostic.set(vim.api.nvim_create_namespace('test'), 0, {{ {{ lnum = 0, col = 3, end_lnum = 0, end_col = 7, \
+             severity = vim.diagnostic.severity.ERROR, message = 'boom', source = 'lint' }} }}); \
+             require('claude_ide').setup({{ server = {{ autostart = false }} }})",
+            first.display(),
+            second.display()
+        ),
+    );
+    wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
+    let mut claude = claude_for(&home).await;
+    let real_first = std::fs::canonicalize(&first).unwrap();
+    let first_uri = format!("file://{}", real_first.display());
+
+    // Of all the files: only the one that has some.
+    let all = call(&mut claude, "getDiagnostics").await;
+    let files = all.as_array().unwrap();
+    assert_eq!(files.len(), 1, "{all}");
+    assert_eq!(files[0]["uri"], first_uri.as_str());
+    let diagnostic = &files[0]["diagnostics"][0];
+    assert_eq!(diagnostic["message"], "boom");
+    assert_eq!(diagnostic["severity"], "Error");
+    assert_eq!(diagnostic["source"], "lint");
+    assert_eq!(diagnostic["range"]["start"]["character"], 2);
+    assert_eq!(diagnostic["range"]["end"]["character"], 4);
+
+    // Of one file: the same, and for a file that has none, an empty list; for a file that is not open, nothing.
+    let one = call_with(
+        &mut claude,
+        "getDiagnostics",
+        serde_json::json!({ "uri": first_uri }),
+    )
+    .await;
+    assert_eq!(one, all);
+    let none = call_with(
+        &mut claude,
+        "getDiagnostics",
+        serde_json::json!({ "uri": format!("file://{}", std::fs::canonicalize(&second).unwrap().display()) }),
+    )
+    .await;
+    assert_eq!(none[0]["diagnostics"], serde_json::json!([]));
+    let unknown = call_with(
+        &mut claude,
+        "getDiagnostics",
+        serde_json::json!({ "uri": "file:///nowhere/at/all.txt" }),
+    )
+    .await;
+    assert_eq!(unknown, serde_json::json!([]));
 }
