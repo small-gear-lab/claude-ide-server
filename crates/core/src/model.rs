@@ -241,6 +241,33 @@ impl SelectionAnswer {
     }
 }
 
+/// The files whose diagnostics have changed (`diagnosticsChanged`): the URIs of the files, as the editor writes them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiagnosticsChanged {
+    pub uris: Vec<String>,
+}
+
+impl DiagnosticsChanged {
+    /// From what an adapter sends in `diagnosticsChanged`: `{ uris: [ ... ] }`.
+    pub fn from_adapter(value: &Value) -> Result<Self, ModelError> {
+        let uris = array(field(value, "uris", "$")?, "$.uris")?
+            .iter()
+            .enumerate()
+            .map(|(index, uri)| {
+                uri.as_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| error(&format!("$.uris[{index}]"), "expected a string"))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self { uris })
+    }
+
+    /// The parameters of the `diagnostics_changed` notification.
+    pub fn to_notification(&self) -> Value {
+        json!({ "uris": self.uris })
+    }
+}
+
 /// The selection that an editor reports for a tab (the active one).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EditorSelection {
@@ -1035,6 +1062,35 @@ mod tests {
                 .unwrap_err()
                 .path,
             "$.tabs[0].isPinned"
+        );
+    }
+
+    #[test]
+    fn changed_diagnostics_are_the_uris_that_the_adapter_gave() {
+        let changed =
+            DiagnosticsChanged::from_adapter(&json!({"uris": ["file:///a.lua", "file:///b.lua"]}))
+                .unwrap();
+        assert_eq!(
+            changed.to_notification(),
+            json!({"uris": ["file:///a.lua", "file:///b.lua"]})
+        );
+        assert_eq!(
+            DiagnosticsChanged::from_adapter(&json!({"uris": []}))
+                .unwrap()
+                .to_notification(),
+            json!({"uris": []})
+        );
+        assert_eq!(
+            DiagnosticsChanged::from_adapter(&json!({}))
+                .unwrap_err()
+                .path,
+            "$.uris"
+        );
+        assert_eq!(
+            DiagnosticsChanged::from_adapter(&json!({"uris": ["file:///a", 3]}))
+                .unwrap_err()
+                .path,
+            "$.uris[1]"
         );
     }
 }

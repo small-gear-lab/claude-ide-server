@@ -4,7 +4,7 @@
 
 use serde_json::Value;
 
-use crate::model::{AtMention, ModelError, Selection};
+use crate::model::{AtMention, DiagnosticsChanged, ModelError, Selection};
 
 /// What to do with a notification from an adapter.
 #[derive(Debug, PartialEq)]
@@ -38,6 +38,16 @@ pub(crate) fn forward(method: &str, params: &Value) -> Forward {
             Ok(mention) => Forward::Notify {
                 method: "at_mentioned",
                 params: mention.to_notification(),
+                remember: false,
+            },
+            Err(error) => Forward::Malformed(error),
+        },
+        // An event, not a state: each one names the files that changed, so none may replace another, and a Claude Code
+        // that connects later is not told of what happened before it came.
+        "diagnosticsChanged" => match DiagnosticsChanged::from_adapter(params) {
+            Ok(changed) => Forward::Notify {
+                method: "diagnostics_changed",
+                params: changed.to_notification(),
                 remember: false,
             },
             Err(error) => Forward::Malformed(error),
@@ -84,6 +94,26 @@ mod tests {
             }
             other => panic!("{other:?}"),
         }
+    }
+
+    #[test]
+    fn changed_diagnostics_are_passed_on_as_an_event() {
+        match forward("diagnosticsChanged", &json!({"uris": ["file:///a.lua"]})) {
+            Forward::Notify {
+                method,
+                params,
+                remember,
+            } => {
+                assert_eq!(method, "diagnostics_changed");
+                assert_eq!(params, json!({"uris": ["file:///a.lua"]}));
+                assert!(!remember);
+            }
+            other => panic!("{other:?}"),
+        }
+        assert!(matches!(
+            forward("diagnosticsChanged", &json!({"uris": "file:///a.lua"})),
+            Forward::Malformed(_)
+        ));
     }
 
     #[test]

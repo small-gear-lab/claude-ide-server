@@ -234,6 +234,49 @@ async fn a_mentioned_file_reaches_claude_as_at_mentioned() {
 }
 
 #[tokio::test]
+async fn changed_diagnostics_reach_claude_as_an_event_and_are_not_told_to_one_that_comes_later() {
+    let mut scene = scene_declaring(&READ_ONLY).await;
+    scene
+        .adapter
+        .notify(
+            "diagnosticsChanged",
+            json!({"uris": ["file:///home/user/project/a.lua", "file:///home/user/project/b.lua"]}),
+        )
+        .await;
+    scene
+        .adapter
+        .notify(
+            "diagnosticsChanged",
+            json!({"uris": ["file:///home/user/project/c.lua"]}),
+        )
+        .await;
+
+    // Both come, in order, and neither replaces the other: they name different files.
+    for expected in [
+        json!({"uris": ["file:///home/user/project/a.lua", "file:///home/user/project/b.lua"]}),
+        json!({"uris": ["file:///home/user/project/c.lua"]}),
+    ] {
+        let message = scene.claude.recv_json().await.expect("a notification");
+        assert_eq!(message["method"], "diagnostics_changed");
+        assert!(message.get("id").is_none());
+        assert_shape(&message["params"], "diagnostics_changed.shape.json");
+        assert_eq!(message["params"], expected);
+    }
+
+    // What happened before a Claude Code came is not told to it: it asks for the diagnostics.
+    let port = scene.workspace.port();
+    let token = scene.fixture.read_lock(port).auth_token;
+    let mut later = MockClaude::connect(port, &token).await;
+    later.handshake(5000).await;
+    assert!(
+        timeout(Duration::from_millis(300), later.recv_json())
+            .await
+            .is_err(),
+        "nothing is replayed"
+    );
+}
+
+#[tokio::test]
 async fn a_malformed_notification_is_not_passed_on_and_the_owner_is_told() {
     let mut scene = scene_declaring(&READ_ONLY).await;
     scene
