@@ -12,8 +12,8 @@ Code changes.
 
 > **Status: early development.** The core library talks to a real Claude Code (the handshake, the list of tools, tool
 > calls, notifications), and is tested with stand-ins for Claude Code and for an editor. The server runs as an
-> executable (`claude-ide-server`, with an example systemd socket unit under `contrib/`). There is no editor adapter yet
-> (#10).
+> executable (`claude-ide-server`, with an example systemd socket unit under `contrib/`). The Neovim adapter connects,
+> registers the workspace and sends the selection; it does not yet answer Claude Code's requests (#20).
 
 ## What it will be
 
@@ -36,6 +36,7 @@ The first adapter will be for Neovim, written in Lua.
 ## Documentation
 
 - [docs/DESIGN.md](docs/DESIGN.md): the design, the protocol between the server and an editor adapter, and the milestones.
+- [docs/NVIM.md](docs/NVIM.md): the Neovim adapter: installing it, its options, and what it does.
 
 The documents are written in English and have a Japanese version (`README.ja.md`, `docs/ja/`), built from the
 gettext catalogs in `docs/locale/ja/` by `tools/build-docs.sh`.

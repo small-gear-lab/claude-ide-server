@@ -1,0 +1,246 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2026, Small Gear Lab
+# This file is distributed under the same license as the claude-ide-server
+# package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: claude-ide-server\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-11 17:14+0900\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: ja <LL@li.org>\n"
+"Language: ja\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../NVIM.md:1
+msgid "The Neovim adapter"
+msgstr "Neovim アダプタ"
+
+#: ../../NVIM.md:3
+msgid ""
+"The Neovim side of the connection: it registers a Neovim with `claude-ide-"
+"server`, so that Claude Code's `/ide` finds it. The adapter is the directory"
+" `editors/nvim/` of this repository, written in Lua."
+msgstr ""
+"Neovim 側の接続部分です。Neovim を `claude-ide-server` に登録して、Claude Code の `/ide` "
+"から見つけられるようにします。アダプタは、このリポジトリの `editors/nvim/` ディレクトリにあり、Lua で書かれています。"
+
+#: ../../NVIM.md:6
+msgid ""
+"**What works now:** connecting to the server (and again when it is not there"
+" or goes away), registering the workspace, following `:cd`, and sending the "
+"selection. **What does not yet:** answering Claude Code's requests for the "
+"open editors, the selection and the diagnostics (issue #20), `openFile`, "
+"`checkDocumentDirty` and `saveDocument` (#11), diagnostics notifications "
+"(#12), and diffs (#13, #14). Until #20 is done, Claude Code connects but "
+"most of its tools fail."
+msgstr ""
+"**いま動くこと:** サーバーへの接続（サーバーがいないときや、いなくなったときの再接続を含む）、ワークスペースの登録、`:cd` "
+"への追従、選択範囲の送信。**まだ動かないこと:** 開いているエディタ、選択範囲、診断についての Claude Code "
+"からのリクエストへの応答（Issue "
+"#20）、`openFile`、`checkDocumentDirty`、`saveDocument`（#11）、診断の通知（#12）、差分（#13、#14）。#20"
+" が済むまでは、Claude Code は接続できますが、ツールのほとんどは失敗します。"
+
+#: ../../NVIM.md:12
+msgid "Requirements"
+msgstr "必要なもの"
+
+#: ../../NVIM.md:14
+msgid ""
+"Neovim 0.11 or newer. CI runs the tests with 0.11.7 and 0.12.6, and 0.11.0 "
+"(the first of the 0.11 series) was tried by hand. Neovim 0.10 does not work "
+"(`vim.str_utfindex` takes other arguments there; nothing was tried beyond "
+"that)."
+msgstr ""
+"Neovim 0.11 以降。CI は 0.11.7 と 0.12.6 でテストを動かし、0.11.0（0.11 "
+"系の最初のリリース）は手で試しました。Neovim 0.10 では動きません（`vim.str_utfindex` "
+"の引数が違います。それより先は試していません）。"
+
+#: ../../NVIM.md:16
+msgid ""
+"`claude-ide-server` on the `PATH` (see \"Running the server\" in "
+"[DESIGN](DESIGN.md)), or a supervisor that starts it at the first "
+"connection. The adapter starts the executable itself if nobody is listening."
+msgstr ""
+"`PATH` の通った `claude-ide-server`（[DESIGN](DESIGN.md) "
+"の「サーバーの実行」を参照）、または最初の接続で起動する監督プロセス。誰も待ち受けていなければ、アダプタが実行ファイルを自分で起動します。"
+
+#: ../../NVIM.md:19
+msgid "Installing"
+msgstr "インストール"
+
+#: ../../NVIM.md:21
+msgid ""
+"Add `editors/nvim` of a clone of this repository to the runtime path of "
+"Neovim, in whatever way your plugin manager does that, and call `setup`:"
+msgstr ""
+"このリポジトリのクローンにある `editors/nvim` を、お使いのプラグインマネージャのやり方で Neovim "
+"のランタイムパスに加えてから、`setup` を呼びます。"
+
+#: ../../NVIM.md:29
+#, python-brace-format
+msgid ""
+"`setup` connects once Neovim has started. `setup({ autostart = false })` "
+"does not; `:ClaudeIde start` does."
+msgstr ""
+"`setup` は、Neovim が起動し終わってから接続します。`setup({ autostart = false })` "
+"なら接続せず、`:ClaudeIde start` で接続します。"
+
+#: ../../NVIM.md:31
+msgid "Options"
+msgstr "オプション"
+
+#: ../../NVIM.md:56
+msgid "Main windows only"
+msgstr "メインウィンドウだけ"
+
+#: ../../NVIM.md:58
+msgid ""
+"Each Neovim that calls `setup` registers a workspace of its own, which "
+"Claude Code lists in `/ide`. A Neovim that is a child of another one (a "
+"window for a Git graph or for a diff, in a setup that opens those in a "
+"Neovim of their own) should not appear there. The adapter cannot know which "
+"Neovim is which; `should_register` is how a configuration says so. It is "
+"asked once, when the adapter starts:"
+msgstr ""
+"`setup` を呼んだ Neovim は、それぞれが自分のワークスペースを登録し、Claude Code は `/ide` にそれを並べます。ほかの "
+"Neovim の子（Git グラフや差分を、別の Neovim で開く構成でのそのウィンドウ）は、そこに現れないほうがよいはずです。どの Neovim "
+"がどれなのかはアダプタには分からず、設定側が `should_register` で伝えます。これは、アダプタが起動するときに1回だけ呼ばれます。"
+
+#: ../../NVIM.md:71
+msgid "Commands"
+msgstr "コマンド"
+
+#: ../../NVIM.md:73
+msgid ""
+"`:ClaudeIde status` shows whether the adapter is connected, the port of the "
+"workspace, the socket, and the last problem. `:ClaudeIde start` and "
+"`:ClaudeIde stop` start and stop the connection."
+msgstr ""
+"`:ClaudeIde status` は、アダプタが接続しているか、ワークスペースのポート、ソケット、直近の問題を表示します。`:ClaudeIde "
+"start` と `:ClaudeIde stop` は、接続を始めたり止めたりします。"
+
+#: ../../NVIM.md:76
+msgid "How it connects"
+msgstr "接続のしかた"
+
+#: ../../NVIM.md:78
+msgid ""
+"Nobody has to start the server by hand. The adapter connects to the socket "
+"of the server, and what happens when nobody is listening depends on how the "
+"server is set up:"
+msgstr ""
+"サーバーを手で起動する必要はありません。アダプタはサーバーのソケットに接続し、誰も待ち受けていないときにどうなるかは、サーバーのセットアップ次第です。"
+
+#: ../../NVIM.md:81
+msgid ""
+"**A supervisor holds the socket** (systemd socket activation, see "
+"`contrib/`): the connection works, and the first one starts the server. The "
+"adapter never notices that the server was not running."
+msgstr ""
+"**監督プロセスがソケットを持っている**（systemd のソケットアクティベーション。`contrib/` を参照）: "
+"接続は成功し、最初の接続でサーバーが起動します。アダプタは、サーバーが動いていなかったことに気づきません。"
+
+#: ../../NVIM.md:83
+msgid ""
+"**Nothing holds it:** the adapter starts `claude-ide-server` itself, once, "
+"and then waits for it like for any other server. The server is not a child "
+"of Neovim: it goes on when Neovim ends, and ends by itself when no adapter "
+"has been there for a while (`--idle-timeout`, five minutes as the adapter "
+"starts it). Several Neovims that start at the same time all try, and the "
+"server refuses to start twice on one socket, so one wins and the others "
+"connect to it. `server.autostart = false` turns this off; `server.command` "
+"and `server.args` say what to run (the executable is looked up on the "
+"`PATH`; the output of a detached process has nowhere to go, so a wrapper of "
+"your own is the way to keep its log). If the executable is not found, the "
+"user is told, once; if the server that was started ends with an error before"
+" it can be reached, the exit code is in the last problem that `:ClaudeIde "
+"status` shows, and a server that did not understand its command line (exit "
+"code 2 or more) is reported with a message."
+msgstr ""
+"**誰も持っていない:** アダプタが `claude-ide-server` を自分で1回起動し、あとはほかのサーバーと同じように待ちます。サーバーは"
+" Neovim の子プロセスではなく、Neovim が終了しても動き続け、しばらくアダプタがいなくなると自分で終了します（`--idle-"
+"timeout`。アダプタが起動するときは5分）。同時に起動した複数の Neovim "
+"は、すべて起動を試みますが、同じソケットでサーバーは2回起動を拒否するので、1つが勝ち、ほかはそれに接続します。`server.autostart = "
+"false` でこれをやめられ、`server.command` と `server.args` で何を実行するかを決められます（実行ファイルは "
+"`PATH` "
+"から探します。切り離したプロセスの出力は行き先がないので、ログを残したいときは、自前のラッパーを使ってください）。実行ファイルが見つからなければ、ユーザーに1回だけ知らせます。起動したサーバーが、接続できるようになる前にエラーで終了した場合は、その終了コードが"
+" `:ClaudeIde status` の直近の問題に出て、コマンドラインを理解できなかったサーバー（終了コード 2 以上）はメッセージで知らせます。"
+
+#: ../../NVIM.md:93
+msgid ""
+"Either way the adapter keeps trying: after `reconnect.initial_ms`, then "
+"after twice that, and so on up to `reconnect.max_ms`, without a message, so "
+"a Neovim that starts before the server is not noisy. When the server says "
+"`shutdown` (it is stopping) or closes the connection, the adapter does the "
+"same, which starts the server again under socket activation (stop the socket"
+" unit as well to stop it for good). A server that refuses `register` (a "
+"protocol version that it does not know, for one) is not the same as one that"
+" is not there: trying again changes nothing, so the adapter tells the user, "
+"once."
+msgstr ""
+"どちらの場合も、アダプタはやり直し続けます。`reconnect.initial_ms` 後に、その次はその2倍後に、というように "
+"`reconnect.max_ms` まで、メッセージを出さずにやり直すので、サーバーより先に起動した Neovim がうるさくなりません。サーバーが "
+"`shutdown` "
+"と言ったとき（停止中）や接続を閉じたときも、アダプタは同じようにし、ソケットアクティベーションならサーバーがまた起動します（完全に止めるには、ソケットユニットも止めてください）。`register`"
+" "
+"を拒否するサーバー（知らないプロトコルのバージョンなど）は、まだいないサーバーとは違います。やり直しても何も変わらないので、アダプタはユーザーに、1回だけ知らせます。"
+
+#: ../../NVIM.md:100
+msgid ""
+"After each registration the current selection is sent once, so that the "
+"server, and a Claude Code that connects to it, start from what the user has "
+"now."
+msgstr ""
+"登録のたびに、現在の選択範囲が1回送られます。サーバーと、それに接続する Claude Code "
+"が、いまユーザーが見ているところから始められるようにするためです。"
+
+#: ../../NVIM.md:103
+msgid "The selection"
+msgstr "選択範囲"
+
+#: ../../NVIM.md:105
+#, python-brace-format
+msgid ""
+"`selectionChanged` is sent once the cursor has stayed still for "
+"`selection_debounce_ms` and the selection is not the one that was sent last."
+" A selection is the visual selection, or an empty range at the cursor. "
+"Positions are `{ line, character }` with `line` 0-based and `character` in "
+"UTF-16 code units (Neovim counts bytes), and the end of a range is "
+"exclusive. Buffers that are not files (a terminal, help, a buffer without a "
+"name) have none."
+msgstr ""
+"`selectionChanged` は、カーソルが `selection_debounce_ms` "
+"のあいだ止まっていて、直前に送ったものと違う選択範囲のときに送られます。選択範囲は、ビジュアル選択か、カーソル位置の空の範囲です。位置は `{ "
+"line, character }` で、`line` は 0 始まり、`character` は UTF-16 コードユニット単位（Neovim "
+"はバイトで数えます）、範囲の終端は含みません。ファイルでないバッファ（ターミナル、ヘルプ、名前のないバッファ）には、選択範囲はありません。"
+
+#: ../../NVIM.md:110
+msgid "Tests"
+msgstr "テスト"
+
+#: ../../NVIM.md:117
+msgid ""
+"The second needs `nvim` on the path. Without it the tests say so and pass, "
+"unless `CLAUDE_IDE_REQUIRE_NVIM` is set (CI sets it)."
+msgstr ""
+"2つ目には、パスの通った `nvim` が要ります。なければ、テストはそう表示して成功します。`CLAUDE_IDE_REQUIRE_NVIM` "
+"が設定されている場合は除きます（CI は設定します）。"
+
+#~ msgid ""
+#~ "Neovim 0.12. It was developed and tested with 0.12.6; older versions have "
+#~ "not been checked."
+#~ msgstr "Neovim 0.12。開発とテストは 0.12.6 で行いました。それより古いバージョンは確認していません。"
+
+#~ msgid ""
+#~ "The adapter does not start the server itself. Start it by hand, or let a "
+#~ "supervisor do it (`contrib/`)."
+#~ msgstr "アダプタは、サーバーを自分では起動しません。手で起動するか、監督プロセスに任せてください（`contrib/`）。"

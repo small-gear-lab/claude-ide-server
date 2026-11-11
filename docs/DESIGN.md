@@ -174,9 +174,10 @@ connection closes it or goes away.
 - JSON-RPC 2.0 with `Content-Length` framing, as in LSP. Editors that already have an LSP client can reuse its
   transport. Checked with Neovim 0.12: `vim.lsp.rpc.connect(path)` connects to a Unix socket, the adapter can
   send requests and notifications and answer the server's requests (the `server_request` dispatcher), and when
-  the server closes the connection `on_exit` is called and `is_closing()` becomes true. A missing socket raises no
-  error: Neovim prints a message and no `on_exit` follows, so the adapter checks that the socket exists before
-  connecting.
+  the server closes the connection `on_exit` is called and `is_closing()` becomes true. A connection that fails
+  raises no error either: Neovim prints a warning and no `on_exit` follows, so the adapter first tries a connection of
+  its own and closes it (the server ignores a connection that says nothing), and connects with `vim.lsp.rpc` only if
+  that worked. That also lets it retry without a message. See [the Neovim adapter](NVIM.md).
 - Both sides send requests and notifications. The connection is the workspace: when it closes, the server closes
   the workspace's WebSocket clients and port and removes the lock file.
 
@@ -358,8 +359,10 @@ What a system does differently is absorbed in a source of its own, selected by `
   `Listener` trait is what the rest of the server depends on, so that is the only place that changes) and a source for
   it; Task Scheduler would then start the server at log-in, or on demand through a task that the adapter triggers.
 
-Whether an adapter starts the server itself when it finds no socket is up to the adapter (issue #10); it starts this
-same executable.
+An adapter that finds nobody listening starts this same executable itself (the Neovim adapter does, unless told not to):
+connecting is how the server is activated, whether a supervisor or the adapter answers it. The server is then not a
+child of the editor, and with `--idle-timeout` it ends when the last adapter has gone. Two adapters that do it at the
+same moment are safe, because a second server on the same socket refuses to start (exit code 1).
 
 ## Security
 

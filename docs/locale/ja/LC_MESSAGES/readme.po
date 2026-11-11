@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-ide-server\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-11 16:29+0900\n"
+"POT-Creation-Date: 2026-11-11 16:59+0900\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: Small Gear Lab\n"
 "Language-Team: ja <LL@li.org>\n"
@@ -56,12 +56,14 @@ msgid ""
 "(the handshake, the list of tools, tool calls, notifications), and is tested"
 " with stand-ins for Claude Code and for an editor. The server runs as an "
 "executable (`claude-ide-server`, with an example systemd socket unit under "
-"`contrib/`). There is no editor adapter yet (#10)."
+"`contrib/`). The Neovim adapter connects, registers the workspace and sends "
+"the selection; it does not yet answer Claude Code's requests (#20)."
 msgstr ""
 "**状況: 開発初期。** コアライブラリは本物の Claude Code "
 "と通信できます（ハンドシェイク、ツール一覧、ツール呼び出し、通知）。テストは、Claude Code "
 "とエディタの代役を使って行っています。サーバーは実行ファイル（`claude-ide-server`。`contrib/` に systemd "
-"のソケットユニットの例があります）として動きます。エディタアダプタはまだありません（#10）。"
+"のソケットユニットの例があります）として動きます。Neovim アダプタは接続し、ワークスペースを登録し、選択範囲を送りますが、Claude Code "
+"からのリクエストにはまだ答えません（#20）。"
 
 #: ../../../README.md:18
 msgid "What it will be"
@@ -112,7 +114,13 @@ msgid ""
 "server and an editor adapter, and the milestones."
 msgstr "[docs/DESIGN.md](docs/DESIGN.md): 設計、サーバーとエディタのアダプターの間のプロトコル、マイルストーン。"
 
-#: ../../../README.md:40
+#: ../../../README.md:39
+msgid ""
+"[docs/NVIM.md](docs/NVIM.md): the Neovim adapter: installing it, its "
+"options, and what it does."
+msgstr "[docs/NVIM.md](docs/NVIM.md): Neovim アダプタ。インストール、オプション、できること。"
+
+#: ../../../README.md:41
 msgid ""
 "The documents are written in English and have a Japanese version "
 "(`README.ja.md`, `docs/ja/`), built from the gettext catalogs in "
@@ -121,59 +129,59 @@ msgstr ""
 "ドキュメントは英語で書いてあり、日本語版（`README.ja.md`、`docs/ja/`）があります。日本語版は、`docs/locale/ja/`"
 " の gettext のカタログから、`tools/build-docs.sh` で作ります。"
 
-#: ../../../README.md:43
+#: ../../../README.md:44
 msgid "Layout (planned)"
 msgstr "構成（予定）"
 
-#: ../../readme.md:45
+#: ../../readme.md:46
 msgid "Where"
 msgstr "場所"
 
-#: ../../readme.md:45
+#: ../../readme.md:46
 msgid "What"
 msgstr "内容"
 
-#: ../../readme.md:45
+#: ../../readme.md:46
 msgid "`crates/core/`"
 msgstr "`crates/core/`"
 
-#: ../../readme.md:47
+#: ../../readme.md:48
 msgid "the server: WebSocket, lock files, authentication, MCP handling"
 msgstr "サーバー: WebSocket、ロックファイル、認証、MCP の処理"
 
-#: ../../readme.md:47
+#: ../../readme.md:48
 msgid "`editors/nvim/`"
 msgstr "`editors/nvim/`"
 
-#: ../../readme.md:48
+#: ../../readme.md:49
 msgid "the Neovim adapter"
 msgstr "Neovim のアダプター"
 
-#: ../../readme.md:48
+#: ../../readme.md:49
 msgid "`docs/`"
 msgstr "`docs/`"
 
-#: ../../readme.md:49
+#: ../../readme.md:50
 msgid "the protocol notes and the design"
 msgstr "プロトコルのメモと、設計"
 
-#: ../../../README.md:51
+#: ../../../README.md:52
 msgid "License"
 msgstr "ライセンス"
 
-#: ../../../README.md:53
+#: ../../../README.md:54
 msgid "Licensed under either of"
 msgstr "次のどちらかのライセンスで使えます。"
 
-#: ../../../README.md:55
+#: ../../../README.md:56
 msgid "Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))"
 msgstr "Apache License, Version 2.0（[LICENSE-APACHE](LICENSE-APACHE)）"
 
-#: ../../../README.md:56
+#: ../../../README.md:57
 msgid "MIT license ([LICENSE-MIT](LICENSE-MIT))"
 msgstr "MIT ライセンス（[LICENSE-MIT](LICENSE-MIT)）"
 
-#: ../../../README.md:58
+#: ../../../README.md:59
 msgid "at your option."
 msgstr "どちらにするかは、使う人が選べます。"
 

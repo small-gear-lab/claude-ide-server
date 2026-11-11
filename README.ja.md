@@ -6,7 +6,7 @@
 
 このプロトコルは、Anthropic によって文書化されていません。このプロジェクトが頼っているのは、既存の連携（VS Code の拡張と JetBrains のプラグイン）の挙動の観察と、[coder/claudecode.nvim](https://github.com/coder/claudecode.nvim/blob/main/PROTOCOL.md) の公開されている解説です。Claude Code が変わると、壊れることがあります。
 
-> **状況: 開発初期。** コアライブラリは本物の Claude Code と通信できます（ハンドシェイク、ツール一覧、ツール呼び出し、通知）。テストは、Claude Code とエディタの代役を使って行っています。サーバーは実行ファイル（`claude-ide-server`。`contrib/` に systemd のソケットユニットの例があります）として動きます。エディタアダプタはまだありません（#10）。
+> **状況: 開発初期。** コアライブラリは本物の Claude Code と通信できます（ハンドシェイク、ツール一覧、ツール呼び出し、通知）。テストは、Claude Code とエディタの代役を使って行っています。サーバーは実行ファイル（`claude-ide-server`。`contrib/` に systemd のソケットユニットの例があります）として動きます。Neovim アダプタは接続し、ワークスペースを登録し、選択範囲を送りますが、Claude Code からのリクエストにはまだ答えません（#20）。
 
 ## 何になるか
 
@@ -24,6 +24,7 @@ Claude Code ──WebSocket (MCP)──▶ claude-ide-server ◀──JSON-RPC (
 ## ドキュメント
 
 - [docs/DESIGN.md](docs/ja/DESIGN.md): 設計、サーバーとエディタのアダプターの間のプロトコル、マイルストーン。
+- [docs/NVIM.md](docs/ja/NVIM.md): Neovim アダプタ。インストール、オプション、できること。
 
 ドキュメントは英語で書いてあり、日本語版（`README.ja.md`、`docs/ja/`）があります。日本語版は、`docs/locale/ja/` の gettext のカタログから、`tools/build-docs.sh` で作ります。
 
