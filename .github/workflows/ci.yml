@@ -38,6 +38,10 @@ jobs:
         run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy && rustup default stable
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
+      # A broken link in the documentation is a bug of the documentation.
+      - run: cargo doc --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
 
   # The tests run on the least version that rust-version names (1.88) and on the latest stable.
   test:
