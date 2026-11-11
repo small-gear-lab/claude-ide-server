@@ -65,21 +65,24 @@ Claude Code 2.1.322 で、インストールされた CLI を読んで分かっ�
 
 ツールの集合は、VS Code の拡張が登録しているものです。サーバーが公開するのは、アダプターが登録のときに宣言したメソッド（下の `register` を参照）に裏付けられたツールだけです。JetBrains のプラグインが、VS Code の拡張より小さい集合を公開しているのと同じ考え方です。
 
-| MCP のツール              | アダプターのメソッド            | 備考                                     |
-|-----------------------|-----------------------|----------------------------------------|
-| `openFile`            | `openFile`            | `startText` / `endText` で、範囲を選ぶこともできます |
-| `openDiff`            | `openDiff`            | 利用者が承認か拒否をするまで待ちます                     |
-| `close_tab`           | `closeDiff`           | `tab_name`（`openDiff` に渡したもの）で指定します    |
-| `closeAllDiffTabs`    | `closeAllDiffs`       | `CLOSED_<n>_DIFF_TABS` と答えます           |
-| `getOpenEditors`      | `getOpenEditors`      |                                        |
-| `getCurrentSelection` | `getCurrentSelection` |                                        |
-| `getLatestSelection`  | `getLatestSelection`  | 最後の選択範囲です。エディタのフォーカスが外れていても返します        |
-| `getWorkspaceFolders` | （サーバーが答えます）           | 登録の内容から返します                            |
-| `getDiagnostics`      | `getDiagnostics`      | 1 つの URI か、すべて                         |
-| `checkDocumentDirty`  | `checkDocumentDirty`  |                                        |
-| `saveDocument`        | `saveDocument`        |                                        |
+| MCP のツール              | アダプターのメソッド            | 備考                                                            |
+|-----------------------|-----------------------|---------------------------------------------------------------|
+| `openFile`            | `openFile`            | `startText` / `endText` で、範囲を選ぶこともできます                        |
+| `openDiff`            | `openDiff`            | 利用者が承認か拒否をするまで待ちます                                            |
+| `close_tab`           | `closeDiff`           | `tab_name`（`openDiff` に渡したもの）で指定します                           |
+| `closeAllDiffTabs`    | `closeAllDiffs`       | `CLOSED_<n>_DIFF_TABS` を答える。アダプタに差分がなければ `CLOSED_0_DIFF_TABS` |
+| `set_permission_mode` | `setPermissionMode`   | `{ mode }`。アダプタに対応するメソッドがなければ `OK` を答える                       |
+| `getOpenEditors`      | `getOpenEditors`      |                                                               |
+| `getCurrentSelection` | `getCurrentSelection` |                                                               |
+| `getLatestSelection`  | `getLatestSelection`  | 最後の選択範囲です。エディタのフォーカスが外れていても返します                               |
+| `getWorkspaceFolders` | （サーバーが答えます）           | 登録の内容から返します                                                   |
+| `getDiagnostics`      | `getDiagnostics`      | 1 つの URI か、すべて                                                |
+| `checkDocumentDirty`  | `checkDocumentDirty`  |                                                               |
+| `saveDocument`        | `saveDocument`        |                                                               |
 
 `executeCode`（Jupyter だけ）は、対象外です。
+
+`closeAllDiffTabs` と `set_permission_mode` は、Claude Code 自身が、一覧に載っていたかどうかに関係なく呼ぶ（「Claude Code が自分から送るもの」を参照）。そのため、アダプタに対応するメソッドがなくても答える。一覧に載せるのは、アダプタが持っているときだけ。
 
 ツール呼び出しの結末は、次のとおりです。
 
@@ -100,6 +103,17 @@ MCP のプロトコル自体（握手、版の交渉、`tools/list`、`tools/cal
 | `diagnostics_changed` | アダプターが、診断の変更を知らせたとき（`{ "uris": [...] }`）                     |
 
 `diagnostics_changed` を送る連携はいくつかありますが、送らない第三者の実装もあります。広く使えるものに、このプロジェクトが最初に足す機能です。
+
+Claude Code 2.1.322 は `diagnostics_changed` を受け付けません（コードに出てきません）。自分で編集する前後に、`getDiagnostics` で診断を取りに来ます。ほかのクライアントは受け付けるかもしれません。
+
+### Claude Code が自分から送るもの
+
+Claude Code 2.1.322 のコードから分かること（プログラムを読んだものであって、仕様ではありません）。該当すると書いてあるものは、ターミナルで Neovim アダプタに対して確かめました。どれも、エディタが何かをしたことへの答えではありません。
+
+- 通知 `ide_connected`。ハンドシェイクの直後に、Claude Code のプロセスつきで来ます。
+- エディタへのツール呼び出し: `closeAllDiffTabs`（接続の直後と、差分を閉じるとき）、`openDiff` と `close_tab`（差分）、`getDiagnostics`（編集しようとするファイルについて、編集の前後と、全ファイルについて。戻ってきた `uri` が、編集したファイルと（両方を正規化したうえで）違うと、`Diagnostics file path mismatch` として結果を捨てます）、`set_permission_mode`（`{ mode: "ask" | "skip_all_permission_checks" }`。許可モードが変わるたびに）。
+- エディタからの通知で受け付けるのは、`selection_changed`、`at_mentioned`、`log_event`、MCP のログメッセージです。`getOpenEditors`、`getCurrentSelection`、`getLatestSelection`、`checkDocumentDirty`、`saveDocument`、`getWorkspaceFolders` は使いません。
+- **ハンドシェイクの直後に届いた通知は、捨てられます。** Claude Code は、接続してからしばらくあとに、通知を受け取るものを用意し、その時間は回によって違います（確認: すぐに送った `selection_changed` は一度も届かず、25 ms や 50 ms 後に送ると3回ずつ3回とも届き、100 ms と 150 ms 後は3回中2回届きました）。サーバーは、通知が受け取られたかどうかを知ることができません。通知には返事がなく、MCP の仕様（2025-11-25 の「Lifecycle」）にも、クライアントがいつ通知を受け取れるかの合図がないからです（最初の `tools/list` も、合図ではありませんでした）。そのため、記憶している状態（選択範囲）を、すぐに送る再送に加えて、ハンドシェイクの 250 ms・1 秒・3 秒後にも送り直します（`claude_state_resends`）。これで、10回中10回がモデルに届きました。あとの通知は受け付けられるので、これは接続後の数秒だけの話です。
 
 ### 遅い読み手
 
@@ -161,7 +175,7 @@ WebSocket の接続は、1 本ごとに別のクライアントです。サー�
 - **`getOpenEditors` の答え** は `{ tabs: [ { uri, isActive, label, languageId, isDirty } ] }` で、5 つとも必須です。
 - **`getDiagnostics` の答え**（引数は `{ uri }`、すべてのファイルなら引数なし）は `[ { uri, diagnostics: [ { message, severity, range: { start, end }, source? } ] } ]` です。`severity` は、`"Error"`、`"Warning"`、`"Information"`、`"Hint"` のどれかです。空の一覧も、答えです。
 
-サーバーは、これらを、Claude Code が期待する形で渡します（上の通知を参照）。`selectionChanged` は `selection_changed` になり（`fileUrl` と `isEmpty` が付きます）、`atMention` は `at_mentioned` になり、答えは、ツール結果のテキストになります。あとから接続した Claude Code には、そのときの（最後の）`selection_changed` を送るので、利用者がいま見ている選択範囲から始まります。
+サーバーは、これらを Claude Code が期待する形で渡します（上の通知を参照）。`selectionChanged` は `selection_changed` になり（`fileUrl` と `isEmpty` が加わります）、`atMention` は `at_mentioned` になり、答えはツールの結果のテキストになります。あとから接続した Claude Code には、そのとき現在の `selection_changed`（最後のもの）が送られ、ユーザーがいま見ている選択範囲から始められます。最初のものが捨てられることがあるので、ハンドシェイクのあとに数回、送り直されます（「Claude Code が自分から送るもの」を参照）。
 
 `openDiff` が `"saved"` を返したとき、アダプターは、`newFileContents` を `newFilePath` に書き終えています。サーバーは、Claude に `FILE_SAVED` というテキストで答えます。`"rejected"` のときは、`DIFF_REJECTED` です。
 

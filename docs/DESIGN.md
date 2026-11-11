@@ -106,7 +106,8 @@ smaller set than the VS Code extension.
 | `openFile` | `openFile` | optional selection by `startText` / `endText` |
 | `openDiff` | `openDiff` | blocks until the user accepts or rejects |
 | `close_tab` | `closeDiff` | by `tab_name`, the one given to `openDiff` |
-| `closeAllDiffTabs` | `closeAllDiffs` | answers `CLOSED_<n>_DIFF_TABS` |
+| `closeAllDiffTabs` | `closeAllDiffs` | answers `CLOSED_<n>_DIFF_TABS`; `CLOSED_0_DIFF_TABS` if the adapter has none |
+| `set_permission_mode` | `setPermissionMode` | `{ mode }`; answers `OK` if the adapter has none |
 | `getOpenEditors` | `getOpenEditors` | |
 | `getCurrentSelection` | `getCurrentSelection` | |
 | `getLatestSelection` | `getLatestSelection` | the last selection, even if the editor lost focus |
@@ -116,6 +117,10 @@ smaller set than the VS Code extension.
 | `saveDocument` | `saveDocument` | |
 
 `executeCode` (Jupyter only) is out of scope.
+
+`closeAllDiffTabs` and `set_permission_mode` are called by Claude Code itself (see "What Claude Code sends on its own"),
+whether or not they were listed, so they are answered even when the adapter has no method for them; they are listed
+only when it has.
 
 How a call turns out:
 
@@ -145,6 +150,32 @@ are custom notifications of the SDK.
 
 Several integrations send `diagnostics_changed`; some third-party implementations do not. It is the first
 feature this project adds beyond what is commonly available.
+
+Claude Code 2.1.322 does not take `diagnostics_changed` (its code does not mention it): it asks for the diagnostics
+itself, with `getDiagnostics`, around its own edits. Other clients may take it.
+
+### What Claude Code sends on its own
+
+From the code of Claude Code 2.1.322 (a reading of the program, not a specification), and checked in a terminal against
+the Neovim adapter where it says so. These are not answers to anything that the editor did.
+
+- The notification `ide_connected`, right after the handshake (with the process of Claude Code).
+- Tool calls to the editor: `closeAllDiffTabs` (right after it connects, and when it closes diffs), `openDiff` and
+  `close_tab` (diffs), `getDiagnostics` (for the file that it is about to edit, before and after the edit, and for all
+  files; it drops the result, with a `Diagnostics file path mismatch`, if the `uri` that comes back is not the file that
+  it edited, after normalising both), and `set_permission_mode` (`{ mode: "ask" | "skip_all_permission_checks" }`,
+  whenever its permission mode changes).
+- It takes these notifications from the editor: `selection_changed`, `at_mentioned`, `log_event` and the MCP logging
+  message. It does not use `getOpenEditors`, `getCurrentSelection`, `getLatestSelection`, `checkDocumentDirty`,
+  `saveDocument` and `getWorkspaceFolders`.
+- **A notification that arrives right after the handshake is thrown away.** Claude Code sets up what receives
+  notifications some time after it is connected, and that time varies (checked: a `selection_changed` sent at once never
+  arrives; sent after 25 ms or 50 ms it did in three runs of three, after 100 ms and 150 ms in two of three). The server
+  cannot tell whether a notification was taken: a notification has no answer, and the MCP specification (2025-11-25,
+  "Lifecycle") has no signal for when a client can take them (the first `tools/list` is not one either). So the state
+  that is remembered (the selection) is sent again at 250 ms, 1 s and 3 s after the handshake, in addition to the
+  replay at once (`claude_state_resends`). With these, ten runs out of ten reached the model. Later notifications are
+  taken, so this is only about the first seconds after a connection.
 
 ### Slow readers
 
@@ -237,7 +268,8 @@ it means that the notification is not passed on and the owner of the workspace i
 The server passes these on to Claude Code in the shapes that it expects (see the notifications above): `selectionChanged`
 becomes `selection_changed` (with a `fileUrl` added, and `isEmpty`), `atMention` becomes `at_mentioned`, and the answers
 become the text of the tool results. A Claude Code that connects later is sent the `selection_changed` that is current
-(the last one), so that it starts from the selection that the user has now.
+(the last one), so that it starts from the selection that the user has now; it is sent again a few times after the
+handshake, because the first may be thrown away (see "What Claude Code sends on its own").
 
 On `"saved"` from `openDiff`, the adapter has written `newFileContents` to `newFilePath`. The server answers
 Claude with the text `FILE_SAVED`; on `"rejected"`, `DIFF_REJECTED`.

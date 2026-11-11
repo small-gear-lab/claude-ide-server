@@ -21,12 +21,21 @@ What the other side is expected to say, written down from what was observed, as 
 
 - The handshake, the lock file: seen with a real Claude Code 2.1.322 (the handshake) and with the existing IDE
   integrations (the lock file).
-- The shapes of the notifications and of the results of the read-only tools were **not** seen from a real Claude Code.
-  They follow the public protocol notes of other implementations and the behaviour of the existing IDE integrations
-  (`getCurrentSelection` as `{ success, text, filePath, selection }`, or `{ success: false, message }`; `getOpenEditors`
-  as `{ tabs: [...] }`; `getDiagnostics` as a list of `{ uri, diagnostics }`; `selection_changed` with `fileUrl`;
-  `at_mentioned` with 0-based lines). To be checked against a real CLI with a real adapter (issue #10), and corrected
-  here if they differ. The diagnostics shape asks for `range.start` and `range.end`; the integrations seen send at
-  least `range.start`.
+- Seen with a real Claude Code 2.1.322, driven in a terminal against the Neovim adapter (issue #20):
+  - `selection_changed` (with `fileUrl`, and `isEmpty`): taken, shown as `Selected N lines from <file> in Neovim`, and
+    known to the model; a cursor without a selection tells the model which file is open.
+  - `at_mentioned` (0-based lines): put into the prompt as `@file#L2-4` (the lines that the CLI shows are 1-based).
+  - The result of `getDiagnostics` as a list of `{ uri, diagnostics: [ { message, severity, range, source } ] }`: taken,
+    called with and without a `uri`; the model reported the message, the severity, the source and the range, with the
+    columns in UTF-16 code units.
+  - A notification that arrives right after the handshake is thrown away (see `docs/DESIGN.md`, "What Claude Code sends on its own").
+- **Not** seen: the results of `getCurrentSelection`, `getLatestSelection` and `getOpenEditors`. The CLI 2.1.322 does not
+  call them at all (nor `checkDocumentDirty`, `saveDocument` and `getWorkspaceFolders`), so they cannot be checked
+  against it; they follow the public protocol notes of other implementations and the behaviour of the existing IDE
+  integrations (`getCurrentSelection` as `{ success, text, filePath, selection }`, or `{ success: false, message }`;
+  `getOpenEditors` as `{ tabs: [...] }`). The diagnostics shape asks for `range.start` and `range.end`; the integrations
+  seen send at least `range.start`.
+- What the CLI sends to the editor on its own, from its code: `closeAllDiffTabs`, `openDiff`, `close_tab`,
+  `getDiagnostics`, `set_permission_mode` and the notification `ide_connected`. It does not take `diagnostics_changed`.
 
 A shape changes when a new observation says it should, not to make a test pass.

@@ -2,7 +2,7 @@
 
 Neovim 側の接続部分です。Neovim を `claude-ide-server` に登録して、Claude Code の `/ide` から見つけられるようにします。アダプタは、このリポジトリの `editors/nvim/` ディレクトリにあり、Lua で書かれています。
 
-**いま動くこと:** サーバーへの接続（サーバーがいないときや、いなくなったときの再接続を含む）、ワークスペースの登録、`:cd` への追従、選択範囲の送信。**まだ動かないこと:** 開いているエディタ、選択範囲、診断についての Claude Code からのリクエストへの応答（Issue #20）、`openFile`、`checkDocumentDirty`、`saveDocument`（#11）、診断の通知（#12）、差分（#13、#14）。#20 が済むまでは、Claude Code は接続できますが、ツールのほとんどは失敗します。
+**いま動くこと:** サーバーへの接続（サーバーがいないときや、いなくなったときの再接続を含む）、ワークスペースの登録、`:cd` への追従、選択範囲の送信、ファイルや行を Claude Code にメンションすること、そして開いているエディタ・選択範囲・診断についての Claude Code のリクエストへの応答。本物の Claude Code（2.1.322）で試しました。**まだ動かないこと:** `openFile`、`checkDocumentDirty`、`saveDocument`（Issue #11）、診断の通知（#12）、差分（#13、#14）。
 
 ## 必要なもの
 
@@ -75,6 +75,20 @@ require('claude_ide').setup({
 ## 選択範囲
 
 `selectionChanged` は、カーソルが `selection_debounce_ms` のあいだ止まっていて、直前に送ったものと違う選択範囲のときに送られます。選択範囲は、ビジュアル選択か、カーソル位置の空の範囲です。位置は `{ line, character }` で、`line` は 0 始まり、`character` は UTF-16 コードユニット単位（Neovim はバイトで数えます）、範囲の終端は含みません。ファイルでないバッファ（ターミナル、ヘルプ、名前のないバッファ）には、選択範囲はありません。
+
+## Claude Code が頼めること
+
+アダプタは、サーバーの次のリクエストに答えます（`register` で宣言する `methods`。設定の `methods` オプションで、置き換えたり、足したりできます）。
+
+- `getOpenEditors`: 一覧にあるバッファのうち、ファイルであるもの。アクティブなのは、現在のウィンドウのファイルです（ターミナルやヘルプにフォーカスがあるときは、直前にいたファイル）。名前のないバッファ、ターミナル、ヘルプは、Claude にとってのエディタではありません。ファイルの言語は `filetype` で、まだ読み込まれていないバッファは、ファイル名から決まるものです。いくつかの filetype は、Claude Code が使う言語 ID に直します（`sh` は `shellscript`、filetype なしは `plaintext`）。
+- `getCurrentSelection` と `getLatestSelection`: ユーザーがいるファイルの選択範囲。ファイルのない場所にフォーカスがあるあいだは、直前にあった選択範囲。
+- `getDiagnostics`: `vim.diagnostic` の診断。`uri` のファイル、またはその診断を持つ開いているすべてのファイルについて。重大度は `Error`、`Warning`、`Information`、`Hint`、列は UTF-16 コードユニット単位です。
+
+Claude Code 2.1.322 は、自分で編集する前後に `getDiagnostics` を頼み、ほかの3つは使いません。[DESIGN](DESIGN.md) の「Claude Code が自分から送るもの」を参照してください。
+
+## Claude Code へのメンション
+
+`:ClaudeIdeMention` は、現在のファイルを Claude Code にメンションし、`:'<,'>ClaudeIdeMention`（`:2,4ClaudeIdeMention` のような任意の範囲でも）は、その範囲の行をメンションします。Claude Code は、それをプロンプトに `@file#L2-4` として入れます。キーは割り当てていないので、好きなように割り当ててください。Lua からは `require('claude_ide').mention(first, last)` で同じことができ、行（1 始まり）を渡すか、渡さなければファイル全体になります。Claude Code に伝えられたかどうかを返します。
 
 ## テスト
 

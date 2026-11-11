@@ -4,10 +4,10 @@ The Neovim side of the connection: it registers a Neovim with `claude-ide-server
 finds it. The adapter is the directory `editors/nvim/` of this repository, written in Lua.
 
 **What works now:** connecting to the server (and again when it is not there or goes away), registering the workspace,
-following `:cd`, and sending the selection. **What does not yet:** answering Claude Code's requests for the open
-editors, the selection and the diagnostics (issue #20), `openFile`, `checkDocumentDirty` and `saveDocument` (#11),
-diagnostics notifications (#12), and diffs (#13, #14). Until #20 is done, Claude Code connects but most of its tools
-fail.
+following `:cd`, sending the selection, mentioning a file or some lines to Claude Code, and answering Claude Code's
+requests for the open editors, the selection and the diagnostics. It was tried with a real Claude Code (2.1.322). **What
+does not yet:** `openFile`, `checkDocumentDirty` and `saveDocument` (issue #11), diagnostics notifications (#12), and
+diffs (#13, #14).
 
 ## Requirements
 
@@ -106,6 +106,31 @@ it, start from what the user has now.
 one that was sent last. A selection is the visual selection, or an empty range at the cursor. Positions are
 `{ line, character }` with `line` 0-based and `character` in UTF-16 code units (Neovim counts bytes), and the end of a
 range is exclusive. Buffers that are not files (a terminal, help, a buffer without a name) have none.
+
+## What Claude Code can ask
+
+The adapter answers these requests of the server (the `methods` that it declares in `register`; a configuration can
+replace them or add to them with the `methods` option):
+
+- `getOpenEditors`: the listed buffers that are files, with the active one (the file of the current window, or, when the
+  focus is in a terminal or a help page, the file that the user was last in). A buffer without a name, a terminal and
+  the help are not editors for Claude. The language of a file is its `filetype`, or the one that its name says for a
+  buffer that is not loaded yet; a few filetypes are renamed to the language ids that Claude Code uses (`sh` is
+  `shellscript`, no filetype is `plaintext`).
+- `getCurrentSelection` and `getLatestSelection`: the selection of the file that the user is in, or the last one that
+  there was while the focus is somewhere that has none.
+- `getDiagnostics`: the diagnostics of `vim.diagnostic`, for the file of a `uri` or for every open file that has some,
+  with `Error`, `Warning`, `Information` or `Hint` as the severity and the columns in UTF-16 code units.
+
+Claude Code 2.1.322 asks for `getDiagnostics` itself, around its own edits, and does not use the other three. See "What
+Claude Code sends on its own" in [DESIGN](DESIGN.md).
+
+## Mentioning to Claude Code
+
+`:ClaudeIdeMention` mentions the current file to Claude Code, and `:'<,'>ClaudeIdeMention` (or any range, as in
+`:2,4ClaudeIdeMention`) the lines of the range. Claude Code puts it into its prompt as `@file#L2-4`. There is no key
+mapped to it; map it as you like. `require('claude_ide').mention(first, last)` does the same from Lua, with the lines
+(1-based) or without them for the whole file, and returns whether Claude Code was told.
 
 ## Tests
 
