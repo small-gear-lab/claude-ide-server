@@ -1,0 +1,15 @@
+[
+  {
+    "uri": "<string>",
+    "diagnostics": [
+      {
+        "message": "<string>",
+        "severity": "<string>",
+        "range": {
+          "start": { "line": "<number>", "character": "<number>" },
+          "end": { "line": "<number>", "character": "<number>" }
+        }
+      }
+    ]
+  }
+]

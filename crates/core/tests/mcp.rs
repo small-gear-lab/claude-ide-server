@@ -78,8 +78,8 @@ async fn an_answer_that_is_a_string_is_the_text_as_it_is() {
     let mut scene = scene().await;
     let (answer, _) = call_tool(
         &mut scene,
-        "getOpenEditors",
-        json!({}),
+        "openFile",
+        json!({"filePath": "/a"}),
         Ok(json!("FILE_SAVED")),
     )
     .await;

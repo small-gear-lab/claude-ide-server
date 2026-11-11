@@ -1,0 +1,11 @@
+{
+  "tabs": [
+    {
+      "uri": "<string>",
+      "isActive": "<bool>",
+      "label": "<string>",
+      "languageId": "<string>",
+      "isDirty": "<bool>"
+    }
+  ]
+}

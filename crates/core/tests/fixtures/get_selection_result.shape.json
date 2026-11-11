@@ -1,0 +1,10 @@
+{
+  "success": true,
+  "text": "<string>",
+  "filePath": "<string>",
+  "selection": {
+    "start": { "line": "<number>", "character": "<number>" },
+    "end": { "line": "<number>", "character": "<number>" },
+    "isEmpty": "<bool>"
+  }
+}

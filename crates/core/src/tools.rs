@@ -10,7 +10,10 @@ use serde_json::{Value, json};
 
 use crate::adapter::{AdapterHandle, RequestError};
 use crate::mcp::{ToolBackend, ToolDefinition, ToolError, ToolResult};
-use crate::model::file_uri;
+use crate::model::{
+    self, ModelError, SelectionAnswer, diagnostics_to_tool_text, file_uri,
+    open_editors_to_tool_text,
+};
 
 /// What runs a tool.
 enum Backing {
@@ -20,9 +23,21 @@ enum Backing {
     Server,
 }
 
+/// How the answer of the adapter becomes the text that Claude gets.
+#[derive(Clone, Copy)]
+enum Answer {
+    /// Passed on as it is (a string), or written as JSON.
+    Raw,
+    /// Checked and rewritten through the types of [`model`](crate::model), so that a malformed answer is a failed call.
+    Selection,
+    OpenEditors,
+    Diagnostics,
+}
+
 struct ToolSpec {
     name: &'static str,
     backing: Backing,
+    answer: Answer,
     description: &'static str,
     schema: fn() -> Value,
 }
@@ -86,66 +101,77 @@ const TOOLS: &[ToolSpec] = &[
     ToolSpec {
         name: "openFile",
         backing: Backing::Adapter("openFile"),
+        answer: Answer::Raw,
         description: "Open a file in the editor and optionally select a range of text.",
         schema: open_file_schema,
     },
     ToolSpec {
         name: "openDiff",
         backing: Backing::Adapter("openDiff"),
+        answer: Answer::Raw,
         description: "Show a proposed change to a file as a diff and wait until the user accepts or rejects it.",
         schema: open_diff_schema,
     },
     ToolSpec {
         name: "close_tab",
         backing: Backing::Adapter("closeDiff"),
+        answer: Answer::Raw,
         description: "Close a diff that openDiff opened, by its tab_name.",
         schema: close_tab_schema,
     },
     ToolSpec {
         name: "closeAllDiffTabs",
         backing: Backing::Adapter("closeAllDiffs"),
+        answer: Answer::Raw,
         description: "Close all the diffs that openDiff opened.",
         schema: no_arguments,
     },
     ToolSpec {
         name: "getOpenEditors",
         backing: Backing::Adapter("getOpenEditors"),
+        answer: Answer::OpenEditors,
         description: "List the files that are open in the editor.",
         schema: no_arguments,
     },
     ToolSpec {
         name: "getCurrentSelection",
         backing: Backing::Adapter("getCurrentSelection"),
+        answer: Answer::Selection,
         description: "Get the selection in the active editor.",
         schema: no_arguments,
     },
     ToolSpec {
         name: "getLatestSelection",
         backing: Backing::Adapter("getLatestSelection"),
+        answer: Answer::Selection,
         description: "Get the most recent selection, even if the editor has lost focus.",
         schema: no_arguments,
     },
     ToolSpec {
         name: "getWorkspaceFolders",
         backing: Backing::Server,
+        answer: Answer::Raw,
         description: "Get the folders of the workspace that the editor has open.",
         schema: no_arguments,
     },
     ToolSpec {
         name: "getDiagnostics",
         backing: Backing::Adapter("getDiagnostics"),
+        answer: Answer::Diagnostics,
         description: "Get the diagnostics (errors and warnings) of one file or of all files.",
         schema: get_diagnostics_schema,
     },
     ToolSpec {
         name: "checkDocumentDirty",
         backing: Backing::Adapter("checkDocumentDirty"),
+        answer: Answer::Raw,
         description: "Check whether a file has unsaved changes.",
         schema: file_path_only,
     },
     ToolSpec {
         name: "saveDocument",
         backing: Backing::Adapter("saveDocument"),
+        answer: Answer::Raw,
         description: "Save a file that has unsaved changes.",
         schema: file_path_only,
     },
@@ -205,9 +231,15 @@ impl ToolBackend for WorkspaceTools {
                 is_error: false,
             },
             Backing::Adapter(method) => match self.adapter.request(method, arguments).await {
-                Ok(result) => ToolResult {
-                    text: result_text(&result),
-                    is_error: false,
+                Ok(result) => match answer_text(spec.answer, &result) {
+                    Ok(text) => ToolResult {
+                        text,
+                        is_error: false,
+                    },
+                    Err(error) => ToolResult {
+                        text: format!("the editor's answer to {name} is not valid: {error}"),
+                        is_error: true,
+                    },
                 },
                 Err(error) => ToolResult {
                     text: error_text(&error),
@@ -216,6 +248,17 @@ impl ToolBackend for WorkspaceTools {
             },
         })
     }
+}
+
+fn answer_text(answer: Answer, result: &Value) -> Result<String, ModelError> {
+    Ok(match answer {
+        Answer::Raw => result_text(result),
+        Answer::Selection => SelectionAnswer::from_adapter(result)?.to_tool_text(),
+        Answer::OpenEditors => {
+            open_editors_to_tool_text(&model::open_editors_from_adapter(result)?)
+        }
+        Answer::Diagnostics => diagnostics_to_tool_text(&model::diagnostics_from_adapter(result)?),
+    })
 }
 
 /// A string is the text as it is (for example `FILE_SAVED`); anything else is written as JSON.

@@ -75,7 +75,13 @@ async fn register_connect_list_call_disconnect_and_clean_up() {
                 adapter
                     .send(Message::Response {
                         id,
-                        outcome: Ok(json!({"tabs": [{"uri": "file:///a.lua", "isActive": true}]})),
+                        outcome: Ok(json!({"tabs": [{
+                            "uri": "file:///a.lua",
+                            "isActive": true,
+                            "label": "a.lua",
+                            "languageId": "lua",
+                            "isDirty": false,
+                        }]})),
                     })
                     .await;
             }

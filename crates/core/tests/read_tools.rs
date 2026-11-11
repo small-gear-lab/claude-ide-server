@@ -1,0 +1,190 @@
+//! The read-only tools and the selection notifications: what an adapter reports is checked, rewritten with the crate's
+//! own types, and passed on to Claude Code in the shapes that it expects.
+
+mod common;
+
+use std::time::Duration;
+
+use common::scene::{Scene, call_tool, result_json, scene_declaring};
+use common::shape::assert_shape;
+use serde_json::{Value, json};
+use tokio::time::timeout;
+
+const READ_ONLY: [&str; 4] = [
+    "getOpenEditors",
+    "getCurrentSelection",
+    "getLatestSelection",
+    "getDiagnostics",
+];
+
+fn selection(text: &str, start: (u32, u32), end: (u32, u32)) -> Value {
+    json!({
+        "filePath": "/home/user/project/a.lua",
+        "text": text,
+        "selection": {
+            "start": {"line": start.0, "character": start.1},
+            "end": {"line": end.0, "character": end.1},
+        },
+    })
+}
+
+#[tokio::test]
+async fn the_read_only_tools_are_listed_with_the_folders_tool_that_the_server_answers_itself() {
+    let mut scene = scene_declaring(&READ_ONLY).await;
+    assert_eq!(
+        scene.claude.tool_names().await,
+        [
+            "getOpenEditors",
+            "getCurrentSelection",
+            "getLatestSelection",
+            "getWorkspaceFolders",
+            "getDiagnostics"
+        ]
+    );
+}
+
+#[tokio::test]
+async fn the_open_editors_are_rewritten_through_the_types() {
+    let mut scene = scene_declaring(&READ_ONLY).await;
+    let tabs = json!({"tabs": [
+        {"uri": "file:///a.lua", "isActive": true, "label": "a.lua", "languageId": "lua", "isDirty": false},
+        {"uri": "file:///b.rs", "isActive": false, "label": "b.rs", "languageId": "rust", "isDirty": true},
+    ]});
+    let (answer, (method, _)) =
+        call_tool(&mut scene, "getOpenEditors", json!({}), Ok(tabs.clone())).await;
+
+    assert_eq!(method, "getOpenEditors");
+    assert_eq!(answer["result"]["isError"], false);
+    assert_eq!(result_json(&answer), tabs);
+    assert_shape(&result_json(&answer), "get_open_editors_result.shape.json");
+}
+
+#[tokio::test]
+async fn a_selection_is_answered_with_its_position_and_text() {
+    let mut scene = scene_declaring(&READ_ONLY).await;
+    for tool in ["getCurrentSelection", "getLatestSelection"] {
+        let (answer, (method, _)) = call_tool(
+            &mut scene,
+            tool,
+            json!({}),
+            Ok(selection("日本語", (3, 0), (3, 3))),
+        )
+        .await;
+        assert_eq!(method, tool);
+        let result = result_json(&answer);
+        assert_shape(&result, "get_selection_result.shape.json");
+        assert_eq!(result["text"], "日本語");
+        assert_eq!(result["selection"]["end"]["character"], 3);
+        assert_eq!(result["selection"]["isEmpty"], false);
+    }
+}
+
+#[tokio::test]
+async fn no_selection_is_an_answer_not_an_error() {
+    let mut scene = scene_declaring(&READ_ONLY).await;
+    let (answer, _) = call_tool(
+        &mut scene,
+        "getCurrentSelection",
+        json!({}),
+        Ok(json!({"success": false, "message": "No active editor found"})),
+    )
+    .await;
+    assert_eq!(answer["result"]["isError"], false);
+    let result = result_json(&answer);
+    assert_shape(&result, "get_selection_none_result.shape.json");
+    assert_eq!(result["message"], "No active editor found");
+
+    // Without a message, the usual one.
+    let (answer, _) = call_tool(
+        &mut scene,
+        "getLatestSelection",
+        json!({}),
+        Ok(json!({"success": false})),
+    )
+    .await;
+    assert_eq!(result_json(&answer)["message"], "No selection available");
+}
+
+#[tokio::test]
+async fn the_diagnostics_are_asked_for_by_uri_and_rewritten_through_the_types() {
+    let mut scene = scene_declaring(&READ_ONLY).await;
+    let files = json!([{
+        "uri": "file:///a.lua",
+        "diagnostics": [
+            {"message": "unused", "severity": "Warning", "source": "lua_ls",
+             "range": {"start": {"line": 1, "character": 2}, "end": {"line": 1, "character": 5}}},
+        ],
+    }]);
+    let (answer, (method, params)) = call_tool(
+        &mut scene,
+        "getDiagnostics",
+        json!({"uri": "file:///a.lua"}),
+        Ok(files.clone()),
+    )
+    .await;
+    assert_eq!(method, "getDiagnostics");
+    assert_eq!(params, json!({"uri": "file:///a.lua"}));
+    assert_eq!(result_json(&answer), files);
+    assert_shape(&result_json(&answer), "get_diagnostics_result.shape.json");
+
+    // No file has anything: an empty list, not a failure.
+    let (answer, _) = call_tool(&mut scene, "getDiagnostics", json!({}), Ok(json!([]))).await;
+    assert_eq!(answer["result"]["isError"], false);
+    assert_eq!(result_json(&answer), json!([]));
+}
+
+#[tokio::test]
+async fn a_malformed_answer_is_a_failed_call_that_says_where() {
+    let mut scene = scene_declaring(&READ_ONLY).await;
+    let cases = [
+        (
+            "getOpenEditors",
+            json!({"tabs": [{"uri": "x"}]}),
+            "$.tabs[0].isActive",
+        ),
+        ("getOpenEditors", json!({"tabs": "none"}), "$.tabs"),
+        ("getCurrentSelection", json!({"filePath": "/a"}), "$.text"),
+        ("getLatestSelection", json!("a string"), "$"),
+        ("getDiagnostics", json!({"not": "a list"}), "$"),
+        (
+            "getDiagnostics",
+            json!([{"uri": "x", "diagnostics": [{"message": "m", "severity": "Fatal", "range": {}}]}]),
+            "$[0].diagnostics[0].severity",
+        ),
+    ];
+    for (tool, malformed, path) in cases {
+        let (answer, _) = call_tool(&mut scene, tool, json!({}), Ok(malformed.clone())).await;
+        assert!(
+            answer.get("error").is_none(),
+            "{tool}: a failed call is still an answer"
+        );
+        assert_eq!(answer["result"]["isError"], true, "{tool}: {malformed}");
+        let text = answer["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains(path), "{tool}: {text}");
+        assert!(text.contains("is not valid"), "{tool}: {text}");
+    }
+}
+
+#[tokio::test]
+async fn a_tool_that_the_adapter_did_not_declare_is_not_offered() {
+    // Only getOpenEditors is declared: the other read-only tools are neither listed nor callable.
+    let mut scene: Scene = scene_declaring(&["getOpenEditors"]).await;
+    assert_eq!(
+        scene.claude.tool_names().await,
+        ["getOpenEditors", "getWorkspaceFolders"]
+    );
+    let answer = scene
+        .claude
+        .request(
+            "tools/call",
+            json!({"name": "getCurrentSelection", "arguments": {}}),
+        )
+        .await;
+    assert_eq!(answer["error"]["code"], -32602);
+    assert!(
+        timeout(Duration::from_millis(200), scene.adapter.recv())
+            .await
+            .is_err(),
+        "the adapter was not asked"
+    );
+}

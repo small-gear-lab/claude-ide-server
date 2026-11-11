@@ -7,7 +7,7 @@ use tokio::io::DuplexStream;
 
 use super::Client;
 use super::claude::MockClaude;
-use super::fixture::{Fixture, registered};
+use super::fixture::{Fixture, registered_with};
 
 /// An adapter that declared `getOpenEditors` and `openFile` is registered, and Claude Code has connected to it and
 /// completed the handshake.
@@ -18,8 +18,13 @@ pub struct Scene {
     pub claude: MockClaude,
 }
 
-pub async fn scene_in(mut fixture: Fixture) -> Scene {
-    let (adapter, workspace, port) = registered(&mut fixture).await;
+pub async fn scene_in(fixture: Fixture) -> Scene {
+    scene_with(fixture, super::registration()).await
+}
+
+/// Like [`scene_in`], for an adapter that registers with `params`.
+pub async fn scene_with(mut fixture: Fixture, params: Value) -> Scene {
+    let (adapter, workspace, port) = registered_with(&mut fixture, params).await;
     let token = fixture.read_lock(port).auth_token;
     let mut claude = MockClaude::connect(port, &token).await;
     claude.handshake(4321).await;
@@ -30,6 +35,21 @@ pub async fn scene_in(mut fixture: Fixture) -> Scene {
         workspace,
         claude,
     }
+}
+
+/// An adapter that declares these methods, and nothing else different from [`registration`](super::registration).
+pub async fn scene_declaring(methods: &[&str]) -> Scene {
+    let mut params = super::registration();
+    params["methods"] = json!(methods);
+    scene_with(Fixture::new(), params).await
+}
+
+/// The JSON that a tool result carries as its text.
+pub fn result_json(answer: &Value) -> Value {
+    let text = answer["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_else(|| panic!("no text in {answer}"));
+    serde_json::from_str(text).unwrap_or_else(|e| panic!("{text}: {e}"))
 }
 
 pub async fn scene() -> Scene {

@@ -107,8 +107,16 @@ impl Fixture {
 }
 
 pub async fn registered(fixture: &mut Fixture) -> (Client<DuplexStream>, Workspace, u16) {
+    registered_with(fixture, registration()).await
+}
+
+/// Like [`registered`], with another `register`.
+pub async fn registered_with(
+    fixture: &mut Fixture,
+    params: serde_json::Value,
+) -> (Client<DuplexStream>, Workspace, u16) {
     let mut client = fixture.client().await;
-    let port = client.register(registration()).await.unwrap();
+    let port = client.register(params).await.unwrap();
     let workspace = timeout(WAIT, fixture.server.accept())
         .await
         .unwrap()
