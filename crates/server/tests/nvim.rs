@@ -415,3 +415,93 @@ async fn a_server_that_the_adapter_started_and_that_does_not_understand_its_argu
     assert!(home.lock_files().is_empty());
     drop(nvim);
 }
+
+/// A Claude Code that is connected to the workspace that a Neovim has registered.
+async fn claude_for(home: &Home) -> MockClaude {
+    let lock = read_lock(home);
+    let port: u16 = home.lock_files()[0]
+        .file_stem()
+        .unwrap()
+        .to_string_lossy()
+        .parse()
+        .unwrap();
+    let mut claude = MockClaude::connect(port, &lock.auth_token).await;
+    claude.handshake(4242).await;
+    claude
+}
+
+/// `tools/call`, and the JSON in the text of the result. The server has checked it against its own types, so a shape
+/// that it does not accept is an error here, with the place of the fault.
+async fn call(claude: &mut MockClaude, name: &str) -> Value {
+    let answer = claude
+        .request(
+            "tools/call",
+            serde_json::json!({ "name": name, "arguments": {} }),
+        )
+        .await;
+    assert_ne!(answer["result"]["isError"], true, "{name}: {answer}");
+    common::scene::result_json(&answer)
+}
+
+#[tokio::test]
+async fn claude_code_can_ask_for_the_open_editors_and_the_selection() {
+    if !nvim_available() {
+        return;
+    }
+    let home = Home::new();
+    let _server = start_server(&home);
+    let _ = connect_when_ready(&home.default_socket()).await;
+
+    let first = home.dir.path().join("a.txt");
+    let second = home.dir.path().join("b.lua");
+    std::fs::write(&first, "aé😀b\nsecond line\n").unwrap();
+    std::fs::write(&second, "return 1\n").unwrap();
+    let _nvim = start_nvim(
+        &home,
+        &format!(
+            "vim.cmd('edit {}'); vim.cmd('badd {}'); \
+             require('claude_ide').setup({{ selection_debounce_ms = 20, server = {{ autostart = false }} }})",
+            first.display(),
+            second.display()
+        ),
+    );
+    wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
+    let mut claude = claude_for(&home).await;
+
+    // The tools that the adapter can answer are offered.
+    let tools = claude.tool_names().await;
+    for name in [
+        "getOpenEditors",
+        "getCurrentSelection",
+        "getLatestSelection",
+    ] {
+        assert!(
+            tools.contains(&name.to_owned()),
+            "{name} is offered: {tools:?}"
+        );
+    }
+
+    // Both files are open, and the first is the active one.
+    let editors = call(&mut claude, "getOpenEditors").await;
+    let tabs = editors["tabs"].as_array().unwrap();
+    assert_eq!(tabs.len(), 2, "{editors}");
+    let real_first = std::fs::canonicalize(&first).unwrap();
+    let active: Vec<_> = tabs.iter().filter(|tab| tab["isActive"] == true).collect();
+    assert_eq!(active.len(), 1, "{editors}");
+    assert_eq!(active[0]["label"], "a.txt");
+    assert_eq!(active[0]["uri"], format!("file://{}", real_first.display()));
+    assert_eq!(active[0]["languageId"], "plaintext");
+    assert_eq!(active[0]["isDirty"], false);
+    let other = tabs.iter().find(|tab| tab["isActive"] == false).unwrap();
+    assert_eq!(other["label"], "b.lua");
+    assert_eq!(other["languageId"], "lua");
+
+    // The selection is the cursor at the start of the file; the latest one is the same.
+    for name in ["getCurrentSelection", "getLatestSelection"] {
+        let selection = call(&mut claude, name).await;
+        assert_eq!(selection["success"], true, "{selection}");
+        assert_eq!(selection["filePath"], real_first.to_string_lossy().as_ref());
+        assert_eq!(selection["selection"]["isEmpty"], true);
+        assert_eq!(selection["selection"]["start"]["line"], 0);
+    }
+}

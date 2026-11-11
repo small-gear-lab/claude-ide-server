@@ -78,6 +78,27 @@ function M.current(bufnr, state)
   return { filePath = path, text = '', selection = { start = here, ['end'] = here } }
 end
 
+---@type claude_ide.Selection?
+local latest
+
+--- The last selection that there was in a file, kept while the focus is somewhere that has none (a terminal, a help
+--- page): what Claude should hear about is the file that the user was in.
+---@return claude_ide.Selection?
+function M.latest()
+  return latest
+end
+
+--- The selection to answer a request with: the one of the current buffer, or, if that is not a file, the last one.
+---@return claude_ide.Selection?
+function M.available()
+  local selection = M.current()
+  if selection then
+    latest = selection
+    return selection
+  end
+  return latest
+end
+
 --- Sends `selectionChanged` when the selection of the current buffer changes, once things have settled for
 --- `debounce_ms` (the cursor moves all the time). Returns a table: `flush()` sends the current selection now, even if it
 --- is the one that was sent last (for a server that has just been connected to), and `detach()` stops.
@@ -92,6 +113,9 @@ function M.attach(session, group, debounce_ms)
 
   local function send(force)
     local selection = M.current()
+    if selection then
+      latest = selection
+    end
     if not selection or (not force and vim.deep_equal(selection, last_sent)) then
       return
     end

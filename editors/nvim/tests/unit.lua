@@ -106,6 +106,29 @@ check(
 )
 check('an executable that is not there is said so', server.start({ command = 'no-such-claude-ide-server', args = {} }) ~= nil, true)
 
+-- What the server asks for. A terminal has no selection and is not an editor: what is answered is about the file that
+-- the user was in.
+local methods = require('claude_ide.methods')
+check('a filetype that differs from the language id', methods.language_id('sh'), 'shellscript')
+check('a filetype that is the language id', methods.language_id('lua'), 'lua')
+check('no filetype', methods.language_id(''), 'plaintext')
+-- `register` declares the names in this table: nothing else may be in it.
+local declared = vim.tbl_keys(methods.handlers)
+table.sort(declared)
+check('the requests that are answered', declared, { 'getCurrentSelection', 'getLatestSelection', 'getOpenEditors' })
+
+vim.cmd.edit(scratch)
+local in_file = methods.handlers.getCurrentSelection()
+check('the selection in a file', in_file.filePath, path)
+vim.cmd.enew()
+vim.cmd.terminal()
+check('in a terminal the last selection is what there is', methods.handlers.getCurrentSelection().filePath, path)
+local active = vim.tbl_filter(function(tab)
+  return tab.isActive
+end, methods.handlers.getOpenEditors().tabs)
+check('in a terminal the file that the user was in is the active one', #active, 1)
+check('and it is that file', active[1] and active[1].uri, vim.uri_from_fname(path))
+
 if failures > 0 then
   io.stderr:write(('%d checks failed\n'):format(failures))
   os.exit(1)

@@ -1,5 +1,6 @@
 --- Connects Neovim to Claude Code's `/ide` through `claude-ide-server`.
 local Session = require('claude_ide.session')
+local methods = require('claude_ide.methods')
 local selection = require('claude_ide.selection')
 
 local M = {}
@@ -32,7 +33,7 @@ local defaults = {
   },
   register_timeout_ms = 5000,
   selection_debounce_ms = 100,
-  methods = {},
+  methods = methods.handlers,
 }
 
 ---@type claude_ide.Session?
