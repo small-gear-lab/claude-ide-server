@@ -18,6 +18,7 @@ test-support = []
 [dependencies]
 futures-util = "0.3.34"
 getrandom = "0.4.3"
+rmcp = { version = "3.9.0", default-features = false, features = ["server"] }
 rustix = { version = "1.1.6", features = ["process"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"

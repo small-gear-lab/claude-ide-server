@@ -6,6 +6,7 @@ mod fsutil;
 pub mod jsonrpc;
 #[cfg(unix)]
 pub mod lock;
+pub mod mcp;
 #[cfg(unix)]
 pub mod workspace;
 pub mod ws;
