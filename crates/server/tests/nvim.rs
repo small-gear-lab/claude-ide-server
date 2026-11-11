@@ -407,6 +407,32 @@ async fn neovims_that_start_together_share_one_server() {
 }
 
 #[tokio::test]
+async fn the_first_connection_after_a_start_does_not_wait_for_the_usual_first_retry() {
+    if !nvim_available() {
+        return;
+    }
+    let home = Home::new();
+    // The usual first wait is three seconds; after it has started the server the adapter retries much sooner.
+    let nvim = start_nvim(
+        &home,
+        &format!(
+            "require('claude_ide').setup({{ reconnect = {{ initial_ms = 3000, max_ms = 6000 }}, \
+             server = {{ command = '{}', args = {{ '--idle-timeout', '1' }} }} }})",
+            env!("CARGO_BIN_EXE_claude-ide-server")
+        ),
+    );
+    let started = std::time::Instant::now();
+    wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
+    assert!(
+        started.elapsed() < Duration::from_millis(2500),
+        "it registered after {:?}",
+        started.elapsed()
+    );
+    drop(nvim);
+    wait_for_the_server_to_end(&home).await;
+}
+
+#[tokio::test]
 async fn a_server_that_the_adapter_started_and_that_does_not_understand_its_arguments_is_reported()
 {
     if !nvim_available() {

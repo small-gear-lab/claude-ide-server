@@ -25,6 +25,14 @@ function Session.delay(attempts, reconnect)
   return math.floor(math.min(delay, reconnect.max_ms))
 end
 
+--- How long to wait before the first retry after this adapter has started the server: the server is usually ready within a few
+--- tens of milliseconds, so waiting as long as for a server that is not there at all would only make the first connection late.
+---@param reconnect { initial_ms: integer, max_ms: integer }
+---@return integer
+function Session.delay_after_start(reconnect)
+  return math.min(100, reconnect.initial_ms)
+end
+
 ---@param opts claude_ide.Options
 ---@return claude_ide.Session
 function Session.new(opts)
@@ -89,6 +97,9 @@ function Session:_attempt()
       end)
       if problem then
         self:_warn(problem)
+      else
+        self:_lost(generation, err, Session.delay_after_start(self.opts.reconnect))
+        return
       end
     end
     self:_lost(generation, err)
@@ -228,7 +239,10 @@ function Session:_gone()
 end
 
 --- The connection is gone, or never was: schedule the next attempt.
-function Session:_lost(generation, reason)
+---@param generation integer
+---@param reason string
+---@param delay integer? How long to wait: by default, as long as the attempts so far say.
+function Session:_lost(generation, reason, delay)
   if generation ~= self.generation or self.state == 'stopped' then
     return
   end
@@ -238,7 +252,7 @@ function Session:_lost(generation, reason)
   self.port = nil
   self.last_error = reason
   self.state = 'waiting'
-  local delay = Session.delay(self.attempts, self.opts.reconnect)
+  delay = delay or Session.delay(self.attempts, self.opts.reconnect)
   self.attempts = self.attempts + 1
   local next_generation = self.generation
   vim.defer_fn(function()

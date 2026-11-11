@@ -39,6 +39,9 @@ for attempts = 0, 6 do
 end
 check('backoff', delays, { 500, 1000, 2000, 4000, 8000, 10000, 10000 })
 check('backoff does not overflow', Session.delay(10000, reconnect), 10000)
+-- After the adapter has started the server, the first retry is soon, and never longer than the usual wait.
+check('the first retry after a start', Session.delay_after_start(reconnect), 100)
+check('and not longer than the usual first wait', Session.delay_after_start({ initial_ms = 40, max_ms = 80 }), 40)
 
 -- Columns are counted in UTF-16 code units, not bytes: `é` is two bytes and one unit, an emoji is four bytes and two.
 local selection = require('claude_ide.selection')
