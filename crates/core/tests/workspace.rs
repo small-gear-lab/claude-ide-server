@@ -446,3 +446,37 @@ async fn a_token_that_is_known_in_advance_ends_up_in_the_lock_file_and_works() {
         .await
         .unwrap();
 }
+
+/// The owner of a workspace that does not read the events does not stall it: the events are dropped, and the workspace
+/// goes on serving what the adapter says.
+#[tokio::test]
+async fn events_that_nobody_reads_are_dropped_and_do_not_stall_the_workspace() {
+    let mut fixture = Fixture::new();
+    let (mut client, workspace, port) = registered(&mut fixture).await;
+
+    // More than the queue of events holds, and nobody calls next_event().
+    for _ in 0..600 {
+        client
+            .notify("diagnosticsChanged", json!({"uris": []}))
+            .await;
+    }
+    // The workspace is not stuck on them: it still applies what the adapter reports next.
+    client
+        .notify(
+            "workspaceFoldersChanged",
+            json!({"workspaceFolders": ["/srv/app"]}),
+        )
+        .await;
+    timeout(WAIT, async {
+        while fixture.read_lock(port).workspace_folders != ["/srv/app"] {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("the change of folders is applied");
+    assert_eq!(workspace.registration().workspace_folders, ["/srv/app"]);
+    assert!(
+        workspace.dropped_events() > 0,
+        "the events that were not read were dropped, not waited for"
+    );
+}

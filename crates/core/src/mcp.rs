@@ -7,7 +7,7 @@
 //! Each connection that a [`McpHub`] is given is served in a task of its own. The hub keeps the connected clients
 //! of one workspace, so that a notification (`selection_changed`, ...) can be sent to all of them.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -18,9 +18,7 @@ use rmcp::model::{
     Implementation, ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerConfig,
     ServerNotification, Tool,
 };
-use rmcp::service::{
-    NotificationContext, Peer, RequestContext, RxJsonRpcMessage, TxJsonRpcMessage,
-};
+use rmcp::service::{NotificationContext, RequestContext, RxJsonRpcMessage, TxJsonRpcMessage};
 use rmcp::transport::Transport;
 use rmcp::{ErrorData as McpError, RoleServer, ServerHandler, ServiceExt};
 use serde_json::{Map, Value, json};
@@ -79,8 +77,80 @@ pub struct ClientInfo {
     pub pid: Option<u32>,
 }
 
+/// How many notifications may wait for one client. Past that, the oldest is dropped: a client that is that far behind
+/// is not keeping up, and it must not hold up the others, or the workspace.
+const OUTBOX: usize = 64;
+
+/// The notifications that wait to be sent to one client, which a task of its own sends one after the other.
+///
+/// Sending never waits. A notification that is a *state* (the selection) replaces the one of the same method that is
+/// still waiting, so that a client that is slow gets the latest state, not the history of it, and the latest is never the
+/// one that is lost. The others (a mentioned file) are kept in order, up to [`OUTBOX`].
+struct Outbox {
+    state: Mutex<OutboxState>,
+    wake: tokio::sync::Notify,
+}
+
+struct OutboxState {
+    queue: VecDeque<(String, Value, bool)>,
+    closed: bool,
+}
+
+impl Outbox {
+    fn new() -> Self {
+        Self {
+            state: Mutex::new(OutboxState {
+                queue: VecDeque::new(),
+                closed: false,
+            }),
+            wake: tokio::sync::Notify::new(),
+        }
+    }
+
+    fn push(&self, method: &str, params: Value, replaces_waiting: bool) {
+        let mut state = self.state.lock().expect("not poisoned");
+        if state.closed {
+            return;
+        }
+        if replaces_waiting {
+            state
+                .queue
+                .retain(|(waiting, _, state_like)| !(*state_like && waiting == method));
+        }
+        if state.queue.len() >= OUTBOX {
+            state.queue.pop_front();
+        }
+        state
+            .queue
+            .push_back((method.to_owned(), params, replaces_waiting));
+        drop(state);
+        self.wake.notify_one();
+    }
+
+    /// The next one to send; `None` once the outbox is closed and empty.
+    async fn next(&self) -> Option<(String, Value)> {
+        loop {
+            {
+                let mut state = self.state.lock().expect("not poisoned");
+                if let Some((method, params, _)) = state.queue.pop_front() {
+                    return Some((method, params));
+                }
+                if state.closed {
+                    return None;
+                }
+            }
+            self.wake.notified().await;
+        }
+    }
+
+    fn close(&self) {
+        self.state.lock().expect("not poisoned").closed = true;
+        self.wake.notify_one();
+    }
+}
+
 struct ClientEntry {
-    peer: Peer<RoleServer>,
+    outbox: Arc<Outbox>,
     name: String,
     version: String,
     pid: Arc<Mutex<Option<u32>>>,
@@ -91,6 +161,8 @@ struct HubInner<B> {
     server_name: String,
     server_version: String,
     handshake_timeout: Duration,
+    /// The last notification of each method that is to reach a client that connects later too.
+    remembered: Mutex<HashMap<String, Value>>,
     clients: Mutex<HashMap<u64, ClientEntry>>,
     next_id: AtomicU64,
 }
@@ -129,6 +201,7 @@ impl<B: ToolBackend> McpHub<B> {
                 server_name: server_name.into(),
                 server_version: server_version.into(),
                 handshake_timeout,
+                remembered: Mutex::new(HashMap::new()),
                 clients: Mutex::new(HashMap::new()),
                 next_id: AtomicU64::new(1),
             }),
@@ -163,17 +236,44 @@ impl<B: ToolBackend> McpHub<B> {
                 })
                 .unwrap_or_default();
             let id = hub.next_id.fetch_add(1, Ordering::Relaxed);
-            hub.clients.lock().expect("not poisoned").insert(
-                id,
-                ClientEntry {
-                    peer: running.peer().clone(),
-                    name,
-                    version,
-                    pid,
-                },
-            );
+
+            let outbox = Arc::new(Outbox::new());
+            let peer = running.peer().clone();
+            let sending = outbox.clone();
+            tokio::spawn(async move {
+                while let Some((method, params)) = sending.next().await {
+                    let notification = CustomNotification::new(method, Some(params));
+                    let sent = peer
+                        .send_notification(ServerNotification::CustomNotification(notification))
+                        .await;
+                    if sent.is_err() {
+                        break;
+                    }
+                }
+            });
+            {
+                // What a client that connects now has missed (the selection that is current, for one) is queued, and the
+                // client is registered, in one step with respect to `notify_remembering` (which also holds the clients
+                // while it remembers): otherwise a state that arrives in between would reach every client but this one,
+                // and this one would be left with the older.
+                let mut clients = hub.clients.lock().expect("not poisoned");
+                for (method, params) in hub.remembered.lock().expect("not poisoned").iter() {
+                    outbox.push(method, params.clone(), true);
+                }
+                clients.insert(
+                    id,
+                    ClientEntry {
+                        outbox: outbox.clone(),
+                        name,
+                        version,
+                        pid,
+                    },
+                );
+            }
             let _ = running.waiting().await;
+            // The entry goes, and the outbox is closed, which ends the task that sends from it.
             hub.clients.lock().expect("not poisoned").remove(&id);
+            outbox.close();
         });
     }
 
@@ -197,22 +297,35 @@ impl<B: ToolBackend> McpHub<B> {
         infos.into_iter().map(|(_, info)| info).collect()
     }
 
-    /// Sends a notification (a method of this protocol that MCP does not define, such as `selection_changed`) to every
-    /// connected client. A client that cannot be reached is skipped.
-    pub async fn notify(&self, method: &str, params: Value) {
-        let peers: Vec<Peer<RoleServer>> = self
-            .inner
-            .clients
+    /// Like [`notify`](Self::notify), for a *state* such as the selection: the notification is kept, so that a client that
+    /// connects later is sent it too (only the last one of each method is kept), and for a client that is slow it
+    /// replaces the one of the same method that is still waiting.
+    pub fn notify_remembering(&self, method: &str, params: Value) {
+        // The clients are held while the state is remembered and queued, so that a client that is being attached sees
+        // either all of this or none of it (see `attach`). The order of the locks is always clients, then remembered.
+        let clients = self.inner.clients.lock().expect("not poisoned");
+        self.inner
+            .remembered
             .lock()
             .expect("not poisoned")
-            .values()
-            .map(|entry| entry.peer.clone())
-            .collect();
-        for peer in peers {
-            let notification = CustomNotification::new(method, Some(params.clone()));
-            let _ = peer
-                .send_notification(ServerNotification::CustomNotification(notification))
-                .await;
+            .insert(method.to_owned(), params.clone());
+        for entry in clients.values() {
+            entry.outbox.push(method, params.clone(), true);
+        }
+    }
+
+    /// Sends a notification (a method of this protocol that MCP does not define, such as `selection_changed`) to every
+    /// connected client. A client that cannot be reached is skipped.
+    ///
+    /// This never waits for a client: the notification is put in the client's queue (the oldest one is dropped if the
+    /// queue is full: a client that is that far behind is not keeping up). Notifications for one client stay in order.
+    pub fn notify(&self, method: &str, params: Value) {
+        self.broadcast(method, params, false);
+    }
+
+    fn broadcast(&self, method: &str, params: Value, state_like: bool) {
+        for entry in self.inner.clients.lock().expect("not poisoned").values() {
+            entry.outbox.push(method, params.clone(), state_like);
         }
     }
 }

@@ -6,6 +6,7 @@
 
 use std::io;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -115,6 +116,8 @@ pub struct Workspace {
     handle: AdapterHandle,
     claude: McpHub<WorkspaceTools>,
     events: mpsc::Receiver<WorkspaceEvent>,
+    /// How many events were dropped because the owner was too far behind.
+    dropped: Arc<AtomicU64>,
     finished: oneshot::Receiver<()>,
 }
 
@@ -143,13 +146,21 @@ impl Workspace {
 
     /// Sends a notification (`selection_changed`, `at_mentioned`, `diagnostics_changed`, ...) to every connected Claude
     /// Code.
-    pub async fn notify_claude(&self, method: &str, params: Value) {
-        self.claude.notify(method, params).await;
+    pub fn notify_claude(&self, method: &str, params: Value) {
+        self.claude.notify(method, params);
     }
 
     /// The next event. `None` once the adapter is gone and everything has been cleaned up.
+    ///
+    /// The events are information; the workspace never waits for whoever reads them. If more than 256 are waiting, the
+    /// newest are dropped (see [`dropped_events`](Self::dropped_events)).
     pub async fn next_event(&mut self) -> Option<WorkspaceEvent> {
         self.events.recv().await
+    }
+
+    /// How many events were dropped because they were not read fast enough.
+    pub fn dropped_events(&self) -> u64 {
+        self.dropped.load(Ordering::Relaxed)
     }
 
     /// Ends the workspace and waits until its lock file and port are gone.
@@ -282,6 +293,7 @@ async fn provision(
         folders: Mutex::new(registration.workspace_folders.clone()),
     });
     let (events_tx, events) = mpsc::channel(256);
+    let dropped = Arc::new(AtomicU64::new(0));
     let (finished_tx, finished) = oneshot::channel();
     let claude = McpHub::new(
         WorkspaceTools::new(registration.methods.clone(), session.handle(), {
@@ -299,6 +311,7 @@ async fn provision(
         handle: session.handle(),
         claude: claude.clone(),
         events,
+        dropped: dropped.clone(),
         finished,
     };
     tokio::spawn(run(Running {
@@ -308,6 +321,7 @@ async fn provision(
         shared,
         claude,
         events: events_tx,
+        dropped,
         finished: finished_tx,
         stop,
         alive,
@@ -344,6 +358,7 @@ struct Running {
     shared: Arc<Shared>,
     claude: McpHub<WorkspaceTools>,
     events: mpsc::Sender<WorkspaceEvent>,
+    dropped: Arc<AtomicU64>,
     finished: oneshot::Sender<()>,
     stop: watch::Receiver<bool>,
     // Held until the end, so that `WorkspaceServer::shutdown` can tell when every workspace is done.
@@ -360,6 +375,7 @@ async fn run(running: Running) {
         shared,
         claude,
         events,
+        dropped,
         finished,
         mut stop,
         alive: _alive,
@@ -373,7 +389,7 @@ async fn run(running: Running) {
                 if method == "workspaceFoldersChanged" {
                     apply_folders_changed(&params, &mut lock, &shared);
                 }
-                if events.send(WorkspaceEvent::Notification { method, params }).await.is_err() {
+                if !publish(&events, &dropped, WorkspaceEvent::Notification { method, params }) {
                     owner_closed = true;
                     break;
                 }
@@ -405,6 +421,24 @@ async fn run(running: Running) {
     // Only now does the event stream end, and `close` return.
     drop(events);
     let _ = finished.send(());
+}
+
+/// Hands an event to the owner of the workspace without ever waiting for it: the events are information, and a
+/// workspace whose owner is slow (or only looks now and then) must go on passing the selection to Claude Code. If the
+/// owner is more than the queue behind, the event is dropped and counted. Returns false if the owner is gone.
+fn publish(
+    events: &mpsc::Sender<WorkspaceEvent>,
+    dropped: &AtomicU64,
+    event: WorkspaceEvent,
+) -> bool {
+    match events.try_send(event) {
+        Ok(()) => true,
+        Err(mpsc::error::TrySendError::Full(_)) => {
+            dropped.fetch_add(1, Ordering::Relaxed);
+            true
+        }
+        Err(mpsc::error::TrySendError::Closed(_)) => false,
+    }
 }
 
 fn apply_folders_changed(params: &Value, lock: &mut LockFile, shared: &Shared) {

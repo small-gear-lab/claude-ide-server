@@ -236,8 +236,7 @@ async fn a_notification_reaches_every_connected_client() {
     let params = json!({"filePath": "/a.lua", "text": "", "selection": {"isEmpty": true}});
     scene
         .workspace
-        .notify_claude("selection_changed", params.clone())
-        .await;
+        .notify_claude("selection_changed", params.clone());
 
     for claude in [&mut scene.claude, &mut second] {
         let message = claude.recv_json().await.expect("a notification");
