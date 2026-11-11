@@ -5,23 +5,24 @@
 mod common;
 mod support;
 
-use std::os::unix::net::UnixListener as StdUnixListener;
 use std::path::Path;
-use std::process::{Command, Stdio};
+#[cfg(unix)]
+use std::process::Command;
+use std::process::Stdio;
 
 use common::claude::MockClaude;
 use common::{Client, registration};
 use serde_json::json;
 use support::{Home, Server, connect_when_ready, token_of, wait_for_log};
-use tokio::net::UnixStream;
 
 /// What an adapter does: registers, and gets the port of the workspace.
-async fn register(socket: &Path) -> (Client<UnixStream>, u16) {
+async fn register(socket: &Path) -> (Client<common::AdapterStream>, u16) {
     let mut adapter = Client::new(connect_when_ready(socket).await);
     let port = adapter.register(registration()).await.unwrap();
     (adapter, port)
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn it_serves_an_adapter_and_a_claude_code_and_leaves_nothing_when_terminated() {
     let home = Home::new();
@@ -76,6 +77,56 @@ async fn it_serves_an_adapter_and_a_claude_code_and_leaves_nothing_when_terminat
     assert!(log.contains("stopped"), "{log}");
 }
 
+/// Windows has no `SIGTERM` for a service to be asked with: a task that is ended, like a process that is killed, gets no
+/// chance to clean up. What is left (the lock file) is removed by the next server, which finds that the process that wrote
+/// it is gone.
+#[cfg(windows)]
+#[tokio::test]
+async fn a_server_that_is_killed_leaves_its_lock_file_and_the_next_server_removes_it() {
+    let home = Home::new();
+    let mut server = Server(
+        home.command()
+            .arg("--socket")
+            .arg(home.socket())
+            .spawn()
+            .unwrap(),
+    );
+
+    let (_adapter, port) = register(&home.socket()).await;
+    let token = token_of(&home.lock_files(), port);
+    let mut claude = MockClaude::connect(port, &token).await;
+    claude.handshake(4242).await;
+    let answer = claude
+        .request(
+            "tools/call",
+            json!({"name": "getWorkspaceFolders", "arguments": {}}),
+        )
+        .await;
+    assert!(
+        answer.to_string().contains("/home/user/project"),
+        "{answer}"
+    );
+    assert_eq!(home.lock_files().len(), 1);
+
+    server.kill();
+    server.wait().await;
+    drop(claude);
+    assert_eq!(home.lock_files().len(), 1, "nothing was cleaned up");
+
+    // The pipe is free again (it went with the process), and the next server clears what was left.
+    let mut next = Server(
+        home.command()
+            .arg("--socket")
+            .arg(home.socket())
+            .spawn()
+            .unwrap(),
+    );
+    wait_for_log(&home, "removed the lock file of an earlier server").await;
+    assert!(home.lock_files().is_empty());
+    next.kill();
+    next.wait().await;
+}
+
 #[tokio::test]
 async fn a_second_server_on_the_same_socket_fails_with_a_message() {
     let home = Home::new();
@@ -101,8 +152,11 @@ async fn a_second_server_on_the_same_socket_fails_with_a_message() {
     drop(first);
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn a_socket_that_is_handed_over_is_served_and_stays_when_the_server_goes() {
+    use std::os::unix::net::UnixListener as StdUnixListener;
+
     let home = Home::new();
     std::fs::create_dir_all(home.socket().parent().unwrap()).unwrap();
     let handed = StdUnixListener::bind(home.socket()).unwrap();

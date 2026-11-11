@@ -7,13 +7,13 @@ use claude_ide_core::adapter;
 use claude_ide_core::lock::{EnvVars, LockDirs};
 use claude_ide_core::mcp::ClientChange;
 use claude_ide_core::workspace::{Config, Workspace, WorkspaceEvent, WorkspaceServer, socket_path};
-use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::mpsc;
 use tokio::time::Instant;
 use tracing::{debug, error, info, warn};
 
 use crate::activation::{default_sources, open_first};
 use crate::args::Options;
+use crate::stop::Stop;
 
 /// How the process ends.
 pub mod exit {
@@ -52,12 +52,9 @@ pub async fn run(options: Options) -> u8 {
             return exit::START_FAILED;
         }
     };
-    let (mut sigint, mut sigterm) = match (
-        signal(SignalKind::interrupt()),
-        signal(SignalKind::terminate()),
-    ) {
-        (Ok(sigint), Ok(sigterm)) => (sigint, sigterm),
-        (Err(error), _) | (_, Err(error)) => {
+    let mut stop = match Stop::new() {
+        Ok(stop) => stop,
+        Err(error) => {
             error!("could not listen for signals: {error}");
             return exit::START_FAILED;
         }
@@ -121,8 +118,7 @@ pub async fn run(options: Options) -> u8 {
                 info!("no adapter for {} seconds: stopping", options.idle_timeout.map_or(0, |t| t.as_secs()));
                 break exit::OK;
             }
-            _ = sigint.recv() => { info!("interrupted: stopping"); break exit::OK; }
-            _ = sigterm.recv() => { info!("terminated: stopping"); break exit::OK; }
+            reason = stop.recv() => { info!("{reason}: stopping"); break exit::OK; }
         }
     };
 

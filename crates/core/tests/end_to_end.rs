@@ -1,4 +1,4 @@
-//! The whole path, with nothing in memory: an adapter on a real Unix socket registers, Claude Code connects with the
+//! The whole path, with nothing in memory: an adapter on a real Unix socket (a named pipe on Windows) registers, Claude Code connects with the
 //! token that it reads from the lock file on disk, lists the tools, calls one, and everything is cleaned up when the
 //! adapter goes away.
 
@@ -13,7 +13,7 @@ use claude_ide_core::lock::{EnvVars, LockDirs};
 use claude_ide_core::workspace::{Config, WorkspaceServer, socket_path};
 use common::claude::MockClaude;
 use common::shape::assert_shape;
-use common::{Client, WAIT, registration};
+use common::{Client, WAIT, connect_to_adapters, registration};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 use tokio::time::timeout;
@@ -31,7 +31,7 @@ async fn register_connect_list_call_disconnect_and_clean_up() {
     let dirs = LockDirs::from_env(&env).unwrap();
     let socket = socket_path(&env);
 
-    let listener = adapter::UnixListener::bind(&socket).unwrap();
+    let listener = adapter::NativeListener::bind(&socket).unwrap();
     let mut server = WorkspaceServer::start(
         listener,
         adapter::Config::default(),
@@ -39,7 +39,7 @@ async fn register_connect_list_call_disconnect_and_clean_up() {
     );
 
     // 1. Register: the adapter connects to the socket and is given a port.
-    let mut adapter = Client::new(tokio::net::UnixStream::connect(&socket).await.unwrap());
+    let mut adapter = Client::new(connect_to_adapters(&socket).await.unwrap());
     let port = adapter.register(registration()).await.unwrap();
     let workspace = timeout(WAIT, server.accept()).await.unwrap().unwrap();
     assert_eq!(workspace.port(), port);

@@ -4,6 +4,9 @@
 //! so that a machine without Neovim can still run the other tests and a CI run cannot pass by skipping these.
 
 // The stand-in for Claude Code is the core's own.
+// The Neovim adapter's side of a Windows pipe is the question of issue #10; until it is answered these run on Unix only.
+#![cfg(unix)]
+
 #[path = "../../core/tests/common/mod.rs"]
 mod common;
 mod support;

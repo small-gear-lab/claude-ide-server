@@ -3,8 +3,8 @@
 //! This layer knows the byte stream, the JSON-RPC framing and the `register` exchange, and nothing about what a
 //! workspace needs (a port, a lock file): it hands each registration to its caller as a [`Registering`], and the
 //! caller says [`accept`](Registering::accept) with a port or [`reject`](Registering::reject). Everything works with
-//! any duplex stream that a [`Listener`] accepts: a Unix socket in production, an in-memory stream in tests; a named
-//! pipe could be added for Windows.
+//! any duplex stream that a [`Listener`] accepts: a Unix socket (a named pipe on Windows) in production, an in-memory
+//! stream in tests.
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -47,6 +47,17 @@ pub trait Listener: Send + 'static {
 
 #[cfg(unix)]
 pub use unix::UnixListener;
+
+/// What the executable listens on for adapters on this system: a Unix socket, or a named pipe on Windows.
+#[cfg(unix)]
+pub type NativeListener = UnixListener;
+
+#[cfg(windows)]
+pub use pipe::PipeListener;
+
+/// What the executable listens on for adapters on this system: a Unix socket, or a named pipe on Windows.
+#[cfg(windows)]
+pub type NativeListener = PipeListener;
 
 #[cfg(unix)]
 mod unix {
@@ -141,6 +152,62 @@ mod unix {
             if let (true, Some(path)) = (self.owns_file, &self.path) {
                 let _ = std::fs::remove_file(path);
             }
+        }
+    }
+}
+
+#[cfg(windows)]
+mod pipe {
+    use std::io;
+    use std::path::{Path, PathBuf};
+
+    use tokio::net::windows::named_pipe::NamedPipeServer;
+
+    use super::Listener;
+
+    /// A listener on a named pipe, which only the user of the process can open.
+    ///
+    /// A pipe has instances, and a client connects to one that is waiting: the listener keeps one waiting, and makes the
+    /// next as it hands out the one that was connected.
+    #[derive(Debug)]
+    pub struct PipeListener {
+        name: PathBuf,
+        waiting: NamedPipeServer,
+    }
+
+    impl PipeListener {
+        /// Makes the pipe `name` (`\\.\pipe\<name>`), private to the user.
+        ///
+        /// One that another server is listening on is an error (a pipe goes with its last handle, so a server that died
+        /// leaves nothing behind that would need to be replaced, as a Unix socket file does).
+        pub fn bind(name: impl Into<PathBuf>) -> io::Result<Self> {
+            let name = name.into();
+            match claude_ide_windows::create_private_pipe(name.as_os_str(), true) {
+                Ok(waiting) => Ok(Self { name, waiting }),
+                // The system says that the name is taken by refusing the first instance of it.
+                Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+                    Err(io::Error::new(
+                        io::ErrorKind::AddrInUse,
+                        format!("another server is listening on {}", name.display()),
+                    ))
+                }
+                Err(error) => Err(error),
+            }
+        }
+
+        /// The name of the pipe.
+        pub fn path(&self) -> Option<&Path> {
+            Some(&self.name)
+        }
+    }
+
+    impl Listener for PipeListener {
+        type Stream = NamedPipeServer;
+
+        async fn accept(&mut self) -> io::Result<NamedPipeServer> {
+            self.waiting.connect().await?;
+            let next = claude_ide_windows::create_private_pipe(self.name.as_os_str(), false)?;
+            Ok(std::mem::replace(&mut self.waiting, next))
         }
     }
 }

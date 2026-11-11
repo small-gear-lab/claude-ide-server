@@ -8,7 +8,6 @@ use std::time::Duration;
 
 use claude_ide_core::lock::LockContents;
 use tempfile::TempDir;
-use tokio::net::UnixStream;
 use tokio::time::timeout;
 
 pub const WAIT: Duration = Duration::from_secs(10);
@@ -25,11 +24,22 @@ impl Home {
         }
     }
 
+    /// Where the test server is told to listen: a socket file in the directory (Unix), or a named pipe whose name has the
+    /// name of the directory in it (Windows, where a pipe has no directory, and the name must be one that no other test has).
     pub fn socket(&self) -> PathBuf {
-        self.dir.path().join("run").join("adapter.sock")
+        #[cfg(unix)]
+        {
+            self.dir.path().join("run").join("adapter.sock")
+        }
+        #[cfg(windows)]
+        {
+            let unique = self.dir.path().file_name().unwrap().to_string_lossy();
+            PathBuf::from(format!(r"\\.\pipe\claude-ide-test-{unique}"))
+        }
     }
 
     /// Where a server that is not given `--socket` puts the socket, with the environment of `command`.
+    #[cfg(unix)]
     pub fn default_socket(&self) -> PathBuf {
         self.dir
             .path()
@@ -49,6 +59,7 @@ impl Home {
             .env("CLAUDE_CONFIG_DIR", self.dir.path().join("claude"))
             .env("XDG_RUNTIME_DIR", self.dir.path().join("xdg"))
             .env("HOME", self.dir.path())
+            .env("USERPROFILE", self.dir.path())
             .env_remove("LISTEN_FDS")
             .env_remove("LISTEN_PID")
             .env_remove("RUST_LOG")
@@ -81,6 +92,8 @@ impl Home {
 pub struct Server(pub Child);
 
 impl Server {
+    /// Asks the server to end, as a supervisor does (`SIGTERM`).
+    #[cfg(unix)]
     pub fn terminate(&self) {
         let status = Command::new("kill")
             .arg("-TERM")
@@ -88,6 +101,11 @@ impl Server {
             .status()
             .unwrap();
         assert!(status.success());
+    }
+
+    /// Ends the server at once, with no chance to clean up (what a process gets when Windows ends a task, or `kill -9`).
+    pub fn kill(&mut self) {
+        self.0.kill().unwrap();
     }
 
     pub async fn wait(&mut self) -> ExitStatus {
@@ -111,10 +129,10 @@ impl Drop for Server {
     }
 }
 
-pub async fn connect_when_ready(socket: &Path) -> UnixStream {
+pub async fn connect_when_ready(socket: &Path) -> crate::common::AdapterStream {
     timeout(WAIT, async {
         loop {
-            if let Ok(stream) = UnixStream::connect(socket).await {
+            if let Ok(stream) = crate::common::connect_to_adapters(socket).await {
                 return stream;
             }
             tokio::time::sleep(Duration::from_millis(20)).await;

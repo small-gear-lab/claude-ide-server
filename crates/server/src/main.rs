@@ -1,18 +1,15 @@
 //! `claude-ide-server`: the server that connects editors to Claude Code (/ide).
 
-#[cfg(unix)]
 mod activation;
 mod args;
-#[cfg(unix)]
 mod logging;
-#[cfg(unix)]
 mod serve;
+mod stop;
 
 use std::process::ExitCode;
 
 use args::{Command, USAGE};
 
-#[cfg(unix)]
 fn main() -> ExitCode {
     let options = match args::parse(std::env::args_os().skip(1)) {
         Ok(Command::Run(options)) => options,
@@ -38,12 +35,4 @@ fn main() -> ExitCode {
         }
     };
     ExitCode::from(runtime.block_on(serve::run(options)))
-}
-
-/// The adapter socket is a Unix domain socket for now; a Windows endpoint is a separate piece of work.
-#[cfg(not(unix))]
-fn main() -> ExitCode {
-    let _ = (Command::Help, USAGE);
-    eprintln!("claude-ide-server: this system is not supported yet");
-    ExitCode::from(1)
 }

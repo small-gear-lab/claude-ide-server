@@ -7,9 +7,9 @@
 //!
 //! | source | for | how |
 //! |---|---|---|
-//! | [`Handed`] | systemd, and other supervisors and container runtimes that follow the same convention | the socket is already listening on a file descriptor that the process inherits (`LISTEN_FDS`) |
+//! | `Handed` (Unix) | systemd, and other supervisors and container runtimes that follow the same convention | the socket is already listening on a file descriptor that the process inherits (`LISTEN_FDS`) |
 //! | `Launchd` (macOS) | launchd | the socket is asked for by name, from the property list of the job (`launch_activate_socket`) |
-//! | [`Bind`] | everything else, and the default | the server makes the socket itself |
+//! | [`Bind`] | everything else, and the default | the server makes the socket itself (a named pipe on Windows) |
 //!
 //! What a system does differently is added here, in a source of its own and selected by `cfg` where the system decides
 //! it (launchd on macOS, which hands a socket over by name through its own interface; Task Scheduler on Windows, which
@@ -22,6 +22,8 @@
 use std::io;
 use std::path::PathBuf;
 
+use claude_ide_core::adapter::NativeListener;
+#[cfg(unix)]
 use claude_ide_core::adapter::UnixListener;
 
 /// One way of getting the adapter socket.
@@ -32,11 +34,11 @@ pub trait SocketSource {
     /// The listener, or `None` if this source does not apply here (the process was not started that way). An error
     /// means that it applies and failed: the next source is not tried, since the supervisor expects its socket to be
     /// the one that is served.
-    fn open(&self) -> io::Result<Option<UnixListener>>;
+    fn open(&self) -> io::Result<Option<NativeListener>>;
 }
 
 /// The first source that applies, with its name.
-pub fn open_first(sources: &[Box<dyn SocketSource>]) -> io::Result<(UnixListener, &'static str)> {
+pub fn open_first(sources: &[Box<dyn SocketSource>]) -> io::Result<(NativeListener, &'static str)> {
     for source in sources {
         if let Some(listener) = source.open()? {
             return Ok((listener, source.name()));
@@ -55,25 +57,29 @@ pub const LAUNCHD_SOCKET_NAME: &str = "adapter";
 /// The sources for this system, in the order they are tried: a socket that was handed over (by the convention of
 /// systemd, and, on macOS, by launchd), then making our own.
 pub fn default_sources(path: PathBuf) -> Vec<Box<dyn SocketSource>> {
-    let mut sources: Vec<Box<dyn SocketSource>> = vec![Box::new(Handed)];
-    #[cfg(target_os = "macos")]
-    sources.push(Box::new(Launchd {
-        name: LAUNCHD_SOCKET_NAME,
-    }));
-    sources.push(Box::new(Bind { path }));
-    sources
+    vec![
+        #[cfg(unix)]
+        Box::new(Handed),
+        #[cfg(target_os = "macos")]
+        Box::new(Launchd {
+            name: LAUNCHD_SOCKET_NAME,
+        }),
+        Box::new(Bind { path }),
+    ]
 }
 
 /// A socket that is already listening, inherited from the process that started the server (`LISTEN_PID` is this
 /// process and `LISTEN_FDS` says how many; the first is used). It is not removed when the server exits.
+#[cfg(unix)]
 pub struct Handed;
 
+#[cfg(unix)]
 impl SocketSource for Handed {
     fn name(&self) -> &'static str {
         "handed over (LISTEN_FDS)"
     }
 
-    fn open(&self) -> io::Result<Option<UnixListener>> {
+    fn open(&self) -> io::Result<Option<NativeListener>> {
         let mut fds = listenfd::ListenFd::from_env();
         match fds.take_unix_listener(0)? {
             Some(socket) => UnixListener::from_listening(socket).map(Some),
@@ -98,7 +104,7 @@ impl SocketSource for Launchd {
         "handed over by launchd"
     }
 
-    fn open(&self) -> io::Result<Option<UnixListener>> {
+    fn open(&self) -> io::Result<Option<NativeListener>> {
         use claude_ide_launchd::{Error, activate_socket};
         match activate_socket(self.name) {
             Ok(fds) => {
@@ -117,7 +123,7 @@ impl SocketSource for Launchd {
     }
 }
 
-/// The server makes the socket itself, at `path`.
+/// The server makes the socket itself, at `path` (on Windows, the named pipe of that name).
 pub struct Bind {
     pub path: PathBuf,
 }
@@ -127,8 +133,8 @@ impl SocketSource for Bind {
         "bound by the server"
     }
 
-    fn open(&self) -> io::Result<Option<UnixListener>> {
-        UnixListener::bind(&self.path).map(Some)
+    fn open(&self) -> io::Result<Option<NativeListener>> {
+        NativeListener::bind(&self.path).map(Some)
     }
 }
 
@@ -141,7 +147,7 @@ mod tests {
         fn name(&self) -> &'static str {
             "never"
         }
-        fn open(&self) -> io::Result<Option<UnixListener>> {
+        fn open(&self) -> io::Result<Option<NativeListener>> {
             Ok(None)
         }
     }
@@ -151,7 +157,7 @@ mod tests {
         fn name(&self) -> &'static str {
             "broken"
         }
-        fn open(&self) -> io::Result<Option<UnixListener>> {
+        fn open(&self) -> io::Result<Option<NativeListener>> {
             Err(io::Error::other("it applies, and fails"))
         }
     }
@@ -166,10 +172,28 @@ mod tests {
         assert!(matches!(source.open(), Ok(None)));
     }
 
+    /// Where a test binds: a socket file in the directory (Unix), or a pipe with a name of its own (Windows, which has no
+    /// directory for it).
+    fn endpoint(dir: &tempfile::TempDir, test: &str) -> PathBuf {
+        #[cfg(unix)]
+        {
+            let _ = test;
+            dir.path().join("a.sock")
+        }
+        #[cfg(windows)]
+        {
+            let _ = dir;
+            PathBuf::from(format!(
+                r"\\.\pipe\claude-ide-server-test-{}-{test}",
+                std::process::id()
+            ))
+        }
+    }
+
     #[tokio::test]
     async fn the_first_source_that_applies_is_used() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("a.sock");
+        let path = endpoint(&dir, "first");
         let sources: Vec<Box<dyn SocketSource>> =
             vec![Box::new(Never), Box::new(Bind { path: path.clone() })];
         let (listener, name) = open_first(&sources).unwrap();
@@ -180,14 +204,15 @@ mod tests {
     #[tokio::test]
     async fn a_source_that_applies_and_fails_ends_the_search() {
         let dir = tempfile::tempdir().unwrap();
-        let sources: Vec<Box<dyn SocketSource>> = vec![
-            Box::new(Broken),
-            Box::new(Bind {
-                path: dir.path().join("a.sock"),
-            }),
-        ];
+        let path = endpoint(&dir, "broken");
+        let sources: Vec<Box<dyn SocketSource>> =
+            vec![Box::new(Broken), Box::new(Bind { path: path.clone() })];
         assert!(open_first(&sources).is_err());
-        assert!(!dir.path().join("a.sock").exists());
+        // The source after it was not tried: nothing was made at the place that it would have bound.
+        #[cfg(unix)]
+        assert!(!path.exists());
+        #[cfg(windows)]
+        assert!(claude_ide_core::adapter::PipeListener::bind(&path).is_ok());
     }
 
     #[test]

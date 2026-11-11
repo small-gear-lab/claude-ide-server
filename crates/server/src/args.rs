@@ -10,7 +10,8 @@ Usage: claude-ide-server [options]
 Runs the server that connects editors to Claude Code (/ide).
 
 Options:
-  --socket <path>        Where the adapters connect. Default: adapter.sock in the runtime directory.
+  --socket <path>        Where the adapters connect. Default: adapter.sock in the runtime directory
+                         (on Windows, the named pipe \\\\.\\pipe\\claude-ide-server-<sid>, and a path is a pipe name).
                          Ignored when the socket is handed over by whatever started the server.
   --idle-timeout <secs>  Exit when the last adapter has been gone for this long. Default: never.
   -v, --verbose          More detail in the log; twice for the most.

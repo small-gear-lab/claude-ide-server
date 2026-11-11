@@ -18,6 +18,37 @@ use tokio::time::timeout;
 
 pub const WAIT: Duration = Duration::from_secs(5);
 
+/// What an adapter connects with on this system: a Unix socket, or a named pipe on Windows.
+#[cfg(unix)]
+pub type AdapterStream = tokio::net::UnixStream;
+#[cfg(windows)]
+pub type AdapterStream = tokio::net::windows::named_pipe::NamedPipeClient;
+
+/// Connects to the adapter socket at `path` (on Windows, the name of the pipe), as an adapter does.
+pub async fn connect_to_adapters(path: &std::path::Path) -> std::io::Result<AdapterStream> {
+    #[cfg(unix)]
+    {
+        tokio::net::UnixStream::connect(path).await
+    }
+    #[cfg(windows)]
+    {
+        // A pipe whose instances are all in use for a moment (the next one is being made) is tried again.
+        const ERROR_PIPE_BUSY: i32 = 231;
+        timeout(WAIT, async {
+            loop {
+                match tokio::net::windows::named_pipe::ClientOptions::new().open(path) {
+                    Err(error) if error.raw_os_error() == Some(ERROR_PIPE_BUSY) => {
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                    }
+                    other => return other,
+                }
+            }
+        })
+        .await
+        .unwrap_or_else(|_| Err(std::io::Error::from(std::io::ErrorKind::TimedOut)))
+    }
+}
+
 /// The adapter's end of a connection: speaks the framing, one message at a time.
 pub struct Client<S> {
     reader: BufReader<ReadHalf<S>>,
