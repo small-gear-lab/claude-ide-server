@@ -3,20 +3,35 @@ name: ci
 on:
   push:
     branches: [main]
-    # The documents have their own workflow (docs.yml), so a change that only touches them needs no build.
+    # A change that only touches what the build and the tests do not read needs no run: the documents (they have their own
+    # workflow, docs.yml), the licenses, and what only the release workflow uses.
     paths-ignore:
       - "docs/**"
       - "README.md"
       - "README.ja.md"
+      - "CONTRIBUTING.md"
+      - "LICENSE-*"
+      - "editors/nvim/README.md"
       - "tools/build-docs.sh"
       - ".github/workflows/docs.yml"
+      # The release is made by its own workflow, and nothing here runs what it uses.
+      - "tools/package-release.sh"
+      - ".github/release-notes.md"
+      - ".github/workflows/release.yml"
   pull_request:
     paths-ignore:
       - "docs/**"
       - "README.md"
       - "README.ja.md"
+      - "CONTRIBUTING.md"
+      - "LICENSE-*"
+      - "editors/nvim/README.md"
       - "tools/build-docs.sh"
       - ".github/workflows/docs.yml"
+      # The release is made by its own workflow, and nothing here runs what it uses.
+      - "tools/package-release.sh"
+      - ".github/release-notes.md"
+      - ".github/workflows/release.yml"
 
 permissions:
   contents: read
