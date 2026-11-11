@@ -2,7 +2,7 @@
 
 An unofficial IDE integration server for Claude Code's `/ide` protocol.
 
-**Status: early development. The core library talks to a real Claude Code and is tested with stand-ins; the server runs as an executable; the Neovim adapter does everything of the protocol except diffs.**
+**Status: early development, and not published. The server implements the whole of the protocol and runs on Linux, macOS and Windows; the Neovim adapter does everything of it, diffs included. It was tried with a real Claude Code (2.1.322) on Linux.**
 
 ```{toctree}
 :maxdepth: 1

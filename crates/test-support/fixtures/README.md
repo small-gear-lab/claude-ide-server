@@ -11,7 +11,6 @@ What the other side is expected to say, written down from what was observed, as 
   - `lock_file.shape.json`: a lock file, as the IDE integrations write it.
   - `initialize_result.shape.json`, `tools_list_result.shape.json`, `tool_call_result.shape.json`: the results of the
     MCP requests that Claude Code makes.
-
   - `selection_changed.shape.json`, `at_mentioned.shape.json`, `get_selection_result.shape.json`,
     `get_selection_none_result.shape.json`, `get_open_editors_result.shape.json`, `get_diagnostics_result.shape.json`:
     what the server sends for the selection, a mentioned file, and the results of `getCurrentSelection` /
