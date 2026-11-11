@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: claude-ide-server\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-11 12:43+0900\n"
+"POT-Creation-Date: 2026-11-11 12:51+0900\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: Small Gear Lab\n"
 "Language-Team: ja <LL@li.org>\n"
@@ -570,18 +570,83 @@ msgstr ""
 " `methods` に並べます。"
 
 #: ../../DESIGN.md:147
+msgid "Hub: one entry for all workspaces (later)"
+msgstr "ハブ: すべてのワークスペースへの、1 つの入口（あとで）"
+
+#: ../../DESIGN.md:149
+msgid ""
+"By default each workspace is its own entry, as in the VS Code and JetBrains "
+"integrations: the lock file lists only that workspace's folders, and every "
+"tool answers for that workspace only. A CLI whose working directory is not "
+"inside any workspace (for example one started in a parent directory) finds "
+"no entry."
+msgstr ""
+"既定では、VS Code や JetBrains "
+"の連携と同じく、ワークスペースごとに、別々の入口です。ロックファイルには、そのワークスペースのフォルダだけを並べ、どのツールも、そのワークスペースのことだけを答えます。作業ディレクトリが、どのワークスペースの中にもない"
+" CLI（たとえば、親のディレクトリで起動したもの）は、入口を見つけられません。"
+
+#: ../../DESIGN.md:153
+msgid ""
+"An optional **hub** adds one more entry that stands for all registered "
+"workspaces:"
+msgstr "オプションの **ハブ** は、登録されたすべてのワークスペースを代表する入口を、もう 1 つ足します。"
+
+#: ../../DESIGN.md:155
+msgid ""
+"Its lock file has its own port and token, an `ideName` that tells it apart "
+"(for example `Neovim (all)`), and the folders of every workspace in "
+"`workspaceFolders`. The per-workspace entries stay as they are."
+msgstr ""
+"ハブのロックファイルは、自分のポートとトークン、見分けがつく `ideName`（たとえば `Neovim "
+"(all)`）を持ち、`workspaceFolders` に、すべてのワークスペースのフォルダを入れます。ワークスペースごとの入口は、そのままです。"
+
+#: ../../DESIGN.md:157
+msgid ""
+"`getWorkspaceFolders` answers with all folders. `getOpenEditors` and "
+"`getDiagnostics` merge the answers of all adapters. `getCurrentSelection` "
+"answers with the workspace that was touched last."
+msgstr ""
+"`getWorkspaceFolders` は、すべてのフォルダを返します。`getOpenEditors` と `getDiagnostics` "
+"は、すべてのアダプターの答えをまとめます。`getCurrentSelection` は、最後に触ったワークスペースのものを返します。"
+
+#: ../../DESIGN.md:159
+msgid ""
+"`openFile`, `saveDocument` and `checkDocumentDirty` go to the adapter whose "
+"workspace contains the path."
+msgstr ""
+"`openFile`、`saveDocument`、`checkDocumentDirty` "
+"は、そのパスを含むワークスペースのアダプターへ振り分けます。"
+
+#: ../../DESIGN.md:160
+msgid ""
+"The server needs no extra messages for this: it already holds every "
+"registration, and it fans a request out to the adapters. When the last "
+"adapter goes away, the hub entry goes with it."
+msgstr ""
+"このために、追加のメッセージは要りません。サーバーは、すべての登録をすでに持っていて、要求をアダプターへ振り分けるだけです。最後のアダプターがいなくなったら、ハブの入口も一緒に消えます。"
+
+#: ../../DESIGN.md:163
+msgid ""
+"Merging all folders into the per-workspace entries instead is not done: "
+"every CLI would then match every entry **(assumption)**, and one project's "
+"Claude would see the paths of unrelated projects."
+msgstr ""
+"すべてのフォルダを、ワークスペースごとの入口に混ぜることは、しません。そうすると、どの CLI も、どの入口にも合ってしまい "
+"**（仮定）**、あるプロジェクトの Claude に、関係のないプロジェクトのパスが見えてしまうからです。"
+
+#: ../../DESIGN.md:166
 msgid "Lifecycle"
 msgstr "起動から終了までの流れ"
 
-#: ../../DESIGN.md:149
+#: ../../DESIGN.md:168
 msgid "The server starts and listens on the adapter socket."
 msgstr "サーバーが起動して、アダプターのソケットで待ち受けます。"
 
-#: ../../DESIGN.md:150
+#: ../../DESIGN.md:169
 msgid "An adapter connects and sends `register`."
 msgstr "アダプターが接続して、`register` を送ります。"
 
-#: ../../DESIGN.md:151
+#: ../../DESIGN.md:170
 msgid ""
 "The server picks a free port on `127.0.0.1`, generates a 128-bit token from "
 "the OS CSPRNG, writes the lock file atomically (write to a temporary name, "
@@ -590,7 +655,7 @@ msgstr ""
 "サーバーは、`127.0.0.1` の空いているポートを選び、OS の暗号論的乱数から 128 "
 "ビットのトークンを作り、ロックファイルを原子的に書き（一時的な名前で書いてから、名前を変える）、ポートを返します。"
 
-#: ../../DESIGN.md:153
+#: ../../DESIGN.md:172
 msgid ""
 "The CLI finds the lock file, connects, and authenticates. Selection and "
 "diagnostics flow to it; its tool calls become adapter requests."
@@ -598,19 +663,19 @@ msgstr ""
 "CLI が、ロックファイルを見つけて、つないで、認証します。選択範囲と診断は、CLI へ流れます。CLI "
 "のツール呼び出しは、アダプターへの要求になります。"
 
-#: ../../DESIGN.md:155
+#: ../../DESIGN.md:174
 msgid ""
 "The adapter disconnects (or crashes): the server closes the workspace's "
 "connections, removes the lock file, and fails any pending requests."
 msgstr "アダプターが切れる（か、落ちる）と、サーバーは、そのワークスペースの接続を閉じ、ロックファイルを消し、保留中の要求を失敗にします。"
 
-#: ../../DESIGN.md:157
+#: ../../DESIGN.md:176
 msgid ""
 "On shutdown the server sends `shutdown` to adapters and removes every lock "
 "file it wrote."
 msgstr "終了するとき、サーバーは、アダプターに `shutdown` を送り、自分が書いたロックファイルをすべて消します。"
 
-#: ../../DESIGN.md:159
+#: ../../DESIGN.md:178
 msgid ""
 "If the server itself is killed, its lock files are left behind. The server "
 "records the lock files it wrote under its runtime directory and removes the "
@@ -618,18 +683,18 @@ msgid ""
 msgstr ""
 "サーバー自身が強制終了されると、ロックファイルが残ります。サーバーは、自分が書いたロックファイルを、実行時のディレクトリに記録しておき、次の起動で、まだ残っているものを消します。"
 
-#: ../../DESIGN.md:162
+#: ../../DESIGN.md:181
 msgid "Security"
 msgstr "セキュリティ"
 
-#: ../../DESIGN.md:164
+#: ../../DESIGN.md:183
 msgid ""
 "Every listener is on `127.0.0.1`. The adapter socket is in a 0700 directory "
 "and is itself 0600."
 msgstr ""
 "待ち受けは、すべて `127.0.0.1` です。アダプターのソケットは、モード 0700 のディレクトリの中にあり、ソケット自身も 0600 です。"
 
-#: ../../DESIGN.md:165
+#: ../../DESIGN.md:184
 msgid ""
 "The token is checked on every WebSocket upgrade. A web page cannot set that "
 "header, so a browser cannot talk to the port."
@@ -637,13 +702,13 @@ msgstr ""
 "トークンは、WebSocket へのアップグレードのたびに確かめます。Web "
 "ページは、そのヘッダーを付けられないので、ブラウザーは、そのポートと話せません。"
 
-#: ../../DESIGN.md:167
+#: ../../DESIGN.md:186
 msgid ""
 "Frame and message sizes are capped. A malformed message closes that "
 "connection and nothing else."
 msgstr "フレームとメッセージの大きさには、上限があります。壊れたメッセージは、その接続だけを閉じます。"
 
-#: ../../DESIGN.md:168
+#: ../../DESIGN.md:187
 msgid ""
 "Paths from Claude are used as given by the adapter; the server never reads "
 "or writes project files itself. Writing a file after an accepted diff is the"
@@ -652,11 +717,11 @@ msgstr ""
 "Claude "
 "からのパスは、アダプターが渡したとおりに使います。サーバー自身は、プロジェクトのファイルを読み書きしません。差分が承認されたあとの、ファイルの書き込みは、アダプターの仕事です。"
 
-#: ../../DESIGN.md:171
+#: ../../DESIGN.md:190
 msgid "Testing"
 msgstr "テスト"
 
-#: ../../DESIGN.md:173
+#: ../../DESIGN.md:192
 msgid ""
 "A mock Claude client (WebSocket) and a mock adapter (Unix socket) run in the"
 " same test process. Tests cover the handshake, authentication, every tool, "
@@ -665,23 +730,23 @@ msgstr ""
 "偽の Claude クライアント（WebSocket）と、偽のアダプター（Unix "
 "ソケット）を、同じテストのプロセスで動かします。テストは、握手、認証、すべてのツール、通知、差分、切断、後始末を扱います。"
 
-#: ../../DESIGN.md:175
+#: ../../DESIGN.md:194
 msgid ""
 "The expected shapes of tool results come from the observed behaviour above, "
 "written down as fixtures."
 msgstr "ツールの結果の期待する形は、上に書いた、観察した挙動から取り、フィクスチャとして書き残します。"
 
-#: ../../DESIGN.md:176
+#: ../../DESIGN.md:195
 msgid ""
 "Each adapter has its own tests; the Neovim one runs headless Neovim against "
 "a real server."
 msgstr "アダプターごとに、自分のテストを持ちます。Neovim のものは、ヘッドレスの Neovim を、本物のサーバーにつないで動かします。"
 
-#: ../../DESIGN.md:178
+#: ../../DESIGN.md:197
 msgid "Milestones"
 msgstr "マイルストーン"
 
-#: ../../DESIGN.md:180
+#: ../../DESIGN.md:199
 msgid ""
 "**M0, server skeleton.** WebSocket server, lock file, token, `initialize`, "
 "`tools/list`. A mock adapter."
@@ -689,7 +754,7 @@ msgstr ""
 "**M0、サーバーの骨組み。** WebSocket "
 "サーバー、ロックファイル、トークン、`initialize`、`tools/list`。偽のアダプター。"
 
-#: ../../DESIGN.md:181
+#: ../../DESIGN.md:200
 msgid ""
 "**M1, read-only tools.** `getOpenEditors`, `getWorkspaceFolders`, "
 "`getCurrentSelection`, `getLatestSelection`, `getDiagnostics`; "
@@ -698,14 +763,14 @@ msgstr ""
 "**M1、読み取りだけのツール。** "
 "`getOpenEditors`、`getWorkspaceFolders`、`getCurrentSelection`、`getLatestSelection`、`getDiagnostics`。`selection_changed`、`at_mentioned`。"
 
-#: ../../DESIGN.md:183
+#: ../../DESIGN.md:202
 msgid ""
 "**M2, Neovim adapter.** Lua, over `vim.lsp.rpc`. Registers the main windows "
 "only."
 msgstr ""
 "**M2、Neovim のアダプター。** Lua で、`vim.lsp.rpc` の上に作ります。登録するのは、メインのウィンドウだけです。"
 
-#: ../../DESIGN.md:184
+#: ../../DESIGN.md:203
 msgid ""
 "**M3, actions.** `openFile`, `checkDocumentDirty`, `saveDocument`, "
 "`diagnostics_changed`."
@@ -713,7 +778,7 @@ msgstr ""
 "**M3、操作。** "
 "`openFile`、`checkDocumentDirty`、`saveDocument`、`diagnostics_changed`。"
 
-#: ../../DESIGN.md:185
+#: ../../DESIGN.md:204
 msgid ""
 "**M4, diffs.** `openDiff`, `close_tab`, `closeAllDiffTabs`, and an "
 "accept/reject flow in the Neovim adapter."
@@ -721,34 +786,45 @@ msgstr ""
 "**M4、差分。** `openDiff`、`close_tab`、`closeAllDiffTabs`。それと、Neovim "
 "のアダプターの、承認と拒否の流れ。"
 
-#: ../../DESIGN.md:187
+#: ../../DESIGN.md:205
+msgid ""
+"**M5, the hub** (optional). One extra entry for all workspaces; see above."
+msgstr "**M5、ハブ**（オプション）。すべてのワークスペースへの、追加の入口を 1 つ。上の節を参照。"
+
+#: ../../DESIGN.md:207
 msgid "Open questions"
 msgstr "未解決の問い"
 
-#: ../../DESIGN.md:189
+#: ../../DESIGN.md:209
 msgid ""
 "How the CLI chooses among several lock files, and what it does with `pid` "
 "(assumed above)."
 msgstr "CLI が、複数のロックファイルからどれを選ぶか。`pid` を何に使うか（上で仮定したもの）。"
 
-#: ../../DESIGN.md:190
+#: ../../DESIGN.md:210
 msgid ""
 "Whether to start the server on demand (systemd socket activation) or keep it"
 " running."
 msgstr "サーバーを、必要になったときに起動するか（systemd のソケットアクティベーション）、動かしたままにするか。"
 
-#: ../../DESIGN.md:191
+#: ../../DESIGN.md:211
 msgid ""
 "What an adapter should do when the server is not there: retry, and for how "
 "long."
 msgstr "サーバーがいないときに、アダプターがどうするか。再試行するか、どのくらいの間か。"
 
-#: ../../DESIGN.md:192
+#: ../../DESIGN.md:212
 msgid ""
 "Whether to accept lock files for workspaces in a path that is a symlink, and"
 " how to compare paths."
 msgstr "シンボリックリンクを通るパスのワークスペースの、ロックファイルを受け付けるか。パスをどう比べるか。"
 
-#: ../../DESIGN.md:193
+#: ../../DESIGN.md:213
+msgid ""
+"Whether a hub entry confuses `/ide` when it and a per-workspace entry match "
+"the same directory."
+msgstr "ハブの入口と、ワークスペースごとの入口が、同じディレクトリに合うとき、`/ide` が迷わないか。"
+
+#: ../../DESIGN.md:214
 msgid "A named-pipe transport for Windows."
 msgstr "Windows 向けの、名前付きパイプの経路。"

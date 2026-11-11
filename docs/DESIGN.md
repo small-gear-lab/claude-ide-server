@@ -144,6 +144,25 @@ Claude with the text `FILE_SAVED`; on `"rejected"`, `DIFF_REJECTED`.
 `register` carries `protocolVersion`. The server refuses an adapter whose major version it does not know.
 Methods can be added without a major bump; an adapter lists in `methods` what it implements.
 
+## Hub: one entry for all workspaces (later)
+
+By default each workspace is its own entry, as in the VS Code and JetBrains integrations: the lock file lists
+only that workspace's folders, and every tool answers for that workspace only. A CLI whose working directory is
+not inside any workspace (for example one started in a parent directory) finds no entry.
+
+An optional **hub** adds one more entry that stands for all registered workspaces:
+
+- Its lock file has its own port and token, an `ideName` that tells it apart (for example `Neovim (all)`), and
+  the folders of every workspace in `workspaceFolders`. The per-workspace entries stay as they are.
+- `getWorkspaceFolders` answers with all folders. `getOpenEditors` and `getDiagnostics` merge the answers of all
+  adapters. `getCurrentSelection` answers with the workspace that was touched last.
+- `openFile`, `saveDocument` and `checkDocumentDirty` go to the adapter whose workspace contains the path.
+- The server needs no extra messages for this: it already holds every registration, and it fans a request out
+  to the adapters. When the last adapter goes away, the hub entry goes with it.
+
+Merging all folders into the per-workspace entries instead is not done: every CLI would then match every entry
+**(assumption)**, and one project's Claude would see the paths of unrelated projects.
+
 ## Lifecycle
 
 1. The server starts and listens on the adapter socket.
@@ -183,6 +202,7 @@ under its runtime directory and removes the ones that are still there on the nex
 3. **M2, Neovim adapter.** Lua, over `vim.lsp.rpc`. Registers the main windows only.
 4. **M3, actions.** `openFile`, `checkDocumentDirty`, `saveDocument`, `diagnostics_changed`.
 5. **M4, diffs.** `openDiff`, `close_tab`, `closeAllDiffTabs`, and an accept/reject flow in the Neovim adapter.
+6. **M5, the hub** (optional). One extra entry for all workspaces; see above.
 
 ## Open questions
 
@@ -190,4 +210,5 @@ under its runtime directory and removes the ones that are still there on the nex
 - Whether to start the server on demand (systemd socket activation) or keep it running.
 - What an adapter should do when the server is not there: retry, and for how long.
 - Whether to accept lock files for workspaces in a path that is a symlink, and how to compare paths.
+- Whether a hub entry confuses `/ide` when it and a per-workspace entry match the same directory.
 - A named-pipe transport for Windows.
