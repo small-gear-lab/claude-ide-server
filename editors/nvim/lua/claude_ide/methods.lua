@@ -27,17 +27,50 @@ function handlers.getOpenEditors()
     local latest = selection.latest()
     active = latest and latest.filePath
   end
+  -- Where the files are shown: the window of the current tab page that shows each, in order (a window is a group of
+  -- tabs, as in the editors that this protocol comes from).
+  local shown = {}
+  local current_win = vim.api.nvim_get_current_win()
+  for index, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    local buf = vim.api.nvim_win_get_buf(win)
+    if not shown[buf] and vim.api.nvim_win_get_config(win).relative == '' then
+      shown[buf] = { group = index - 1, is_current = win == current_win }
+    end
+  end
+  local latest = selection.available()
+
   local tabs = {}
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
     local path = vim.bo[buf].buflisted and file_of(buf)
     if path then
-      table.insert(tabs, {
+      local tab = {
         uri = vim.uri_from_fname(path),
         isActive = path == active,
         label = vim.fn.fnamemodify(path, ':t'),
         languageId = files.language_of(buf, path),
         isDirty = vim.bo[buf].modified,
-      })
+        -- What Neovim has no notion of: pinned tabs, and tabs that are previews.
+        isPinned = false,
+        isPreview = false,
+        fileName = path,
+        lineCount = files.line_count(buf),
+        isUntitled = false,
+      }
+      local place = shown[buf]
+      if place then
+        tab.groupIndex = place.group
+        tab.viewColumn = place.group + 1
+        tab.isGroupActive = place.is_current
+      end
+      -- The selection is given for the active tab, as the extension does.
+      if tab.isActive and latest and latest.filePath == path then
+        tab.selection = {
+          start = latest.selection.start,
+          ['end'] = latest.selection['end'],
+          isReversed = false,
+        }
+      end
+      table.insert(tabs, tab)
     end
   end
   return { tabs = tabs }

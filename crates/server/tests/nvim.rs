@@ -519,8 +519,22 @@ async fn claude_code_can_ask_for_the_open_editors_and_the_selection() {
     assert_eq!(active[0]["uri"], format!("file://{}", real_first.display()));
     assert_eq!(active[0]["languageId"], "plaintext");
     assert_eq!(active[0]["isDirty"], false);
+    // What the extension adds to a tab: where it is shown, and what the document is.
+    assert_eq!(active[0]["fileName"], real_first.to_string_lossy().as_ref());
+    assert_eq!(
+        active[0]["lineCount"], 3,
+        "two lines and the empty one after the final newline"
+    );
+    assert_eq!(active[0]["isUntitled"], false);
+    assert_eq!(active[0]["isPinned"], false);
+    assert_eq!(active[0]["isPreview"], false);
+    assert_eq!(active[0]["groupIndex"], 0);
+    assert_eq!(active[0]["viewColumn"], 1);
+    assert_eq!(active[0]["isGroupActive"], true);
+    assert_eq!(active[0]["selection"]["isReversed"], false);
     let other = tabs.iter().find(|tab| tab["isActive"] == false).unwrap();
-
+    // A file that no window shows has no place.
+    assert!(other.get("groupIndex").is_none(), "{other}");
     assert_eq!(other["label"], "b.lua");
     assert_eq!(other["languageId"], "lua");
 

@@ -135,6 +135,14 @@ local active = vim.tbl_filter(function(tab)
   return tab.isActive
 end, methods.handlers.getOpenEditors().tabs)
 check('in a terminal the file that the user was in is the active one', #active, 1)
+check('and the tab says where it is and what it holds', {
+  active[1].fileName == path,
+  active[1].lineCount,
+  active[1].isUntitled,
+  active[1].isPinned,
+  active[1].isPreview,
+}, { true, 4, false, false, false })
+check('the active tab has the selection', active[1].selection ~= nil and active[1].selection.isReversed == false, true)
 check('and it is that file', active[1] and active[1].uri, vim.uri_from_fname(path))
 
 -- A diagnostic: the columns are UTF-16 code units, and the severity has a name.
