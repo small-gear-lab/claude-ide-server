@@ -5,6 +5,7 @@
 
 pub mod claude;
 pub mod fixture;
+pub mod scene;
 
 use std::time::Duration;
 

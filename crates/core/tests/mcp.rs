@@ -6,70 +6,13 @@ mod common;
 use std::time::Duration;
 
 use claude_ide_core::adapter::PROTOCOL_VERSION;
-use claude_ide_core::jsonrpc::{Message, RpcError};
-use claude_ide_core::workspace::Workspace;
+use claude_ide_core::jsonrpc::RpcError;
+use common::WAIT;
 use common::claude::MockClaude;
 use common::fixture::{Fixture, registered};
-use common::{Client, WAIT};
+use common::scene::{Scene, call_tool, scene, scene_in};
 use serde_json::{Value, json};
-use tokio::io::DuplexStream;
 use tokio::time::timeout;
-
-/// An adapter that declared `getOpenEditors` and `openFile` is registered, and Claude Code has connected to it and
-/// completed the handshake.
-struct Scene {
-    _fixture: Fixture,
-    adapter: Client<DuplexStream>,
-    workspace: Workspace,
-    claude: MockClaude,
-}
-
-async fn scene_in(mut fixture: Fixture) -> Scene {
-    let (adapter, workspace, port) = registered(&mut fixture).await;
-    let token = fixture.read_lock(port).auth_token;
-    let mut claude = MockClaude::connect(port, &token).await;
-    claude.handshake(4321).await;
-    claude.tool_names().await; // the handshake is done when this is answered
-    Scene {
-        _fixture: fixture,
-        adapter,
-        workspace,
-        claude,
-    }
-}
-
-async fn scene() -> Scene {
-    scene_in(Fixture::new()).await
-}
-
-/// The adapter answers the next request that it gets, and the request is returned.
-async fn answer_next_request(
-    adapter: &mut Client<DuplexStream>,
-    outcome: Result<Value, RpcError>,
-) -> (String, Value) {
-    match adapter.recv().await {
-        Some(Message::Request { id, method, params }) => {
-            adapter.send(Message::Response { id, outcome }).await;
-            (method, params)
-        }
-        other => panic!("expected a request, got {other:?}"),
-    }
-}
-
-/// `tools/call` for a tool, while the adapter answers the one request it should get.
-async fn call_tool(
-    scene: &mut Scene,
-    name: &str,
-    arguments: Value,
-    outcome: Result<Value, RpcError>,
-) -> (Value, (String, Value)) {
-    let call = scene.claude.request(
-        "tools/call",
-        json!({ "name": name, "arguments": arguments }),
-    );
-    let (answer, request) = tokio::join!(call, answer_next_request(&mut scene.adapter, outcome));
-    (answer, request)
-}
 
 #[tokio::test]
 async fn the_handshake_negotiates_the_version_and_says_what_the_server_is() {
@@ -280,7 +223,7 @@ async fn the_client_is_known_by_its_name_its_version_and_the_pid_from_ide_connec
 async fn a_notification_reaches_every_connected_client() {
     let mut scene = scene().await;
     let port = scene.workspace.port();
-    let token = scene._fixture.read_lock(port).auth_token;
+    let token = scene.fixture.read_lock(port).auth_token;
     let mut second = MockClaude::connect(port, &token).await;
     second.handshake(4322).await;
     second.tool_names().await;
