@@ -11,15 +11,12 @@
 //! The design is in `docs/DESIGN.md`.
 
 pub mod adapter;
-#[cfg(unix)]
 mod fsutil;
 pub mod jsonrpc;
-#[cfg(unix)]
 pub mod lock;
 pub mod mcp;
 pub mod model;
 mod notifications;
 mod tools;
-#[cfg(unix)]
 pub mod workspace;
 pub mod ws;

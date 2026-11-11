@@ -97,6 +97,7 @@ name = "claude-ide-core"
 version = "0.0.0"
 dependencies = [
  "claude-ide-core",
+ "claude-ide-windows",
  "futures-util",
  "getrandom",
  "rmcp",
@@ -130,6 +131,14 @@ dependencies = [
  "tokio-tungstenite",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "claude-ide-windows"
+version = "0.0.0"
+dependencies = [
+ "tokio",
+ "windows-sys",
 ]
 
 [[package]]

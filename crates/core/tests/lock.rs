@@ -1,7 +1,6 @@
 //! Tests of the lock files, in temporary directories. Nothing here touches the real `~/.claude`.
 
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
 use claude_ide_core::lock::{
@@ -33,7 +32,10 @@ fn contents(token: &str) -> LockContents {
     }
 }
 
+/// The permission bits of a file or directory (Unix; on Windows what a file gets is what its directory gives it).
+#[cfg(unix)]
 fn mode(path: &std::path::Path) -> u32 {
+    use std::os::unix::fs::PermissionsExt;
     fs::metadata(path).unwrap().permissions().mode() & 0o777
 }
 
@@ -55,9 +57,12 @@ fn the_file_has_the_name_the_contents_and_the_modes_that_the_cli_expects() {
 
     assert_eq!(lock.path(), dirs.lock_dir.join("41234.lock"));
     assert_eq!(names(&dirs.lock_dir), ["41234.lock"]);
-    assert_eq!(mode(lock.path()), 0o600);
-    assert_eq!(mode(&dirs.lock_dir), 0o700);
-    assert_eq!(mode(&dirs.record_dir), 0o700);
+    #[cfg(unix)]
+    {
+        assert_eq!(mode(lock.path()), 0o600);
+        assert_eq!(mode(&dirs.lock_dir), 0o700);
+        assert_eq!(mode(&dirs.record_dir), 0o700);
+    }
 
     // The keys and their types, as the CLI reads them (and nothing besides them).
     let json: serde_json::Value = serde_json::from_slice(&fs::read(lock.path()).unwrap()).unwrap();
@@ -116,6 +121,7 @@ fn rewriting_changes_the_folders_and_leaves_no_temporary_file() {
     assert_eq!(on_disk.workspace_folders, ["/a", "/b"]);
     assert_eq!(on_disk, *lock.contents());
     assert_eq!(names(&dirs.lock_dir), ["41235.lock"]);
+    #[cfg(unix)]
     assert_eq!(mode(lock.path()), 0o600);
 }
 
@@ -201,19 +207,23 @@ fn directories_follow_the_environment() {
         claude_config_dir: config.map(PathBuf::from),
         home: home.map(PathBuf::from),
         xdg_runtime_dir: xdg.map(PathBuf::from),
-        uid: 1000,
+        user: "1000".into(),
     };
 
     let from_config =
         LockDirs::from_env(&env(Some("/cfg"), Some("/home/u"), Some("/run/u"))).unwrap();
-    assert_eq!(from_config.lock_dir, PathBuf::from("/cfg/ide"));
+    // The expected paths are built the way a path is on the system that runs the test (`/` or `\\` between the parts).
+    assert_eq!(from_config.lock_dir, PathBuf::from("/cfg").join("ide"));
     assert_eq!(
         from_config.record_dir,
-        PathBuf::from("/run/u/claude-ide-server")
+        PathBuf::from("/run/u").join("claude-ide-server")
     );
 
     let from_home = LockDirs::from_env(&env(None, Some("/home/u"), None)).unwrap();
-    assert_eq!(from_home.lock_dir, PathBuf::from("/home/u/.claude/ide"));
+    assert_eq!(
+        from_home.lock_dir,
+        PathBuf::from("/home/u").join(".claude").join("ide")
+    );
     assert_eq!(
         from_home.record_dir,
         std::env::temp_dir().join("claude-ide-server-1000")
@@ -226,7 +236,14 @@ fn directories_follow_the_environment() {
 fn liveness_tells_this_process_from_a_gone_one() {
     assert!(process_is_alive(std::process::id()));
     // A child that has exited and been reaped: its id no longer names a process.
-    let mut child = std::process::Command::new("true").spawn().unwrap();
+    let mut command = if cfg!(windows) {
+        let mut command = std::process::Command::new("cmd");
+        command.args(["/C", "exit", "0"]);
+        command
+    } else {
+        std::process::Command::new("true")
+    };
+    let mut child = command.spawn().unwrap();
     let pid = child.id();
     child.wait().unwrap();
     assert!(!process_is_alive(pid));

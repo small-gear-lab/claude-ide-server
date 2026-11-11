@@ -6,7 +6,6 @@
 
 use std::fs;
 use std::io::{self, Write};
-use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -21,12 +20,14 @@ pub const TRANSPORT_WS: &str = "ws";
 pub struct EnvVars {
     /// `CLAUDE_CONFIG_DIR`.
     pub claude_config_dir: Option<PathBuf>,
-    /// `HOME`.
+    /// The home directory of the user: `HOME`, and on Windows `USERPROFILE` (which is where Node, and so Claude Code, takes
+    /// the home directory from there).
     pub home: Option<PathBuf>,
     /// `XDG_RUNTIME_DIR`.
     pub xdg_runtime_dir: Option<PathBuf>,
-    /// The numeric id of the user, for the fallback runtime directory.
-    pub uid: u32,
+    /// Who the user is, for the names that two users of one machine must not share (the fallback runtime directory, the
+    /// pipe on Windows): the numeric id on Unix, the security identifier (SID) on Windows.
+    pub user: String,
 }
 
 impl EnvVars {
@@ -37,11 +38,20 @@ impl EnvVars {
                 .filter(|value| !value.is_empty())
                 .map(PathBuf::from)
         };
+        #[cfg(unix)]
+        let (home, user) = (var("HOME"), rustix::process::getuid().as_raw().to_string());
+        #[cfg(windows)]
+        let (home, user) = (
+            var("USERPROFILE"),
+            claude_ide_windows::current_user_sid()
+                .or_else(|_| std::env::var("USERNAME"))
+                .unwrap_or_else(|_| "unknown".to_owned()),
+        );
         Self {
             claude_config_dir: var("CLAUDE_CONFIG_DIR"),
-            home: var("HOME"),
+            home,
             xdg_runtime_dir: var("XDG_RUNTIME_DIR"),
-            uid: rustix::process::getuid().as_raw(),
+            user,
         }
     }
 }
@@ -76,12 +86,12 @@ impl LockDirs {
     }
 }
 
-/// The directory for what the server needs while it runs (the record of its lock files, the adapter socket):
+/// The directory for what the server needs while it runs (the record of its lock files, the adapter socket on Unix):
 /// `$XDG_RUNTIME_DIR/claude-ide-server`, else a per-user directory under the temporary directory.
 pub fn runtime_dir(env: &EnvVars) -> PathBuf {
     match &env.xdg_runtime_dir {
         Some(runtime) => runtime.join("claude-ide-server"),
-        None => std::env::temp_dir().join(format!("claude-ide-server-{}", env.uid)),
+        None => std::env::temp_dir().join(format!("claude-ide-server-{}", env.user)),
     }
 }
 
@@ -130,7 +140,7 @@ pub struct LockFile {
 }
 
 impl LockFile {
-    /// Writes `<port>.lock` atomically (file mode 0600, directory 0700) and records it.
+    /// Writes `<port>.lock` atomically (private to the user) and records it.
     ///
     /// `server_pid` is the process of this server, which decides whether a leftover record is still in use.
     pub fn create(
@@ -244,6 +254,13 @@ pub fn cleanup_stale(dirs: &LockDirs, is_alive: impl Fn(u32) -> bool) -> io::Res
 }
 
 /// Whether a process with this id exists on this machine.
+#[cfg(windows)]
+pub fn process_is_alive(pid: u32) -> bool {
+    claude_ide_windows::process_is_alive(pid)
+}
+
+/// Whether a process with this id exists on this machine.
+#[cfg(unix)]
 pub fn process_is_alive(pid: u32) -> bool {
     let Some(pid) = i32::try_from(pid)
         .ok()
@@ -278,12 +295,16 @@ fn write_atomically(path: &Path, bytes: &[u8], server_pid: u32) -> io::Result<()
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "path has no file name"))?;
     let temporary = path.with_file_name(format!(".{name}.{server_pid}.tmp"));
     let written = (|| {
-        let mut file = fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(&temporary)?;
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create(true).truncate(true);
+        // Only the user can read it, as far as the system lets this be said: mode 0600 on Unix; on Windows the file is
+        // made in a directory of the user's, and has what that directory gives its files.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(&temporary)?;
         file.write_all(bytes)?;
         file.sync_all()?;
         fs::rename(&temporary, path)

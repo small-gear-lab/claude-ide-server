@@ -371,13 +371,31 @@ async fn dropping_the_server_stops_its_workspaces_too() {
     assert!(lock_files_in(&dirs).is_empty());
 }
 
+/// On Windows the default is a named pipe, which has no directory: it has the user in its name, so that two users of one
+/// machine do not meet.
+#[cfg(windows)]
+#[test]
+fn the_adapter_pipe_has_the_user_in_its_name() {
+    let env = |xdg: Option<&str>| EnvVars {
+        claude_config_dir: None,
+        home: Some(r"C:\Users\u".into()),
+        xdg_runtime_dir: xdg.map(Into::into),
+        user: "S-1-5-21-1-2-3-1001".into(),
+    };
+    let expected = std::path::PathBuf::from(r"\\.\pipe\claude-ide-server-S-1-5-21-1-2-3-1001");
+    assert_eq!(socket_path(&env(None)), expected);
+    // The runtime directory does not matter to a pipe.
+    assert_eq!(socket_path(&env(Some(r"C:\run"))), expected);
+}
+
+#[cfg(unix)]
 #[test]
 fn the_adapter_socket_goes_into_the_runtime_directory() {
     let env = |xdg: Option<&str>| EnvVars {
         claude_config_dir: None,
         home: Some("/home/u".into()),
         xdg_runtime_dir: xdg.map(Into::into),
-        uid: 1000,
+        user: "1000".into(),
     };
     assert_eq!(
         socket_path(&env(Some("/run/user/1000"))),
