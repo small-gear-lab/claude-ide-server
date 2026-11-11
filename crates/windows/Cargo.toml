@@ -5,8 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "The calls to Windows that need unsafe, wrapped so that nothing else needs it"
-publish = false
+description = "Unofficial: the calls to Windows that claude-ide-server needs (a named pipe for one user, the user's SID, a process check), wrapped so that nothing else needs unsafe"
+readme = "README.md"
+keywords = ["windows", "named-pipe"]
+categories = ["os::windows-apis"]
 
 # Not `workspace = true`: the workspace forbids unsafe code, and this crate is, with `claude-ide-launchd`, the one place
 # that has a reason for it (calls to the system, with raw pointers and handles). It is denied, and allowed at each place

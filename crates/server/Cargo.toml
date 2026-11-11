@@ -5,8 +5,12 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Claude Code /ide protocol server for editors"
-publish = false
+description = "Unofficial server that connects editors to the /ide of Claude Code, with an adapter for each editor"
+readme = "README.md"
+keywords = ["claude-code", "mcp", "ide", "editor", "websocket"]
+categories = ["development-tools", "command-line-utilities"]
+# The tests share what `claude-ide-test-support` has, which is not published, so they cannot be run from the package.
+exclude = ["tests/"]
 
 [lints]
 workspace = true
@@ -16,7 +20,7 @@ name = "claude-ide-server"
 path = "src/main.rs"
 
 [dependencies]
-claude-ide-core = { path = "../core" }
+claude-ide-core.workspace = true
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "signal", "sync", "time", "net"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt", "env-filter", "ansi"] }
@@ -26,7 +30,7 @@ listenfd = "1.0.2"
 rustix = { version = "1.1.6", features = ["process"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-claude-ide-launchd = { path = "../launchd" }
+claude-ide-launchd.workspace = true
 
 [dev-dependencies]
 tempfile = "3.27.0"

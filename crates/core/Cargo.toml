@@ -5,8 +5,12 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Claude Code /ide protocol server (editor-agnostic core)"
-publish = false
+description = "Unofficial server side of the /ide protocol of Claude Code: WebSocket, lock files and MCP, for the adapter of any editor"
+readme = "README.md"
+keywords = ["claude-code", "mcp", "ide", "editor", "websocket"]
+categories = ["development-tools", "network-programming"]
+# The tests share what `claude-ide-test-support` has, which is not published, so they cannot be run from the package.
+exclude = ["tests/"]
 
 [lints]
 workspace = true
@@ -28,7 +32,7 @@ tokio-tungstenite = { version = "0.30.0", default-features = false, features = [
 rustix = { version = "1.1.6", features = ["process"] }
 
 [target.'cfg(windows)'.dependencies]
-claude-ide-windows = { path = "../windows" }
+claude-ide-windows.workspace = true
 
 [dev-dependencies]
 # The tests of this crate use its own `test-support` feature.
