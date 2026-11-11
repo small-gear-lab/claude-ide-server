@@ -29,6 +29,15 @@ impl Home {
         self.dir.path().join("run").join("adapter.sock")
     }
 
+    /// Where a server that is not given `--socket` puts the socket, with the environment of `command`.
+    pub fn default_socket(&self) -> PathBuf {
+        self.dir
+            .path()
+            .join("xdg")
+            .join("claude-ide-server")
+            .join("adapter.sock")
+    }
+
     pub fn lock_dir(&self) -> PathBuf {
         self.dir.path().join("claude").join("ide")
     }
