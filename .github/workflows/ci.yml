@@ -45,17 +45,33 @@ jobs:
 
   # The tests run on the least version that rust-version names (1.88) and on the latest stable, on Linux, and on the latest
   # stable on macOS (the other system with Unix sockets that the server runs on; it is also where launchd is tried).
+  # They also run the Neovim adapter in a headless Neovim: the least version that it supports (0.11) goes with the least
+  # Rust, the newest with the others. A fixed release, so that a new one cannot turn a run red with no change of the
+  # code; it is raised on purpose, together with the checksum (the `digest` of the asset in the release). The packages
+  # of the systems are older than the adapter needs.
   test:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest, toolchain: "1.88" }
-          - { os: ubuntu-latest, toolchain: stable }
-          - { os: macos-latest, toolchain: stable }
+          - { os: ubuntu-latest, toolchain: "1.88", nvim_version: v0.11.7, nvim_asset: nvim-linux-x86_64, nvim_sha256: 38a7c6317f94503841096c00e8fde05ef04b9472fc9d7d62b6e033cecd6f7991 }
+          - { os: ubuntu-latest, toolchain: stable, nvim_version: v0.12.6, nvim_asset: nvim-linux-x86_64, nvim_sha256: 474430d53e6264f6d6dd18db42d6dc9df3a1b56ca9e88a325bbf860e1a811d87 }
+          - { os: macos-latest, toolchain: stable, nvim_version: v0.12.6, nvim_asset: nvim-macos-arm64, nvim_sha256: 1dbd148222b051ba6c307c4d17a318ed083df018a4f6a5a0ce46955ffc9ab87b }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
       - name: Toolchain
         run: rustup toolchain install ${{ matrix.toolchain }} --profile minimal && rustup default ${{ matrix.toolchain }}
+      - name: Neovim
+        run: |
+          base="https://github.com/neovim/neovim/releases/download/${{ matrix.nvim_version }}"
+          curl -fsSL -o "${{ matrix.nvim_asset }}.tar.gz" "$base/${{ matrix.nvim_asset }}.tar.gz"
+          # Checked before it is unpacked, let alone run.
+          echo "${{ matrix.nvim_sha256 }}  ${{ matrix.nvim_asset }}.tar.gz" | shasum -a 256 -c -
+          tar xzf "${{ matrix.nvim_asset }}.tar.gz"
+          echo "$PWD/${{ matrix.nvim_asset }}/bin" >> "$GITHUB_PATH"
+      - run: nvim --version
+      # The tests of the Neovim adapter are skipped on a machine without nvim; here they must run.
       - run: cargo test --workspace --locked
+        env:
+          CLAUDE_IDE_REQUIRE_NVIM: "1"
