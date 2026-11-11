@@ -4,12 +4,22 @@ use std::path::PathBuf;
 
 use serde_json::Value;
 
-/// Reads `tests/fixtures/<name>`.
+/// Reads `tests/fixtures/<name>` of the core crate. (Tests of other crates include these helpers from there, so the
+/// directory is looked for next to the crate that is being tested, and then in the core crate.)
 pub fn fixture(name: &str) -> Value {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("fixtures")
-        .join(name);
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let fixtures = [
+        manifest.join("tests").join("fixtures"),
+        manifest
+            .join("..")
+            .join("core")
+            .join("tests")
+            .join("fixtures"),
+    ]
+    .into_iter()
+    .find(|dir| dir.is_dir())
+    .expect("the fixtures directory");
+    let path = fixtures.join(name);
     let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     serde_json::from_str(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
