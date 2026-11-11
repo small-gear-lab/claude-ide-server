@@ -194,3 +194,23 @@ async fn the_server_can_close_with_a_code_and_a_reason() {
         other => panic!("expected a close frame, got {other:?}"),
     }
 }
+
+#[tokio::test]
+async fn dropping_the_server_closes_the_connections_it_accepted() {
+    let mut server = start(Config::default()).await;
+    let mut client = connect(server.port(), Some(TOKEN)).await.unwrap();
+    let mut accepted = timeout(WAIT, server.accept()).await.unwrap().unwrap();
+
+    drop(server);
+
+    // The server's side ends, and the client is told that the server is going away.
+    assert!(timeout(WAIT, accepted.recv()).await.unwrap().is_none());
+    assert!(matches!(
+        accepted.send("too late").await,
+        Err(ConnectionError::Closed)
+    ));
+    match timeout(WAIT, client.next()).await.unwrap() {
+        Some(Ok(Message::Close(Some(frame)))) => assert_eq!(u16::from(frame.code), 1001),
+        other => panic!("expected a close frame, got {other:?}"),
+    }
+}

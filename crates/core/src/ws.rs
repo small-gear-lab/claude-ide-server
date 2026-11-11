@@ -12,7 +12,7 @@ use std::time::Duration;
 use futures_util::{SinkExt, StreamExt};
 
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 use tokio_tungstenite::WebSocketStream;
 use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, Response};
@@ -33,6 +33,8 @@ pub enum Error {
     Protocol(String),
     /// The peer sent a binary frame; this protocol uses text frames only.
     UnexpectedBinary,
+    /// The connection is closed (the server that accepted it was dropped, or it was closed here).
+    Closed,
 }
 
 impl fmt::Display for Error {
@@ -41,6 +43,7 @@ impl fmt::Display for Error {
             Self::Io(error) => write!(f, "network error: {error}"),
             Self::Protocol(reason) => write!(f, "WebSocket protocol error: {reason}"),
             Self::UnexpectedBinary => f.write_str("unexpected binary frame"),
+            Self::Closed => f.write_str("the connection is closed"),
         }
     }
 }
@@ -66,16 +69,34 @@ impl From<WsError> for Error {
 /// An accepted, authenticated connection that carries text messages (JSON-RPC, one per message).
 ///
 /// Pings, pongs and the closing handshake are handled inside. Nothing of the WebSocket library shows in this type.
+///
+/// When the [`WsServer`] that accepted it is dropped, the connection is closed with code 1001 ("going away"): `recv`
+/// then returns `None` and `send` fails.
 #[derive(Debug)]
 pub struct Connection {
-    inner: WebSocketStream<TcpStream>,
+    // Boxed: the stream is large, and a Connection travels through channels and enums.
+    inner: Box<WebSocketStream<TcpStream>>,
+    // Raised when the server that accepted this connection is dropped.
+    shutdown: watch::Receiver<bool>,
+    closed: bool,
 }
 
 impl Connection {
     /// The next text message, or `None` once the peer has closed the connection.
     pub async fn recv(&mut self) -> Option<Result<String, Error>> {
+        if self.closed {
+            return None;
+        }
         loop {
-            match self.inner.next().await? {
+            let next = tokio::select! {
+                next = self.inner.next() => next,
+                // The server is gone (the value was raised, or its sender was dropped).
+                _ = self.shutdown.changed() => {
+                    self.close(1001, "going away").await;
+                    return None;
+                }
+            };
+            match next? {
                 Ok(Message::Text(text)) => return Some(Ok(text.as_str().to_owned())),
                 Ok(Message::Binary(_)) => return Some(Err(Error::UnexpectedBinary)),
                 Ok(Message::Close(_)) => return None,
@@ -89,11 +110,15 @@ impl Connection {
 
     /// Sends one text message.
     pub async fn send(&mut self, text: impl Into<String>) -> Result<(), Error> {
+        if self.closed || self.shutdown.has_changed().unwrap_or(true) {
+            return Err(Error::Closed);
+        }
         Ok(self.inner.send(Message::text(text.into())).await?)
     }
 
     /// Closes the connection with a WebSocket close code (for example 1008, "policy violation") and a reason.
     pub async fn close(&mut self, code: u16, reason: &str) {
+        self.closed = true;
         let frame = CloseFrame {
             code: CloseCode::from(code),
             reason: reason.to_owned().into(),
@@ -123,7 +148,7 @@ impl Default for Config {
     }
 }
 
-/// A listening WebSocket server. Dropping it stops listening.
+/// A listening WebSocket server. Dropping it stops listening and closes the connections that it accepted.
 ///
 /// Connections that have passed the upgrade and the token check are handed out by [`accept`].
 ///
@@ -133,6 +158,7 @@ pub struct WsServer {
     addr: SocketAddr,
     task: JoinHandle<()>,
     connections: mpsc::Receiver<Connection>,
+    shutdown: watch::Sender<bool>,
 }
 
 impl WsServer {
@@ -144,11 +170,13 @@ impl WsServer {
         let addr = listener.local_addr()?;
         let (tx, connections) = mpsc::channel(16);
         let token: std::sync::Arc<str> = token.into().into();
-        let task = tokio::spawn(accept_loop(listener, token, config, tx));
+        let (shutdown, shutdown_signal) = watch::channel(false);
+        let task = tokio::spawn(accept_loop(listener, token, config, tx, shutdown_signal));
         Ok(Self {
             addr,
             task,
             connections,
+            shutdown,
         })
     }
 
@@ -171,6 +199,8 @@ impl WsServer {
 impl Drop for WsServer {
     fn drop(&mut self) {
         self.task.abort();
+        // Wakes the connections that were handed out.
+        let _ = self.shutdown.send(true);
     }
 }
 
@@ -179,6 +209,7 @@ async fn accept_loop(
     token: std::sync::Arc<str>,
     config: Config,
     tx: mpsc::Sender<Connection>,
+    shutdown: watch::Receiver<bool>,
 ) {
     loop {
         let Ok((stream, _peer)) = listener.accept().await else {
@@ -192,13 +223,20 @@ async fn accept_loop(
         let token = token.clone();
         let config = config.clone();
         let tx = tx.clone();
+        let shutdown = shutdown.clone();
         // Each upgrade runs in its own task, so a slow or hostile peer cannot hold up the others.
         tokio::spawn(async move {
             let upgraded =
                 tokio::time::timeout(config.handshake_timeout, upgrade(stream, &token, &config))
                     .await;
             if let Ok(Ok(inner)) = upgraded {
-                let _ = tx.send(Connection { inner }).await;
+                let _ = tx
+                    .send(Connection {
+                        inner: Box::new(inner),
+                        shutdown,
+                        closed: false,
+                    })
+                    .await;
             }
         });
     }
