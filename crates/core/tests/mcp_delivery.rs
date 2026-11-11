@@ -54,6 +54,7 @@ async fn rig() -> Rig {
         "test",
         "0",
         WAIT,
+        Vec::new(),
         Arc::new(move |change| recording.lock().unwrap().push(change)),
     );
     let attaching = hub.clone();
@@ -257,6 +258,7 @@ async fn an_observer_may_ask_the_hub_about_its_clients() {
         "test",
         "0",
         WAIT,
+        Vec::new(),
         Arc::new(move |change| {
             // Called with the hub's own lock of its clients not held: this would otherwise wait for itself.
             let count = cell.get().map_or(0, |hub| hub.clients().len());
@@ -280,5 +282,70 @@ async fn an_observer_may_ask_the_hub_about_its_clients() {
     .await
     .expect("the observer is told, and does not wait for itself");
     assert_eq!(seen.lock().unwrap()[0].1, 1);
+    accepting.abort();
+}
+
+#[tokio::test]
+async fn a_state_is_sent_again_after_the_handshake_in_case_claude_code_was_not_ready() {
+    // Claude Code sets up what receives notifications a little after its handshake, and throws away what comes before
+    // (seen with 2.1.322): the state that is replayed at once is sent again, at the times that are set.
+    let resends = vec![Duration::from_millis(250), Duration::from_millis(600)];
+    let mut server = WsServer::start(TOKEN, ws::Config::default()).await.unwrap();
+    let port = server.port();
+    let hub = McpHub::new(NoTools, "test", "0", WAIT, resends, Arc::new(|_| {}));
+    hub.notify_remembering("state", json!({ "n": 1 }));
+    let attaching = hub.clone();
+    let accepting = tokio::spawn(async move {
+        while let Some(connection) = server.accept().await {
+            attaching.attach(connection);
+        }
+    });
+
+    let mut claude = MockClaude::connect(port, TOKEN).await;
+    claude.handshake(4000).await;
+    let handshaken = std::time::Instant::now();
+    let mut times = Vec::new();
+    for _ in 0..3 {
+        let message = claude.recv_json().await.expect("the state, three times");
+        assert_eq!(message["method"], "state");
+        assert_eq!(message["params"]["n"], 1);
+        times.push(handshaken.elapsed());
+    }
+    assert!(times[0] < Duration::from_millis(200), "at once: {times:?}");
+    assert!(times[1] >= Duration::from_millis(200), "again: {times:?}");
+    assert!(
+        times[2] >= Duration::from_millis(500),
+        "and again: {times:?}"
+    );
+    accepting.abort();
+}
+
+#[tokio::test]
+async fn a_newer_state_is_not_replaced_by_an_older_one_that_is_sent_again() {
+    let mut server = WsServer::start(TOKEN, ws::Config::default()).await.unwrap();
+    let port = server.port();
+    let hub = McpHub::new(
+        NoTools,
+        "test",
+        "0",
+        WAIT,
+        vec![Duration::from_millis(200)],
+        Arc::new(|_| {}),
+    );
+    hub.notify_remembering("state", json!({ "n": 1 }));
+    let attaching = hub.clone();
+    let accepting = tokio::spawn(async move {
+        while let Some(connection) = server.accept().await {
+            attaching.attach(connection);
+        }
+    });
+    let mut claude = MockClaude::connect(port, TOKEN).await;
+    claude.handshake(4000).await;
+    // The state changes while the second sending waits: what is sent again is the state that there is by then.
+    assert_eq!(claude.recv_json().await.unwrap()["params"]["n"], 1);
+    hub.notify_remembering("state", json!({ "n": 2 }));
+    assert_eq!(claude.recv_json().await.unwrap()["params"]["n"], 2);
+    let again = claude.recv_json().await.unwrap();
+    assert_eq!(again["params"]["n"], 2, "the newest, not the one before");
     accepting.abort();
 }

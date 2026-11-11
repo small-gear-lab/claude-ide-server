@@ -143,6 +143,10 @@ impl Outbox {
         }
     }
 
+    fn is_closed(&self) -> bool {
+        self.state.lock().expect("not poisoned").closed
+    }
+
     fn close(&self) {
         self.state.lock().expect("not poisoned").closed = true;
         self.wake.notify_one();
@@ -183,6 +187,7 @@ struct HubInner<B> {
     server_name: String,
     server_version: String,
     handshake_timeout: Duration,
+    state_resends: Vec<Duration>,
     observer: Observer,
     /// The last notification of each method that is to reach a client that connects later too.
     remembered: Mutex<HashMap<String, Value>>,
@@ -211,13 +216,16 @@ impl<B> std::fmt::Debug for McpHub<B> {
 
 impl<B: ToolBackend> McpHub<B> {
     /// A hub whose clients are told that the server is `server_name` / `server_version`. A client that has not
-    /// completed the MCP handshake within `handshake_timeout` is disconnected. `observer` is told when a client has
+    /// completed the MCP handshake within `handshake_timeout` is disconnected. The states that were remembered (see
+    /// [`notify_remembering`](Self::notify_remembering)) are sent to a client again at each of `state_resends`, counted from
+    /// its handshake (see [`crate::workspace::Config::claude_state_resends`]). `observer` is told when a client has
     /// connected and when it is gone.
     pub fn new(
         backend: B,
         server_name: impl Into<String>,
         server_version: impl Into<String>,
         handshake_timeout: Duration,
+        state_resends: Vec<Duration>,
         observer: Observer,
     ) -> Self {
         Self {
@@ -226,6 +234,7 @@ impl<B: ToolBackend> McpHub<B> {
                 server_name: server_name.into(),
                 server_version: server_version.into(),
                 handshake_timeout,
+                state_resends,
                 observer,
                 remembered: Mutex::new(HashMap::new()),
                 clients: Mutex::new(HashMap::new()),
@@ -299,6 +308,32 @@ impl<B: ToolBackend> McpHub<B> {
             };
             // Told with the clients no longer held: an observer that asks the hub something must not wait for itself.
             (hub.observer)(ClientChange::Connected(connected));
+            // Claude Code takes a notification only once it has set up what receives it, which happens some time after the
+            // handshake, and not always after the same time (seen with 2.1.322: a notification sent at once is thrown
+            // away, and one sent a few tens or a few hundreds of milliseconds later gets through or does not, from one
+            // start to the next). So a state that is remembered is sent again, a few times. It is the same state, and what
+            // waits in the queue is replaced by it.
+            if !hub.state_resends.is_empty() {
+                let resending = hub.clone();
+                let queue = outbox.clone();
+                tokio::spawn(async move {
+                    let start = tokio::time::Instant::now();
+                    for after in resending.state_resends.iter() {
+                        tokio::time::sleep_until(start + *after).await;
+                        if queue.is_closed() {
+                            return;
+                        }
+                        // With the clients held, as `notify_remembering` holds them: a state that arrives now is queued
+                        // after this one, not before it.
+                        let _clients = resending.clients.lock().expect("not poisoned");
+                        for (method, params) in
+                            resending.remembered.lock().expect("not poisoned").iter()
+                        {
+                            queue.push(method, params.clone(), true);
+                        }
+                    }
+                });
+            }
             let _ = running.waiting().await;
             // The entry goes, and the outbox is closed, which ends the task that sends from it.
             let gone = hub.clients.lock().expect("not poisoned").remove(&id);

@@ -44,6 +44,10 @@ pub struct Config {
     pub ws: ws::Config,
     /// How long a Claude Code that has connected may take to complete the MCP handshake.
     pub claude_handshake_timeout: Duration,
+    /// When, counted from its handshake, the selection that was last reported is sent to a Claude Code again. Claude
+    /// Code sets up what receives notifications some time after the handshake, and throws away those that come before;
+    /// how long it takes varies from one start to the next, so the selection is sent a few times. Empty for none.
+    pub claude_state_resends: Vec<Duration>,
     /// Whether a process is alive; decides which leftovers of an earlier server are cleaned up at start.
     pub is_alive: Arc<dyn Fn(u32) -> bool + Send + Sync>,
     /// Told when a Claude Code connects to a workspace and when it goes, with the registration of the workspace. It
@@ -63,6 +67,11 @@ impl Config {
             server_pid,
             ws: ws::Config::default(),
             claude_handshake_timeout: Duration::from_secs(10),
+            claude_state_resends: vec![
+                Duration::from_millis(250),
+                Duration::from_millis(1000),
+                Duration::from_millis(3000),
+            ],
             is_alive: Arc::new(lock::process_is_alive),
             claude_observer: None,
             token_source: Arc::new(lock::generate_token),
@@ -95,6 +104,7 @@ impl std::fmt::Debug for Config {
             .field("server_pid", &self.server_pid)
             .field("ws", &self.ws)
             .field("claude_handshake_timeout", &self.claude_handshake_timeout)
+            .field("claude_state_resends", &self.claude_state_resends)
             .finish_non_exhaustive()
     }
 }
@@ -316,6 +326,7 @@ async fn provision(
         "claude-ide-server",
         env!("CARGO_PKG_VERSION"),
         config.claude_handshake_timeout,
+        config.claude_state_resends.clone(),
         {
             let observer = config.claude_observer.clone();
             let registration = registration.clone();

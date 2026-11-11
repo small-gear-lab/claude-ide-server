@@ -73,8 +73,11 @@ impl Fixture {
         root: TempDir,
         dirs: LockDirs,
         adapter_config: adapter::Config,
-        config: Config,
+        mut config: Config,
     ) -> Self {
+        // The tests read what Claude Code is sent as it comes; the states that the real server sends again (so that a
+        // Claude Code that was not ready gets them) are tested on their own, in `mcp_delivery`.
+        config.claude_state_resends = Vec::new();
         let (listener, connector) = listener();
         let server = WorkspaceServer::start(listener, adapter_config, config);
         Self {
