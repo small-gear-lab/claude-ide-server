@@ -78,6 +78,8 @@ fn start_nvim_listening(home: &Home, lua: &str, listen: Option<&Path>) -> Nvim {
         .arg(format!("set runtimepath^={}", adapter_dir().display()))
         .arg("-c")
         .arg(format!("lua {lua}"))
+        // What a server that the adapter starts inherits: it must not touch the user's own lock files either.
+        .env("CLAUDE_CONFIG_DIR", root.join("claude"))
         .env("XDG_RUNTIME_DIR", root.join("xdg"))
         .env("XDG_CONFIG_HOME", root.join("config"))
         .env("XDG_DATA_HOME", root.join("data"))
@@ -118,8 +120,7 @@ fn the_checks_that_need_no_server_pass() {
 }
 
 /// The adapter with a short wait between attempts, so that the tests do not wait for the usual one.
-const SETUP: &str =
-    "require('claude_ide').setup({ reconnect = { initial_ms = 50, max_ms = 200 } })";
+const SETUP: &str = "require('claude_ide').setup({ reconnect = { initial_ms = 50, max_ms = 200 }, server = { autostart = false } })";
 
 fn start_server(home: &Home) -> Server {
     Server(home.command().spawn().unwrap())
@@ -220,7 +221,7 @@ async fn a_neovim_that_is_not_to_register_stays_away() {
     // A Neovim that is not to register (a child window, in the author's setup) does not, however long it runs.
     let _quiet = start_nvim(
         &home,
-        "require('claude_ide').setup({ should_register = function() return false end })",
+        "require('claude_ide').setup({ should_register = function() return false end, server = { autostart = false } })",
     );
     tokio::time::sleep(Duration::from_millis(700)).await;
     assert!(home.lock_files().is_empty());
@@ -241,7 +242,7 @@ async fn the_workspace_follows_cd() {
     let _nvim = start_nvim(
         &home,
         &format!(
-            "require('claude_ide').setup({{ on_registered = function() vim.cmd('cd {}') end }})",
+            "require('claude_ide').setup({{ server = {{ autostart = false }}, on_registered = function() vim.cmd('cd {}') end }})",
             folder.display()
         ),
     );
@@ -282,7 +283,7 @@ async fn the_selection_reaches_claude_code_when_it_connects_and_when_the_cursor_
     let _nvim = start_nvim_listening(
         &home,
         &format!(
-            "vim.cmd('edit {}'); require('claude_ide').setup({{ selection_debounce_ms = 20 }})",
+            "vim.cmd('edit {}'); require('claude_ide').setup({{ selection_debounce_ms = 20, server = {{ autostart = false }} }})",
             file.display()
         ),
         Some(&listen),
@@ -317,4 +318,97 @@ async fn the_selection_reaches_claude_code_when_it_connects_and_when_the_cursor_
     let moved = next_notification(&mut claude, "selection_changed").await;
     assert_eq!(moved["selection"]["start"]["line"], 0);
     assert_eq!(moved["selection"]["start"]["character"], 2);
+}
+
+/// The adapter set to start the real executable, which ends one second after the last adapter has gone.
+fn starts_the_server() -> String {
+    format!(
+        "require('claude_ide').setup({{ reconnect = {{ initial_ms = 50, max_ms = 200 }}, \
+         server = {{ command = '{}', args = {{ '--idle-timeout', '1' }} }} }})",
+        env!("CARGO_BIN_EXE_claude-ide-server")
+    )
+}
+
+async fn nobody_listens(home: &Home) -> bool {
+    tokio::net::UnixStream::connect(home.default_socket())
+        .await
+        .is_err()
+}
+
+#[tokio::test]
+async fn a_neovim_starts_the_server_when_nobody_is_listening_and_it_ends_when_the_neovim_is_gone() {
+    if !nvim_available() {
+        return;
+    }
+    let home = Home::new();
+    assert!(nobody_listens(&home).await);
+
+    let mut nvim = start_nvim(&home, &starts_the_server());
+    wait_until(
+        "the adapter registers with the server that it started",
+        || !home.lock_files().is_empty(),
+    )
+    .await;
+    assert_eq!(read_lock(&home).pid, nvim.pid());
+
+    // The server was not a child of Neovim and does not end with it: it ends by itself, when it has been idle.
+    nvim.kill();
+    let mut ended = false;
+    for _ in 0..250 {
+        if nobody_listens(&home).await {
+            ended = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(ended, "the server ends once it has been idle");
+    assert!(home.lock_files().is_empty());
+}
+
+#[tokio::test]
+async fn neovims_that_start_together_share_one_server() {
+    if !nvim_available() {
+        return;
+    }
+    let home = Home::new();
+    let first = start_nvim(&home, &starts_the_server());
+    let second = start_nvim(&home, &starts_the_server());
+    wait_until("both register", || home.lock_files().len() == 2).await;
+    let pids: Vec<u32> = home
+        .lock_files()
+        .iter()
+        .map(|path| {
+            let contents: LockContents =
+                serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+            contents.pid
+        })
+        .collect();
+    assert!(pids.contains(&first.pid()) && pids.contains(&second.pid()));
+}
+
+#[tokio::test]
+async fn a_server_that_the_adapter_started_and_that_does_not_understand_its_arguments_is_reported()
+{
+    if !nvim_available() {
+        return;
+    }
+    let home = Home::new();
+    let messages = home.dir.path().join("messages.txt");
+    // The server's own output goes nowhere, so the exit code is what the user hears.
+    let nvim = start_nvim(
+        &home,
+        &format!(
+            "vim.notify = function(message) local file = io.open('{}', 'a'); file:write(message, '\\n'); file:close() end; \
+             require('claude_ide').setup({{ reconnect = {{ initial_ms = 50, max_ms = 200 }}, \
+             server = {{ command = '{}', args = {{ '--no-such-switch' }} }} }})",
+            messages.display(),
+            env!("CARGO_BIN_EXE_claude-ide-server")
+        ),
+    );
+    wait_until("the user is told", || {
+        std::fs::read_to_string(&messages).is_ok_and(|text| text.contains("exited with code 2"))
+    })
+    .await;
+    assert!(home.lock_files().is_empty());
+    drop(nvim);
 }

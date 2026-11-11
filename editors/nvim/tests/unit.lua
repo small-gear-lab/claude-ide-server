@@ -89,6 +89,21 @@ check('a buffer without a name is not a file', selection.current(vim.api.nvim_ge
 vim.cmd.terminal()
 check('a terminal is not a file', selection.current(vim.api.nvim_get_current_buf(), { mode = 'n', visual = pos(1, 1), cursor = pos(1, 1) }), nil)
 
+-- Starting the server: only when nobody is there, and only with the socket that the adapter was given.
+local server = require('claude_ide.server')
+check('no one at the socket', server.nobody_there('ENOENT: no such file or directory'), true)
+check('a refused connection', server.nobody_there('ECONNREFUSED: connection refused'), true)
+check('a refusal of permission is not nobody', server.nobody_there('EACCES: permission denied'), false)
+check('no error is not nobody', server.nobody_there(nil), false)
+local opts = { command = 'claude-ide-server', args = { '--idle-timeout', '300' } }
+check('command line', server.command_line(opts, nil), { 'claude-ide-server', '--idle-timeout', '300' })
+check(
+  'command line with a socket',
+  server.command_line(opts, '/run/a.sock'),
+  { 'claude-ide-server', '--idle-timeout', '300', '--socket', '/run/a.sock' }
+)
+check('an executable that is not there is said so', server.start({ command = 'no-such-claude-ide-server', args = {} }) ~= nil, true)
+
 if failures > 0 then
   io.stderr:write(('%d checks failed\n'):format(failures))
   os.exit(1)

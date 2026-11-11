@@ -10,6 +10,7 @@ local M = {}
 ---@field should_register fun(): boolean Whether this Neovim is to register (see the README: main windows only).
 ---@field workspace_folders fun(): string[] The folders of the workspace. Default: the working directory.
 ---@field reconnect { initial_ms: integer, max_ms: integer } The wait between attempts to connect: doubles up to the maximum.
+---@field server claude_ide.ServerOptions Whether and how to start the server when nobody is listening.
 ---@field register_timeout_ms integer How long the server has to answer `register`.
 ---@field selection_debounce_ms integer How long the cursor must stay still before the selection is sent.
 ---@field methods table<string, fun(params: any): any, table?> What the server may ask of this Neovim.
@@ -23,6 +24,12 @@ local defaults = {
     return { vim.uv.cwd() }
   end,
   reconnect = { initial_ms = 500, max_ms = 10000 },
+  server = {
+    autostart = true,
+    command = 'claude-ide-server',
+    -- It ends by itself when no adapter has been there for five minutes.
+    args = { '--idle-timeout', '300' },
+  },
   register_timeout_ms = 5000,
   selection_debounce_ms = 100,
   methods = {},

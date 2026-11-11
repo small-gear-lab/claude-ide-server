@@ -2,6 +2,7 @@
 ---
 --- States: `stopped` (not asked to run), `waiting` (no connection; a new attempt is scheduled), `connecting` (a
 --- connection is open, `register` is not answered yet), `registered`.
+local server = require('claude_ide.server')
 local transport = require('claude_ide.transport')
 
 local PROTOCOL_VERSION = 1
@@ -49,6 +50,8 @@ function Session:stop()
   self:_drop_connection()
   self.state = 'stopped'
   self.port = nil
+  -- Started again by the user: if there is still no server, one is started again too.
+  self.started_server = false
 end
 
 ---@return string
@@ -75,9 +78,19 @@ function Session:_attempt()
     end
     if ok then
       self:_open(generation)
-    else
-      self:_lost(generation, err)
+      return
     end
+    -- Nobody is listening. Start the server, once for as long as there is none, and then wait for it like for any other.
+    if not self.started_server and self.opts.server.autostart and server.nobody_there(err) then
+      self.started_server = true
+      local problem = server.start(self.opts.server, self.opts.socket, function(code)
+        self:_server_exited(code)
+      end)
+      if problem then
+        self:_warn(problem)
+      end
+    end
+    self:_lost(generation, err)
   end)
 end
 
@@ -143,6 +156,8 @@ function Session:_open(generation)
       self.attempts = 0
       self.last_error = nil
       self.warned = nil
+      -- If this server goes away, the next one is started by whoever finds nobody there.
+      self.started_server = false
       if self.opts.on_registered then
         self.opts.on_registered(self)
       end
@@ -175,6 +190,24 @@ function Session:_serve(method, params)
     return nil, vim.lsp.rpc.rpc_response_error(vim.lsp.protocol.ErrorCodes.MethodNotFound, 'method not found: ' .. method)
   end
   return handler(params)
+end
+
+--- The server that this adapter started has ended. Its output is not kept, so the exit code is all that there is to
+--- say. A server that ends with 0 was stopped as asked; with 1 it may have lost the race to another one (which is
+--- then the server that is connected to) or may not have been able to start, which `:ClaudeIde status` shows if it
+--- stays unreachable; with anything else, it did not understand its command line, which the user should hear.
+---@param code integer
+function Session:_server_exited(code)
+  vim.schedule(function()
+    if code == 0 or self.state == 'registered' or self.state == 'stopped' then
+      return
+    end
+    local reason = ('the server that was started exited with code %d (run it by hand to see why)'):format(code)
+    self.last_error = reason
+    if code >= 2 then
+      self:_warn(reason)
+    end
+  end)
 end
 
 --- Tells the user of a problem that retrying does not solve, once for each reason.
