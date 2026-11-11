@@ -6,10 +6,12 @@
 
 use std::fs;
 use std::io::{self, Write};
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+
+use crate::fsutil::create_private_dir;
 
 /// The value of `transport` for a WebSocket.
 pub const TRANSPORT_WS: &str = "ws";
@@ -253,13 +255,6 @@ pub fn process_is_alive(pid: u32) -> bool {
 
 fn to_json<T: Serialize>(value: &T) -> io::Result<Vec<u8>> {
     serde_json::to_vec(value).map_err(io::Error::other)
-}
-
-fn create_private_dir(path: &Path) -> io::Result<()> {
-    fs::DirBuilder::new()
-        .recursive(true)
-        .mode(0o700)
-        .create(path)
 }
 
 fn remove_if_exists(path: &Path) -> io::Result<()> {
