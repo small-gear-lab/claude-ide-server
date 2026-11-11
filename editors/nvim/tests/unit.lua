@@ -51,7 +51,9 @@ local scratch = vim.fn.tempname() .. '.txt'
 vim.cmd.edit(scratch)
 vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'aé😀b', 'second line', '' })
 local buf = vim.api.nvim_get_current_buf()
-local path = vim.fn.fnamemodify(scratch, ':p')
+-- What Neovim calls the file, which is the real path (on macOS the temporary directory is under a link: /var is
+-- /private/var), and so is what the adapter reports.
+local path = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ':p')
 local function pos(lnum, col)
   return { buf, lnum, col, 0 }
 end

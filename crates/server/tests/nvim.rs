@@ -301,7 +301,10 @@ async fn the_selection_reaches_claude_code_when_it_connects_and_when_the_cursor_
     let mut claude = MockClaude::connect(port, &lock.auth_token).await;
     claude.handshake(4242).await;
     let first = next_notification(&mut claude, "selection_changed").await;
-    assert_eq!(first["filePath"], file.to_string_lossy().as_ref());
+    // The real path of the file: Neovim names a file by it, and on macOS the temporary directory is under a link
+    // (`/var` is `/private/var`).
+    let real = std::fs::canonicalize(&file).unwrap();
+    assert_eq!(first["filePath"], real.to_string_lossy().as_ref());
     assert_eq!(first["selection"]["isEmpty"], true);
     assert_eq!(first["selection"]["start"]["character"], 0);
 
