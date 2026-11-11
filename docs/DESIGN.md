@@ -1,7 +1,8 @@
 # Design
 
-Status: draft. Nothing here is implemented yet. Statements about Claude Code's behaviour come from observing
-existing integrations and from public write-ups; they are marked **(assumption)** where they have not been
+Status: implemented, except for what the "Non-goals" and the "Open questions" below leave out. Statements about
+Claude Code's behaviour come from observing Claude Code (2.1.322), from reading its code, and from reading existing
+integrations and public write-ups; each says which, and they are marked **(assumption)** where they have not been
 checked against Claude Code itself.
 
 ## Goals
@@ -24,7 +25,7 @@ checked against Claude Code itself.
 ## Overview
 
 ```
-Claude Code ──WebSocket (MCP)──▶ claude-ide-server ◀──JSON-RPC (Unix socket)── editor adapter
+Claude Code ──WebSocket (MCP)──▶ claude-ide-server ◀──JSON-RPC (Unix socket, or named pipe)── editor adapter
    (1 per CLI)                    (1 process)                                    (1 per workspace)
 ```
 
@@ -33,7 +34,7 @@ The server has two faces:
 - **Claude side.** For each registered workspace, it listens on a loopback WebSocket port, writes a lock file,
   authenticates the CLI with a token, and speaks MCP (JSON-RPC 2.0): it answers `initialize`, `tools/list` and
   `tools/call`, and sends notifications.
-- **Adapter side.** It listens on one Unix socket. An adapter connects, registers a workspace, pushes
+- **Adapter side.** It listens on one Unix socket (a named pipe on Windows). An adapter connects, registers a workspace, pushes
   notifications (selection changed, diagnostics changed) and answers the server's requests (open a file, get
   the open editors, show a diff).
 
@@ -232,8 +233,9 @@ connection closes it or goes away.
 
 ### Transport
 
-- A Unix domain socket at `$XDG_RUNTIME_DIR/claude-ide-server/adapter.sock`, in a directory of mode 0700. The
-  socket file is mode 0600.
+- A Unix domain socket at `$XDG_RUNTIME_DIR/claude-ide-server/adapter.sock` (without `XDG_RUNTIME_DIR`, as on macOS,
+  `claude-ide-server-<user>/adapter.sock` under the temporary directory), in a directory of mode 0700. The socket file is
+  mode 0600. On Windows it is a named pipe instead (see "Where the adapter socket comes from").
 - JSON-RPC 2.0 with `Content-Length` framing, as in LSP. Editors that already have an LSP client can reuse its
   transport. Checked with Neovim 0.12: `vim.lsp.rpc.connect(path)` connects to a Unix socket, the adapter can
   send requests and notifications and answer the server's requests (the `server_request` dispatcher), and when
@@ -559,6 +561,8 @@ same moment are safe, because a second server on the same socket refuses to star
 
 ## Milestones
 
+All five are done; they are kept as the order in which it was built.
+
 1. **M0, server skeleton.** WebSocket server, lock file, token, `initialize`, `tools/list`. A mock adapter.
 2. **M1, read-only tools.** `getOpenEditors`, `getWorkspaceFolders`, `getCurrentSelection`,
    `getLatestSelection`, `getDiagnostics`; `selection_changed`, `at_mentioned`.
@@ -570,7 +574,6 @@ same moment are safe, because a second server on the same socket refuses to star
 ## Open questions
 
 - WSL, where Claude Code and the editor are on the two sides of the boundary between Linux and Windows (issue #24).
-- What an adapter should do when the server is not there: retry, and for how long (issue #10).
 - Whether to write both a path and its symlink-resolved form into `workspaceFolders`, since the CLI compares text.
 - A process id can be reused: if an unrelated process takes the id that a dead server recorded, its leftover lock
   files are not cleaned up until that process ends. Recording the start time of the process as well would settle it.

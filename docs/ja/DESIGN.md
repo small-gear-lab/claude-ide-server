@@ -1,6 +1,6 @@
 # 設計
 
-状態: 草稿。ここに書いてあることは、まだ何も実装されていません。Claude Code の挙動についての記述は、既存の連携の観察と、公開されている解説に基づいています。Claude Code 本体で確かめていないものには **（仮定）** と付けてあります。
+状態: 実装済み。ただし、下の「Non-goals」と「Open questions」が対象外にしているものを除きます。Claude Code の挙動についての記述は、Claude Code（2.1.322）の観察、そのコードの読解、既存の連携や公開されている解説の読解に基づいていて、それぞれどれなのかを書いてあります。Claude Code 本体で確かめていないものには **（仮定）** と付けてあります。
 
 ## 目標
 
@@ -19,14 +19,14 @@
 ## 概要
 
 ```default
-Claude Code ──WebSocket (MCP)──▶ claude-ide-server ◀──JSON-RPC (Unix socket)── editor adapter
+Claude Code ──WebSocket (MCP)──▶ claude-ide-server ◀──JSON-RPC (Unix socket, or named pipe)── editor adapter
    (1 per CLI)                    (1 process)                                    (1 per workspace)
 ```
 
 サーバーには、2 つの顔があります。
 
 - **Claude 側。** 登録されたワークスペースごとに、ループバックの WebSocket ポートで待ち受け、ロックファイルを書き、トークンで CLI を認証して、MCP（JSON-RPC 2.0）を話します。`initialize`、`tools/list`、`tools/call` に答え、通知を送ります。
-- **アダプター側。** 1 つの Unix ソケットで待ち受けます。アダプターが接続して、ワークスペースを登録し、通知（選択範囲の変更、診断の変更）を送り、サーバーの要求（ファイルを開く、開いているエディタを返す、差分を出す）に答えます。
+- **アダプター側。** 1 つの Unix ソケット（Windows では名前付きパイプ）で待ち受けます。アダプターが接続して、ワークスペースを登録し、通知（選択範囲の変更、診断の変更）を送り、サーバーの要求（ファイルを開く、開いているエディタを返す、差分を出す）に答えます。
 
 ## Claude 側
 
@@ -141,7 +141,7 @@ WebSocket の接続は、1 本ごとに別のクライアントです。サー�
 
 ### 通信の経路
 
-- `$XDG_RUNTIME_DIR/claude-ide-server/adapter.sock` の Unix ドメインソケットです。置き場所のディレクトリはモード 0700、ソケットのファイルはモード 0600 です。
+- `$XDG_RUNTIME_DIR/claude-ide-server/adapter.sock` にある Unix ドメインソケット（macOS のように `XDG_RUNTIME_DIR` がなければ、一時ディレクトリの下の `claude-ide-server-<user>/adapter.sock`）。ディレクトリのモードは 0700、ソケットファイルのモードは 0600 です。Windows では代わりに名前付きパイプを使います（「Where the adapter socket comes from」を参照）。
 - JSON-RPC 2.0 を、LSP と同じ `Content-Length` のフレーミングで使います。すでに LSP クライアントを持つエディタは、そのトランスポートを再利用できます。Neovim 0.12 で確認しました。`vim.lsp.rpc.connect(path)` は Unix ソケットに接続でき、アダプタはリクエストと通知を送れ、サーバーからのリクエストにも答えられ（`server_request` ディスパッチャ）、サーバーが接続を閉じると `on_exit` が呼ばれて `is_closing()` が true になります。接続に失敗した場合もエラーは起きません。Neovim は警告を表示するだけで、`on_exit` は続きません。そのためアダプタは、まず自前の接続を試して閉じ（サーバーは何も言わずに閉じる接続を無視します）、それがうまくいったときだけ `vim.lsp.rpc` で接続します。これにより、メッセージを出さずに再試行することもできます。[Neovim アダプタ](NVIM.md)を参照してください。
 - どちらの側からも、要求と通知を送ります。接続がそのままワークスペースです。接続が閉じたら、サーバーは、そのワークスペースの WebSocket のクライアントとポートを閉じて、ロックファイルを消します。
 
@@ -299,6 +299,8 @@ WebSocket の接続は、1 本ごとに別のクライアントです。サー�
 
 ## マイルストーン
 
+5 つとも完了しています。作った順序の記録として残してあります。
+
 1. **M0、サーバーの骨組み。** WebSocket サーバー、ロックファイル、トークン、`initialize`、`tools/list`。偽のアダプター。
 2. **M1、読み取りだけのツール。** `getOpenEditors`、`getWorkspaceFolders`、`getCurrentSelection`、`getLatestSelection`、`getDiagnostics`。`selection_changed`、`at_mentioned`。
 3. **M2、Neovim アダプタ。** サーバーの実行ファイル（`crates/server`）と、`vim.lsp.rpc` 上の Lua アダプタ。メインのウィンドウだけを登録する。
@@ -308,6 +310,5 @@ WebSocket の接続は、1 本ごとに別のクライアントです。サー�
 ## 未解決の問い
 
 - WSL。Claude Code とエディタが、Linux と Windows の境界の両側にいる場合（Issue #24）。
-- サーバーがいないときに、アダプターがどうするか。再試行するか、どのくらいの間か（Issue #10）。
 - CLI は文字列で比べるので、`workspaceFolders` に、パスと、シンボリックリンクを解決した形の両方を書くか。
 - プロセスの id は、再利用されることがあります。死んだサーバーが記録した id を、関係のないプロセスが引き継ぐと、そのサーバーが残したロックファイルは、そのプロセスが終わるまで、掃除されません。プロセスの開始時刻も記録すれば、解決します。
