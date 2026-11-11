@@ -1,0 +1,53 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    # The documents have their own workflow (docs.yml), so a change that only touches them needs no build.
+    paths-ignore:
+      - "docs/**"
+      - "README.md"
+      - "README.ja.md"
+      - "tools/build-docs.sh"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "README.md"
+      - "README.ja.md"
+      - "tools/build-docs.sh"
+      - ".github/workflows/docs.yml"
+
+permissions:
+  contents: read
+
+# A newer push to the same branch makes the run for the older one pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # rustfmt and clippy are tools of the people who write the code, not of the least version that builds it: they run
+  # on the latest stable toolchain. A release that adds a lint can turn a run red with no change of the code; the code
+  # is then made to pass it.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Toolchain
+        run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy && rustup default stable
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+
+  # The tests run on the least version that rust-version names (1.85) and on the latest stable.
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: ["1.85", stable]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Toolchain
+        run: rustup toolchain install ${{ matrix.toolchain }} --profile minimal && rustup default ${{ matrix.toolchain }}
+      - run: cargo test --workspace --locked
