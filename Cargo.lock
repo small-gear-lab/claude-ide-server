@@ -97,6 +97,7 @@ name = "claude-ide-core"
 version = "0.0.0"
 dependencies = [
  "claude-ide-core",
+ "claude-ide-test-support",
  "claude-ide-windows",
  "futures-util",
  "getrandom",
@@ -122,15 +123,26 @@ version = "0.0.0"
 dependencies = [
  "claude-ide-core",
  "claude-ide-launchd",
- "futures-util",
+ "claude-ide-test-support",
  "listenfd",
  "rustix",
  "serde_json",
  "tempfile",
  "tokio",
- "tokio-tungstenite",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "claude-ide-test-support"
+version = "0.0.0"
+dependencies = [
+ "claude-ide-core",
+ "futures-util",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite",
 ]
 
 [[package]]

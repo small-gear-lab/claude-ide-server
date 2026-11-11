@@ -33,5 +33,6 @@ claude-ide-windows = { path = "../windows" }
 [dev-dependencies]
 # The tests of this crate use its own `test-support` feature.
 claude-ide-core = { path = ".", features = ["test-support"] }
+claude-ide-test-support = { path = "../test-support" }
 tempfile = "3.27.0"
 tokio-tungstenite = { version = "0.30.0", features = ["connect"] }

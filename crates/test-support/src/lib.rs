@@ -1,7 +1,9 @@
-//! Helpers shared by the integration tests of the adapter side and of the workspaces.
-
-// Each test file uses some of these, not all.
-#![allow(dead_code)]
+//! What the integration tests of the other crates share: the adapter's end of a connection ([`Client`]), a stand-in for
+//! Claude Code ([`claude::MockClaude`]), a workspace server to start from ([`fixture`], [`scene`]), and the shapes of what
+//! Claude Code reads and sends ([`shape`], with the files in `fixtures/`).
+//!
+//! It is a crate of its own, and not a directory that tests include (`#[path]`), so that the tests of every crate use it in
+//! the same way, and what reads the sources (rust-analyzer, for one) finds it.
 
 pub mod claude;
 pub mod fixture;

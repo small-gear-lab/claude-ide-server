@@ -9,7 +9,7 @@ use claude_ide_core::lock::{
 };
 use tempfile::TempDir;
 
-mod common;
+use claude_ide_test_support as common;
 use common::shape::assert_shape;
 
 const SERVER_PID: u32 = 4242;

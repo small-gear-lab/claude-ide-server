@@ -1,7 +1,7 @@
 //! The delivery of notifications to Claude Code, on its own: a hub over a WebSocket server, with no workspace and no
 //! adapter. What matters here is that a client that does not read cannot hold up the others.
 
-mod common;
+use claude_ide_test_support as common;
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;

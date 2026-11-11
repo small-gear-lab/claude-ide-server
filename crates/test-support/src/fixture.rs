@@ -14,7 +14,7 @@ use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Error as WsError;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 
-use super::{Client, WAIT, registration};
+use crate::{Client, WAIT, registration};
 
 pub struct Fixture {
     // Held so that the temporary directory lives as long as the fixture.
@@ -106,6 +106,12 @@ impl Fixture {
     pub fn read_lock(&self, port: u16) -> LockContents {
         serde_json::from_slice(&fs::read(self.dirs.lock_dir.join(format!("{port}.lock"))).unwrap())
             .unwrap()
+    }
+}
+
+impl Default for Fixture {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

@@ -2,7 +2,7 @@
 //! turned into the text that the VS Code extension writes; a path that is not absolute is taken from the first folder of
 //! the workspace before the adapter is asked.
 
-mod common;
+use claude_ide_test_support as common;
 
 use claude_ide_core::jsonrpc::RpcError;
 use common::scene::{call_tool, result_json, scene_declaring};

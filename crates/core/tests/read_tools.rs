@@ -1,7 +1,7 @@
 //! The read-only tools and the selection notifications: what an adapter reports is checked, rewritten with the crate's
 //! own types, and passed on to Claude Code in the shapes that it expects.
 
-mod common;
+use claude_ide_test_support as common;
 
 use std::time::Duration;
 

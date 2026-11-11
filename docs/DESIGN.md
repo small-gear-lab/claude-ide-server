@@ -546,13 +546,13 @@ same moment are safe, because a second server on the same socket refuses to star
 
 - A mock Claude client (WebSocket) and a mock adapter (Unix socket) run in the same test process. Tests cover the
   handshake, authentication, every tool, notifications, diffs, disconnects and cleanup. The parts that the tests
-  share are in `crates/core/tests/common/`: the adapter's end of a connection (`Client`), a workspace server on
-  temporary directories (`Fixture`), Claude Code's client (`MockClaude`), and a workspace with both already
-  connected (`Scene`). Most tests run over in-memory streams; one runs the whole path on a real Unix socket
+  share are in a crate of their own, `crates/test-support`, which the tests of the other crates use: the adapter's end of a
+  connection (`Client`), a workspace server on temporary directories (`Fixture`), Claude Code's client (`MockClaude`), and a
+  workspace with both already connected (`Scene`). Most tests run over in-memory streams; one runs the whole path on a real Unix socket
   (`tests/end_to_end.rs`: register, connect with the token from the lock file, list the tools, call one, disconnect,
   clean up).
 - The expected shapes of what the server sends and writes come from the observed behaviour above, written down as
-  fixtures in `crates/core/tests/fixtures/`: the `initialize` that Claude Code sends, and the shapes of a lock file and
+  fixtures in `crates/test-support/fixtures/`: the `initialize` that Claude Code sends, and the shapes of a lock file and
   of the results of `initialize`, `tools/list` and `tools/call`. A shape changes when a new observation says it
   should, not to make a test pass.
 - Each adapter has its own tests; the Neovim one runs headless Neovim against a real server.

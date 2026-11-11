@@ -5,9 +5,9 @@ use claude_ide_core::workspace::Workspace;
 use serde_json::{Value, json};
 use tokio::io::DuplexStream;
 
-use super::Client;
-use super::claude::MockClaude;
-use super::fixture::{Fixture, registered_with};
+use crate::Client;
+use crate::claude::MockClaude;
+use crate::fixture::{Fixture, registered_with};
 
 /// An adapter that declared `getOpenEditors` and `openFile` is registered, and Claude Code has connected to it and
 /// completed the handshake.

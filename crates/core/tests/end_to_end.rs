@@ -2,7 +2,7 @@
 //! token that it reads from the lock file on disk, lists the tools, calls one, and everything is cleaned up when the
 //! adapter goes away.
 
-mod common;
+use claude_ide_test_support as common;
 
 use std::fs;
 use std::time::Duration;

@@ -4,7 +4,7 @@
 
 #![cfg(unix)]
 
-mod common;
+use claude_ide_test_support as common;
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;

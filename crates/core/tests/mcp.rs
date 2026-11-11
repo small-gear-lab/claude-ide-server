@@ -1,7 +1,7 @@
 //! Tests of the MCP side, with a stand-in for Claude Code's client on one end and a stand-in for an adapter on the
 //! other, and the workspace between them.
 
-mod common;
+use claude_ide_test_support as common;
 
 use std::time::Duration;
 

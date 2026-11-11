@@ -1,7 +1,7 @@
 //! Tests of the workspaces: the adapter side and the Claude side together, over in-memory streams, with the lock
 //! files in a temporary directory.
 
-mod common;
+use claude_ide_test_support as common;
 
 use std::fs;
 use std::time::Duration;

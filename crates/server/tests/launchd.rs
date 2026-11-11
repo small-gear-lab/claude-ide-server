@@ -1,5 +1,3 @@
-//! The server under launchd, with a real launchd: the socket is launchd's, nothing runs until an adapter connects, and
-//! when the server has been idle and ends, the socket stays and the next connection starts it again.
 //!
 //! This needs a domain of launchd that a user agent can be loaded into (`gui/<uid>`, or else `user/<uid>`). A machine that
 //! has none (a session without a user logged in, a container) cannot run it: the test says so and ends, unless
@@ -8,8 +6,7 @@
 #![cfg(target_os = "macos")]
 
 // The adapter end is that of the core's own tests.
-#[path = "../../core/tests/common/mod.rs"]
-mod common;
+use claude_ide_test_support as common;
 mod support;
 
 use std::path::{Path, PathBuf};

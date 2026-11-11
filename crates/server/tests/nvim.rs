@@ -4,8 +4,7 @@
 //! so that a machine without Neovim can still run the other tests and a CI run cannot pass by skipping these.
 
 // The stand-in for Claude Code is the core's own.
-#[path = "../../core/tests/common/mod.rs"]
-mod common;
+use claude_ide_test_support as common;
 mod support;
 
 use std::path::{Path, PathBuf};

@@ -1,30 +1,18 @@
-//! Fixtures, and the comparison of a value with a shape (see `tests/fixtures/README.md`).
+//! Fixtures, and the comparison of a value with a shape (see `fixtures/README.md`).
 
 use std::path::PathBuf;
 
 use serde_json::Value;
 
-/// Reads `tests/fixtures/<name>` of the core crate. (Tests of other crates include these helpers from there, so the
-/// directory is looked for next to the crate that is being tested, and then in the core crate.)
+/// Reads `fixtures/<name>` of this crate.
 pub fn fixture(name: &str) -> Value {
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let fixtures = [
-        manifest.join("tests").join("fixtures"),
-        manifest
-            .join("..")
-            .join("core")
-            .join("tests")
-            .join("fixtures"),
-    ]
-    .into_iter()
-    .find(|dir| dir.is_dir())
-    .expect("the fixtures directory");
+    let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures");
     let path = fixtures.join(name);
     let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     serde_json::from_str(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
 
-/// Checks `actual` against the shape in `tests/fixtures/<shape_name>`, and panics with the path of the first
+/// Checks `actual` against the shape in `fixtures/<shape_name>`, and panics with the path of the first
 /// difference.
 pub fn assert_shape(actual: &Value, shape_name: &str) {
     if let Err(difference) = matches_shape(actual, &fixture(shape_name), "$") {

@@ -6,8 +6,7 @@
 
 #![cfg(windows)]
 
-#[path = "../../core/tests/common/mod.rs"]
-mod common;
+use claude_ide_test_support as common;
 mod support;
 
 use std::path::PathBuf;

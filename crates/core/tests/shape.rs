@@ -1,6 +1,6 @@
 //! The comparison of a value with a shape, which the other tests rely on.
 
-mod common;
+use claude_ide_test_support as common;
 
 use common::shape::matches_shape;
 use serde_json::json;

@@ -1,7 +1,7 @@
 //! `openDiff`, `close_tab` and `closeAllDiffTabs`: a diff waits for the user, nothing else waits for it, it ends with the
 //! contents of the file or with a rejection, and it does not stay when the one who asked for it has gone.
 
-mod common;
+use claude_ide_test_support as common;
 
 use std::time::Duration;
 

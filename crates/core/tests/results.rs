@@ -1,7 +1,7 @@
 //! The result of a tool call may have several texts: the first is what the tool says, the others come after it (the answer
 //! to `openDiff` is `FILE_SAVED` and then the contents of the file).
 
-mod common;
+use claude_ide_test_support as common;
 
 use std::sync::Arc;
 use std::time::Duration;

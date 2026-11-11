@@ -1,7 +1,7 @@
 //! Tests of the adapter side alone: the framing, `register`, the requests. There are no ports and no lock files
 //! here; a test plays the part of the layer above, and answers each registration itself.
 
-mod common;
+use claude_ide_test_support as common;
 
 use std::time::Duration;
 

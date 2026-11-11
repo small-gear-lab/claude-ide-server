@@ -4,7 +4,7 @@
 
 #![cfg(windows)]
 
-mod common;
+use claude_ide_test_support as common;
 
 use std::io;
 use std::path::Path;

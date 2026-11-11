@@ -1,8 +1,7 @@
 //! The executable, as a child process: what a user, or a supervisor, starts.
 
 // The adapter end and the stand-in for Claude Code are those of the core's own tests.
-#[path = "../../core/tests/common/mod.rs"]
-mod common;
+use claude_ide_test_support as common;
 mod support;
 
 use std::path::Path;
