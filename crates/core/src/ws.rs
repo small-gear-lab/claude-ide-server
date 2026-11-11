@@ -124,7 +124,9 @@ impl Connection {
             code: CloseCode::from(code),
             reason: reason.to_owned().into(),
         };
-        let _ = self.inner.close(Some(frame)).await;
+        // Called by path: with some features on, `Box<WebSocketStream>` is itself a `Sink`, and `.close()` would then mean
+        // `SinkExt::close`, which takes no argument.
+        let _ = WebSocketStream::close(&mut self.inner, Some(frame)).await;
     }
 }
 
