@@ -87,6 +87,30 @@ local function range(start_line, start_char, end_line, end_char)
   return { start = { line = start_line, character = start_char }, ['end'] = { line = end_line, character = end_char } }
 end
 
+-- A buffer that stands for a file but is not a normal one (an image viewer): the file as a whole, at its start.
+do
+  local files = require('claude_ide.files')
+  local image = vim.api.nvim_create_buf(true, true)
+  vim.bo[image].buftype = 'nofile'
+  vim.api.nvim_buf_set_lines(image, 0, -1, false, { 'size: 1x1', 'format: png' })
+  check('a nofile buffer is not a file without a file_of', selection.current(image, { mode = 'n', visual = pos(1, 1), cursor = pos(2, 3) }), nil)
+  files.custom_file_of = function(b)
+    return b == image and path or nil
+  end
+  check(
+    'a buffer that stands for a file is the file at its start, wherever the cursor is',
+    selection.current(image, { mode = 'n', visual = pos(1, 1), cursor = pos(2, 3) }),
+    { filePath = path, text = '', selection = range(0, 0, 0, 0) }
+  )
+  check(
+    'and its selected lines are not sent as text',
+    selection.current(image, { mode = 'v', visual = pos(1, 1), cursor = pos(2, 4) }),
+    { filePath = path, text = '', selection = range(0, 0, 0, 0) }
+  )
+  files.custom_file_of = nil
+  vim.api.nvim_buf_delete(image, { force = true })
+end
+
 check(
   'a cursor is an empty range',
   selection.current(buf, { mode = 'n', visual = pos(1, 1), cursor = pos(1, 8) }),

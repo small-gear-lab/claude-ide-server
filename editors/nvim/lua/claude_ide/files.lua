@@ -39,11 +39,20 @@ function M.language_of(buf, path)
   return M.language_id(filetype)
 end
 
+--- Set by `setup` from the option `file_of`: `fun(buf: integer): string?`, the path of the file that a buffer stands for.
+---@type (fun(buf: integer): string?)?
+M.custom_file_of = nil
+
 --- Whether a buffer is a file that Claude can be told about: it has a name and is a normal buffer. (A buffer without
 --- a name has no path to name it by; a terminal or the help are not files.)
 ---@param buf integer
 ---@return string? path The absolute path, or nil.
 function M.file_of(buf)
+  -- A buffer that the configuration names a file for (an image viewer, which is not a normal buffer).
+  local custom = M.custom_file_of and M.custom_file_of(buf)
+  if custom and custom ~= '' then
+    return M.long_path(vim.fn.fnamemodify(custom, ':p'))
+  end
   local name = vim.api.nvim_buf_get_name(buf)
   if name == '' or vim.bo[buf].buftype ~= '' then
     return nil

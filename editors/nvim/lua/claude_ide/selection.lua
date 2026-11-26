@@ -47,6 +47,13 @@ function M.current(bufnr, state)
     return nil
   end
 
+  -- A buffer that is not a normal one but stands for a file (an image viewer): its lines are not those of the file, so
+  -- the selection is the file as a whole, at its start.
+  if vim.bo[bufnr].buftype ~= '' then
+    local start = position(1, '', 0)
+    return { filePath = path, text = '', selection = { start = start, ['end'] = start } }
+  end
+
   local function line_of(lnum)
     return vim.api.nvim_buf_get_lines(bufnr, lnum - 1, lnum, false)[1] or ''
   end

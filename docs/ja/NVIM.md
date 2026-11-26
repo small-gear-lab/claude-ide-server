@@ -36,6 +36,8 @@ require('claude_ide').setup({
   should_register = function() return true end,
   -- The folders of the workspace. By default, the working directory. It is asked at registration, and when :cd changes it.
   workspace_folders = function() return { vim.uv.cwd() } end,
+  -- The file that a buffer stands for when it is not a normal one (an image viewer, say): its path, or nil. See "The selection".
+  file_of = nil,
   -- The wait between attempts to connect: it doubles, up to the maximum.
   reconnect = { initial_ms = 500, max_ms = 10000 },
   -- What to do when nobody is listening on the socket. See "How it connects".
@@ -96,6 +98,8 @@ require('claude_ide').setup({
 ## 選択範囲
 
 `selectionChanged` は、カーソルが `selection_debounce_ms` のあいだ止まっていて、直前に送ったものと違う選択範囲のときに送られます。選択範囲は、ビジュアル選択か、カーソル位置の空の範囲です。位置は `{ line, character }` で、`line` は 0 始まり、`character` は UTF-16 コードユニット単位（Neovim はバイトで数えます）、範囲の終端は含みません。ファイルでないバッファ（ターミナル、ヘルプ、名前のないバッファ）には、選択範囲はありません。
+
+通常のバッファではない（`buftype` が空ではない）バッファでも、ファイルの代わりになることがあります。たとえば、`a.png` を `nofile` のバッファに表示する画像ビューアです。`file_of(buf)` がそのファイルのパスを返すと、そのバッファはそのファイルとして扱われます。バッファの行はファイルの行ではないので、選択範囲はファイル全体です。テキストなしの、先頭の空の範囲で、カーソルの位置やビジュアル選択にかかわりません。バッファのメンションも同じです（「Claude Code へのメンション」を参照）。
 
 ## Claude Code が頼めること
 
@@ -158,7 +162,7 @@ require('claude_ide').setup({
 
 ## Claude Code へのメンション
 
-`:ClaudeIdeMention` は、現在のファイルを Claude Code にメンションし、`:'<,'>ClaudeIdeMention`（`:2,4ClaudeIdeMention` のような任意の範囲でも）は、その範囲の行をメンションします。Claude Code は、それをプロンプトに `@file#L2-4` として入れます。キーは割り当てていないので、好きなように割り当ててください。Lua からは `require('claude_ide').mention(first, last)` で同じことができ、行（1 始まり）を渡すか、渡さなければファイル全体になります。Claude Code に伝えられたかどうかを返します。
+`:ClaudeIdeMention` は、現在のファイルを Claude Code にメンションし、`:'<,'>ClaudeIdeMention`（`:2,4ClaudeIdeMention` のような任意の範囲でも）は、その範囲の行をメンションします。Claude Code は、それをプロンプトに `@file#L2-4` として入れます。キーは割り当てていないので、好きなように割り当ててください。Lua からは `require('claude_ide').mention(first, last)` で同じことができ、行（1 始まり）を渡すか、渡さなければファイル全体になります。Claude Code に伝えられたかどうかを返します。通常のバッファではない（`buftype` が空ではない）けれど、オプション `file_of` がファイルを割り当てているバッファ（たとえば画像のビューア）は、そのファイルとして扱われます。範囲にかかわらず、行なしのファイル全体としてメンションされます。そのバッファの行は、ファイルの行ではないからです（「選択範囲」を参照）。
 
 ## テスト
 

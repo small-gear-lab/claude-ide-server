@@ -20,6 +20,7 @@ local M = {}
 ---@field diagnostics_wait false|{ first_ms: integer?, quiet_ms: integer?, cap_ms: integer?, cap_hidden_ms: integer? } How long `getDiagnostics` waits for the diagnostics of a file that was changed under Neovim (see `methods.wait`). `false`: not at all.
 ---@field diff false|{ provider: ('tab'|claude_ide.DiffProvider)?, keys: { accept: string?, reject: string? }? } How the changes that Claude Code proposes are shown (`false`: not at all: Claude Code then shows them itself).
 ---@field methods table<string, fun(params: any): any, table?> What the server may ask of this Neovim.
+---@field file_of (fun(buf: integer): string?)? The file that a buffer stands for, when it is not a normal buffer (an image viewer, say): its path, or nil. Such a buffer is then taken as that file (selection, mention, diagnostics), with no lines of its own: Claude is told the file as a whole.
 ---@field on_gone fun()? Called when the connection to the server has ended.
 ---@field on_registered fun(session: claude_ide.Session)? Called each time the registration has been accepted.
 local defaults = {
@@ -97,6 +98,7 @@ function M.setup(opts)
     diff.configure(opts.diff)
   end
   -- Diffs that wait for a server that is gone are over.
+  require('claude_ide.files').custom_file_of = opts.file_of
   local on_gone = opts.on_gone
   opts.on_gone = function()
     diff.cancel_all()
@@ -144,9 +146,14 @@ function M.mention(first, last)
   if not path then
     return false, 'this buffer is not a file'
   end
-  first = first or 1
-  last = last or vim.api.nvim_buf_line_count(buf)
-  if not session or not session:notify('atMention', { filePath = path, lineStart = first - 1, lineEnd = last - 1 }) then
+  local params = { filePath = path }
+  -- The lines of a normal buffer are those of the file. A buffer that is not one (an image viewer, which a `file_of` of
+  -- the configuration may name a file for) has lines of its own that are not in the file: mention the file as a whole.
+  if vim.bo[buf].buftype == '' then
+    params.lineStart = (first or 1) - 1
+    params.lineEnd = (last or vim.api.nvim_buf_line_count(buf)) - 1
+  end
+  if not session or not session:notify('atMention', params) then
     return false, 'Neovim is not connected to the server'
   end
   return true

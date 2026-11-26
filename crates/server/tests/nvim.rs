@@ -782,6 +782,52 @@ async fn a_file_or_some_of_its_lines_can_be_mentioned_to_claude_code() {
 }
 
 #[tokio::test]
+async fn a_buffer_that_stands_for_a_file_is_mentioned_as_the_whole_file_without_lines() {
+    if !nvim_available() {
+        return;
+    }
+    let home = Home::new();
+    let _server = start_server(&home);
+    let _ = connect_when_ready(&home.default_socket()).await;
+
+    // An image: the file is not text, and the buffer (a `nofile` one, with a few lines of its own) stands for it.
+    let image = home.dir.path().join("a.png");
+    std::fs::write(&image, "not really a png").unwrap();
+    let listen = home.nvim_listen();
+    let _nvim = start_nvim_listening(
+        &home,
+        &format!(
+            "require('claude_ide').setup({{ server = {{ autostart = false }}, \
+               file_of = function(buf) return vim.b[buf].image_path end }}); \
+             vim.cmd('enew'); vim.bo.buftype = 'nofile'; vim.b.image_path = '{}'; \
+             vim.api.nvim_buf_set_lines(0, 0, -1, false, {{'a', 'b', 'c'}})",
+            lua_path(&image)
+        ),
+        Some(&listen),
+    );
+    wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
+    let mut claude = claude_for(&home).await;
+    wait_until("nvim listens", || listens(&listen)).await;
+    let real = real_path(&image);
+
+    // Being in the buffer is being in the file: it is the current file, as a whole, at its start.
+    let selected = next_notification(&mut claude, "selection_changed").await;
+    assert_eq!(selected["filePath"], real.to_string_lossy().as_ref());
+    assert_eq!(selected["text"], "");
+    assert_eq!(selected["selection"]["start"]["line"], 0);
+
+    // Neither the lines of the buffer nor the range of the command are lines of the file.
+    send_keys(&listen, ":ClaudeIdeMention<CR>");
+    let whole = next_notification(&mut claude, "at_mentioned").await;
+    assert_eq!(whole["filePath"], real.to_string_lossy().as_ref());
+    assert!(whole.get("lineStart").is_none(), "{whole}");
+    assert!(whole.get("lineEnd").is_none(), "{whole}");
+    send_keys(&listen, ":2,3ClaudeIdeMention<CR>");
+    let ranged = next_notification(&mut claude, "at_mentioned").await;
+    assert!(ranged.get("lineStart").is_none(), "{ranged}");
+}
+
+#[tokio::test]
 async fn claude_code_can_open_a_file_check_whether_it_has_changes_and_save_it() {
     if !nvim_available() {
         return;

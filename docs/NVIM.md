@@ -49,6 +49,8 @@ require('claude_ide').setup({
   should_register = function() return true end,
   -- The folders of the workspace. By default, the working directory. It is asked at registration, and when :cd changes it.
   workspace_folders = function() return { vim.uv.cwd() } end,
+  -- The file that a buffer stands for when it is not a normal one (an image viewer, say): its path, or nil. See "The selection".
+  file_of = nil,
   -- The wait between attempts to connect: it doubles, up to the maximum.
   reconnect = { initial_ms = 500, max_ms = 10000 },
   -- What to do when nobody is listening on the socket. See "How it connects".
@@ -145,6 +147,11 @@ it, start from what the user has now.
 one that was sent last. A selection is the visual selection, or an empty range at the cursor. Positions are
 `{ line, character }` with `line` 0-based and `character` in UTF-16 code units (Neovim counts bytes), and the end of a
 range is exclusive. Buffers that are not files (a terminal, help, a buffer without a name) have none.
+
+A buffer that is not a normal one (its `buftype` is not empty) can still stand for a file, such as an image viewer that
+shows `a.png` in a `nofile` buffer: `file_of(buf)` returns the path of the file, and the buffer is taken as that file. Its
+lines are not those of the file, so the selection is the file as a whole: an empty range at the start, with no text,
+whatever the cursor or a visual selection. The same goes for the mention of the buffer (see "Mentioning to Claude Code").
 
 ## What Claude Code can ask
 
@@ -250,7 +257,10 @@ gives `User rejected update`, and the file is not changed; and deciding in the t
 `:ClaudeIdeMention` mentions the current file to Claude Code, and `:'<,'>ClaudeIdeMention` (or any range, as in
 `:2,4ClaudeIdeMention`) the lines of the range. Claude Code puts it into its prompt as `@file#L2-4`. There is no key
 mapped to it; map it as you like. `require('claude_ide').mention(first, last)` does the same from Lua, with the lines
-(1-based) or without them for the whole file, and returns whether Claude Code was told.
+(1-based) or without them for the whole file, and returns whether Claude Code was told. A buffer that is not a normal one
+(`buftype` is not empty) but that the option `file_of` names a file for, such as an image viewer, is taken as that file:
+it is mentioned as the whole file with no lines, whatever the range, because its lines are not those of the file (see "The
+selection").
 
 ## Tests
 
