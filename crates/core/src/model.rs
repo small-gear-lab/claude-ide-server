@@ -506,28 +506,32 @@ pub fn diagnostics_to_tool_text(files: &[FileDiagnostics]) -> String {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AtMention {
     pub file_path: String,
-    /// 0-based.
-    pub line_start: u32,
-    /// 0-based; the last line that is mentioned.
-    pub line_end: u32,
+    /// 0-based. `None` for a file that has no lines to point at (an image).
+    pub line_start: Option<u32>,
+    /// 0-based; the last line that is mentioned. `None` as `line_start`.
+    pub line_end: Option<u32>,
 }
 
 impl AtMention {
     pub fn from_adapter(value: &Value) -> Result<Self, ModelError> {
         Ok(Self {
             file_path: absolute_path(value, "filePath", "$")?,
-            line_start: count(value, "lineStart", "$")?,
-            line_end: count(value, "lineEnd", "$")?,
+            line_start: optional_count(value, "lineStart", "$")?,
+            line_end: optional_count(value, "lineEnd", "$")?,
         })
     }
 
     /// The parameters of the `at_mentioned` notification.
     pub fn to_notification(&self) -> Value {
-        json!({
-            "filePath": self.file_path,
-            "lineStart": self.line_start,
-            "lineEnd": self.line_end,
-        })
+        // Claude Code takes both lines as optional: with none, it mentions the whole file.
+        let mut params = json!({ "filePath": self.file_path });
+        if let Some(line_start) = self.line_start {
+            params["lineStart"] = json!(line_start);
+        }
+        if let Some(line_end) = self.line_end {
+            params["lineEnd"] = json!(line_end);
+        }
+        params
     }
 }
 
@@ -940,11 +944,20 @@ mod tests {
             mention.to_notification(),
             json!({"filePath": "/a.lua", "lineStart": 4, "lineEnd": 9})
         );
+        // The lines are optional: a file that has none to point at (an image) is mentioned as a whole.
+        let whole = AtMention::from_adapter(&json!({"filePath": "/a.png"})).unwrap();
+        assert_eq!(whole.to_notification(), json!({"filePath": "/a.png"}));
+        let null = AtMention::from_adapter(
+            &json!({"filePath": "/a.png", "lineStart": null, "lineEnd": null}),
+        )
+        .unwrap();
+        assert_eq!(null.to_notification(), json!({"filePath": "/a.png"}));
+        // A line that is there has to be a number.
         assert_eq!(
-            AtMention::from_adapter(&json!({"filePath": "/a.lua", "lineStart": 4}))
+            AtMention::from_adapter(&json!({"filePath": "/a.lua", "lineStart": "4"}))
                 .unwrap_err()
                 .path,
-            "$.lineEnd"
+            "$.lineStart"
         );
     }
 

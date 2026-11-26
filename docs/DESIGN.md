@@ -256,7 +256,7 @@ Adapter → server:
 | `workspaceFoldersChanged` | notification | `workspaceFolders` (the lock file is rewritten) |
 | `selectionChanged` | notification | `filePath`, `text`, `selection` |
 | `diagnosticsChanged` | notification | `uris` |
-| `atMention` | notification | `filePath`, `lineStart`, `lineEnd` |
+| `atMention` | notification | `filePath`, `lineStart` (optional), `lineEnd` (optional) |
 
 Server → adapter:
 
@@ -290,7 +290,9 @@ it means that the notification is not passed on and the owner of the workspace i
   one; when there is none, the answer is `{ "success": false, "message": ... }` (the message is optional). A cursor
   without a selection is a selection with an empty `text` and `start` equal to `end`. The server works out `isEmpty`
   from the range.
-- **`atMention`** is `{ filePath, lineStart, lineEnd }`, 0-based, `lineEnd` being the last line.
+- **`atMention`** is `{ filePath, lineStart?, lineEnd? }`, 0-based, `lineEnd` being the last line. The lines are optional:
+  without them the file is mentioned as a whole (an image has no lines to point at). Claude Code takes `lineStart` and
+  `lineEnd` of `at_mentioned` as optional, from its code (2.1.332), not tried with a running Claude Code.
 - A **`filePath`** is an absolute path (on Unix it starts with `/`; on Windows with a drive and a separator, `C:\Users\u\a.lua`,
   or with a separator, as Node, which Claude Code is, takes it: `path.win32.isAbsolute`). Claude Code works out what to show
   from it, and a relative one would be taken relative to the directory that Claude Code runs in, which is not that of the

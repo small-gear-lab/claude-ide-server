@@ -285,7 +285,7 @@ async fn a_malformed_notification_is_not_passed_on_and_the_owner_is_told() {
         .await;
     scene
         .adapter
-        .notify("atMention", json!({"filePath": "/a"}))
+        .notify("atMention", json!({"filePath": "/a", "lineStart": "x"}))
         .await;
 
     for expected_path in ["$.text", "$.lineStart"] {

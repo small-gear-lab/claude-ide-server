@@ -155,7 +155,7 @@ WebSocket の接続は、1 本ごとに別のクライアントです。サー�
 | `workspaceFoldersChanged` | 通知   | `workspaceFolders`（ロックファイルを書き直します）                                                   |
 | `selectionChanged`        | 通知   | `filePath`、`text`、`selection`                                                        |
 | `diagnosticsChanged`      | 通知   | `uris`                                                                               |
-| `atMention`               | 通知   | `filePath`、`lineStart`、`lineEnd`                                                     |
+| `atMention`               | 通知   | `filePath`、`lineStart`（省略可）、`lineEnd`（省略可）                                           |
 
 サーバー → アダプター:
 
@@ -180,7 +180,7 @@ WebSocket の接続は、1 本ごとに別のクライアントです。サー�
 アダプターが送るものは、サーバーが検査します。足りない項目や、型の違いを、推測で補いません。要求への答えなら、ツール呼び出しを失敗にして、誤りの場所をテキストに入れます（たとえば `the editor's answer to getOpenEditors is not valid: $.tabs[1].isDirty: expected a boolean`）。通知なら、その通知は転送せず、ワークスペースの持ち主に知らせます（`MalformedNotification`）。
 
 - **選択範囲** は `{ filePath, text, selection: { start, end } }` です。`start` と `end` は位置です。これが `selectionChanged` の引数で、選択範囲があるときの `getCurrentSelection` と `getLatestSelection` の答えです。ないときの答えは `{ "success": false, "message": ... }` です（`message` は省略できます）。選択のないカーソルは、`text` が空で、`start` と `end` が等しい選択範囲です。`isEmpty` は、サーバーが範囲から求めます。
-- **`atMention`** は `{ filePath, lineStart, lineEnd }` で、0 始まり、`lineEnd` は最後の行です。
+- **`atMention`** は `{ filePath, lineStart?, lineEnd? }` で、0 始まり、`lineEnd` は最後の行です。行は省略できます。省略すると、ファイル全体のメンションになります（画像には、指し示す行がありません）。Claude Code は、`at_mentioned` の `lineStart` と `lineEnd` を省略できるものとして受け取ります。コード（2.1.332）から読んだことで、動いている Claude Code では試していません。
 - **`filePath`** は、絶対パスです（Unix では `/` で始まります。Windows では、ドライブと区切り文字（`C:\Users\u\a.lua`）か、区切り文字で始まります。Claude Code は Node なので、そのように扱います: `path.win32.isAbsolute`）。Claude Code は、これから、見せるものを決めます。相対パスだと、Claude Code が動いているディレクトリが基準になりますが、それはエディタのものではありません。
 - **Windows のパス**は、ネイティブのパスを、省略せずに書いたものです。エディタは、ファイルを 8.3 の短い名前（`C:\Users\RUNNER~1\a.lua`）で知っていることがありますが、Claude Code は、自分の作業ディレクトリ（長い名前を持っています）と、パスをテキストとして比べます。そこで、Neovim アダプターは長い名前（実在するパスで、元の大文字小文字のまま）を報告します。それ以外では、サーバーはエディタの報告を変えません（区切り文字やドライブレターの大文字小文字は、そのままです）。サーバーが `filePath` から作る `fileUrl` は `file:///C:/Users/u/a%20b.lua` で、共有のパスでは `file://server/share/a.lua` です。アダプターが作る `uri` はそのアダプターのものです（Neovim の `vim.uri_from_fname` も同じ形を書きます）。ツール呼び出しの相対的な `filePath` は、ワークスペースの最初のフォルダと、そのフォルダが使う区切り文字で結合され、`..` はドライブや共有より上には出ません（`crates/core/src/paths.rs`。文字列だけを扱い、パスの2つの書き方の両方を、どのシステムでもテストしています）。
 - **`getOpenEditors` への答え**は `{ tabs: [ ... ] }` です。タブには、このプロトコルのどのクライアントも受け取る5つがあり、5つとも必須です（`uri`、`isActive`、`label`、`languageId`、`isDirty`）。VS Code の拡張機能は、タブにさらに加えており、アダプターはどれを省いてもかまいません。`isPinned`、`isPreview`、`groupIndex`、`viewColumn`（そのタブがいるグループと、その列）、`isGroupActive`、`fileName`、`lineCount`、`isUntitled`、そしてアクティブなタブには `selection: { start, end, isReversed }` です。あるものはそのまま渡し、あれば検査します。

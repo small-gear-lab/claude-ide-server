@@ -958,8 +958,8 @@ msgid "`atMention`"
 msgstr "`atMention`"
 
 #: ../../DESIGN.md:259
-msgid "`filePath`, `lineStart`, `lineEnd`"
-msgstr "`filePath`、`lineStart`、`lineEnd`"
+msgid "`filePath`, `lineStart` (optional), `lineEnd` (optional)"
+msgstr "`filePath`、`lineStart`（省略可）、`lineEnd`（省略可）"
 
 #: ../../DESIGN.md:261
 msgid "Server → adapter:"
@@ -1089,11 +1089,15 @@ msgstr ""
 #: ../../DESIGN.md:293
 #, python-brace-format
 msgid ""
-"**`atMention`** is `{ filePath, lineStart, lineEnd }`, 0-based, `lineEnd` "
-"being the last line."
+"**`atMention`** is `{ filePath, lineStart?, lineEnd? }`, 0-based, `lineEnd` "
+"being the last line. The lines are optional: without them the file is "
+"mentioned as a whole (an image has no lines to point at). Claude Code takes"
+" `lineStart` and `lineEnd` of `at_mentioned` as optional, from its code "
+"(2.1.332), not tried with a running Claude Code."
 msgstr ""
-"**`atMention`** は `{ filePath, lineStart, lineEnd }` で、0 始まり、`lineEnd` "
-"は最後の行です。"
+"**`atMention`** は `{ filePath, lineStart?, lineEnd? }` で、0 始まり、`lineEnd` "
+"は最後の行です。行は省略できます。省略すると、ファイル全体のメンションになります（画像には、指し示す行がありません）。Claude Code は、`at_mentioned` の "
+"`lineStart` と `lineEnd` を省略できるものとして受け取ります。コード（2.1.332）から読んだことで、動いている Claude Code では試していません。"
 
 #: ../../DESIGN.md:294
 msgid ""
