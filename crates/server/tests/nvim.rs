@@ -201,14 +201,39 @@ fn start_server(home: &Home) -> Server {
     Server(home.command().spawn().unwrap())
 }
 
-async fn wait_until(what: &str, mut done: impl FnMut() -> bool) {
+/// Waits until `done` holds. When it does not, the panic says what the home of the test looked like then (the lock
+/// directory and the log of the server), so that a failure on a machine that cannot be got at (a runner of the CI) says why.
+async fn wait_until(home: &Home, what: &str, mut done: impl FnMut() -> bool) {
     timeout(WAIT, async {
         while !done() {
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
     })
     .await
-    .unwrap_or_else(|_| panic!("{what}"));
+    .unwrap_or_else(|_| panic!("{what}\n{}", describe(home)));
+}
+
+/// The lock directory (each entry, and what a lock file says) and the log of the server.
+fn describe(home: &Home) -> String {
+    let mut text = format!("the lock directory {}:\n", home.lock_dir().display());
+    match std::fs::read_dir(home.lock_dir()) {
+        Ok(entries) => {
+            let mut any = false;
+            for entry in entries.flatten() {
+                any = true;
+                let path = entry.path();
+                let content =
+                    std::fs::read_to_string(&path).unwrap_or_else(|error| format!("<{error}>"));
+                text.push_str(&format!("  {}: {}\n", path.display(), content.trim()));
+            }
+            if !any {
+                text.push_str("  (empty)\n");
+            }
+        }
+        Err(error) => text.push_str(&format!("  <{error}>\n")),
+    }
+    text.push_str(&format!("the log of the server:\n{}\n", home.log()));
+    text
 }
 
 fn read_lock(home: &Home) -> LockContents {
@@ -228,14 +253,17 @@ async fn it_registers_at_the_default_socket_and_goes_away_with_the_process() {
     let _ = connect_when_ready(&home.default_socket()).await;
 
     let mut nvim = start_nvim(&home, SETUP);
-    wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
+    wait_until(&home, "the adapter registers", || {
+        !home.lock_files().is_empty()
+    })
+    .await;
     let lock = read_lock(&home);
     assert_eq!(lock.ide_name, "Neovim");
     // The process of the lock file is this Neovim: the CLI deletes a lock file whose process is gone.
     assert_eq!(lock.pid, nvim.pid());
 
     nvim.kill();
-    wait_until("the lock file goes with the process", || {
+    wait_until(&home, "the lock file goes with the process", || {
         home.lock_files().is_empty()
     })
     .await;
@@ -253,9 +281,11 @@ async fn a_neovim_that_starts_before_the_server_connects_when_the_server_comes()
     assert!(home.lock_files().is_empty());
 
     let _server = start_server(&home);
-    wait_until("the adapter registers once the server is there", || {
-        !home.lock_files().is_empty()
-    })
+    wait_until(
+        &home,
+        "the adapter registers once the server is there",
+        || !home.lock_files().is_empty(),
+    )
     .await;
     assert_eq!(read_lock(&home).pid, nvim.pid());
 }
@@ -269,17 +299,25 @@ async fn it_connects_again_when_the_server_restarts() {
     let mut server = start_server(&home);
     let _ = connect_when_ready(&home.default_socket()).await;
     let nvim = start_nvim(&home, SETUP);
-    wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
+    wait_until(&home, "the adapter registers", || {
+        !home.lock_files().is_empty()
+    })
+    .await;
 
     // The server is told to stop: it tells the adapter, and removes the lock file.
     server.stop();
     server.wait().await;
-    wait_until("the lock file is removed", || home.lock_files().is_empty()).await;
+    wait_until(&home, "the lock file is removed", || {
+        home.lock_files().is_empty()
+    })
+    .await;
 
     let _second = start_server(&home);
-    wait_until("the adapter registers with the server that follows", || {
-        !home.lock_files().is_empty()
-    })
+    wait_until(
+        &home,
+        "the adapter registers with the server that follows",
+        || !home.lock_files().is_empty(),
+    )
     .await;
     assert_eq!(read_lock(&home).pid, nvim.pid());
 }
@@ -322,7 +360,7 @@ async fn the_workspace_follows_cd() {
         ),
     );
     let folder = real_path(&folder);
-    wait_until("the lock file names the folder", || {
+    wait_until(&home, "the lock file names the folder", || {
         home.lock_files().len() == 1
             && read_lock(&home).workspace_folders == [folder.to_string_lossy()]
     })
@@ -363,7 +401,10 @@ async fn the_selection_reaches_claude_code_when_it_connects_and_when_the_cursor_
         ),
         Some(&listen),
     );
-    wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
+    wait_until(&home, "the adapter registers", || {
+        !home.lock_files().is_empty()
+    })
+    .await;
     let lock = read_lock(&home);
     let port: u16 = home.lock_files()[0]
         .file_stem()
@@ -385,7 +426,7 @@ async fn the_selection_reaches_claude_code_when_it_connects_and_when_the_cursor_
 
     // Two characters to the right: past `a` and `é`, onto the emoji. The column is counted in UTF-16 code units, not
     // in bytes (the emoji starts at byte 3).
-    wait_until("nvim listens", || listens(&listen)).await;
+    wait_until(&home, "nvim listens", || listens(&listen)).await;
     let sent = Command::new("nvim")
         .arg("--server")
         .arg(&listen)
@@ -446,6 +487,7 @@ async fn a_neovim_starts_the_server_when_nobody_is_listening_and_it_ends_when_th
 
     let mut nvim = start_nvim(&home, &starts_the_server());
     wait_until(
+        &home,
         "the adapter registers with the server that it started",
         || !home.lock_files().is_empty(),
     )
@@ -466,7 +508,7 @@ async fn neovims_that_start_together_share_one_server() {
     let home = Home::new();
     let first = start_nvim(&home, &starts_the_server());
     let second = start_nvim(&home, &starts_the_server());
-    wait_until("both register", || home.lock_files().len() == 2).await;
+    wait_until(&home, "both register", || home.lock_files().len() == 2).await;
     let pids: Vec<u32> = home
         .lock_files()
         .iter()
@@ -498,7 +540,10 @@ async fn the_first_connection_after_a_start_does_not_wait_for_the_usual_first_re
         ),
     );
     let started = std::time::Instant::now();
-    wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
+    wait_until(&home, "the adapter registers", || {
+        !home.lock_files().is_empty()
+    })
+    .await;
     assert!(
         started.elapsed() < Duration::from_millis(2500),
         "it registered after {:?}",
@@ -527,7 +572,7 @@ async fn a_server_that_the_adapter_started_and_that_does_not_understand_its_argu
             server_exe()
         ),
     );
-    wait_until("the user is told", || {
+    wait_until(&home, "the user is told", || {
         std::fs::read_to_string(&messages).is_ok_and(|text| text.contains("exited with code 2"))
     })
     .await;
@@ -603,7 +648,10 @@ async fn claude_code_can_ask_for_the_open_editors_and_the_selection() {
             lua_path(&second)
         ),
     );
-    wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
+    wait_until(&home, "the adapter registers", || {
+        !home.lock_files().is_empty()
+    })
+    .await;
     let mut claude = claude_for(&home).await;
 
     // The tools that the adapter can answer are offered.
@@ -690,7 +738,10 @@ async fn claude_code_can_ask_for_the_diagnostics_of_a_file_and_of_all() {
             lua_path(&second)
         ),
     );
-    wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
+    wait_until(&home, "the adapter registers", || {
+        !home.lock_files().is_empty()
+    })
+    .await;
     let mut claude = claude_for(&home).await;
     let real_first = real_path(&first);
     let first_uri = uri_of(&real_first);
@@ -762,9 +813,12 @@ async fn a_file_or_some_of_its_lines_can_be_mentioned_to_claude_code() {
         ),
         Some(&listen),
     );
-    wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
+    wait_until(&home, "the adapter registers", || {
+        !home.lock_files().is_empty()
+    })
+    .await;
     let mut claude = claude_for(&home).await;
-    wait_until("nvim listens", || listens(&listen)).await;
+    wait_until(&home, "nvim listens", || listens(&listen)).await;
     let real = real_path(&file);
 
     // The whole file: from the first line to the last (0-based, the last one included).
@@ -805,9 +859,12 @@ async fn a_buffer_that_stands_for_a_file_is_mentioned_as_the_whole_file_without_
         ),
         Some(&listen),
     );
-    wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
+    wait_until(&home, "the adapter registers", || {
+        !home.lock_files().is_empty()
+    })
+    .await;
     let mut claude = claude_for(&home).await;
-    wait_until("nvim listens", || listens(&listen)).await;
+    wait_until(&home, "nvim listens", || listens(&listen)).await;
     let real = real_path(&image);
 
     // Being in the buffer is being in the file: it is the current file, as a whole, at its start.
@@ -848,7 +905,10 @@ async fn claude_code_can_open_a_file_check_whether_it_has_changes_and_save_it() 
         "require('claude_ide').setup({ selection_debounce_ms = 20, server = { autostart = false } })",
         Some(&listen),
     );
-    wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
+    wait_until(&home, "the adapter registers", || {
+        !home.lock_files().is_empty()
+    })
+    .await;
     let mut claude = claude_for(&home).await;
     let real = real_path(&project);
     let a = real.join("lib").join("a.lua");
@@ -931,7 +991,7 @@ async fn claude_code_can_open_a_file_check_whether_it_has_changes_and_save_it() 
     assert_eq!(details["lineCount"], 2);
 
     // A change that is not written is told, and is written by saveDocument.
-    wait_until("nvim listens", || listens(&listen)).await;
+    wait_until(&home, "nvim listens", || listens(&listen)).await;
     send_keys(&listen, "<Esc>ggdd");
     let mut dirty = Value::Null;
     for _ in 0..100 {
@@ -992,9 +1052,12 @@ async fn changed_diagnostics_reach_claude_code_once_for_a_burst_of_changes() {
         ),
         Some(&listen),
     );
-    wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
+    wait_until(&home, "the adapter registers", || {
+        !home.lock_files().is_empty()
+    })
+    .await;
     let mut claude = claude_for(&home).await;
-    wait_until("nvim listens", || listens(&listen)).await;
+    wait_until(&home, "nvim listens", || listens(&listen)).await;
     let uri = |path: &Path| uri_of(&real_path(path));
 
     // The diagnostics of two files change, and the first one again, within the wait: one notification names both files,
@@ -1121,9 +1184,12 @@ async fn claude_code_can_propose_a_change_that_the_user_accepts_edits_or_rejects
         ),
         Some(&listen),
     );
-    wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
+    wait_until(&home, "the adapter registers", || {
+        !home.lock_files().is_empty()
+    })
+    .await;
     let claude = claude_for(&home).await;
-    wait_until("nvim listens", || listens(&listen)).await;
+    wait_until(&home, "nvim listens", || listens(&listen)).await;
     let arguments = |tab_name: &str| {
         serde_json::json!({
             "old_file_path": file.to_string_lossy(),
@@ -1220,7 +1286,10 @@ async fn diagnostics_asked_for_right_after_a_file_was_written_are_those_of_the_n
             lua_path(&file)
         ),
     );
-    wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
+    wait_until(&home, "the adapter registers", || {
+        !home.lock_files().is_empty()
+    })
+    .await;
     let mut claude = claude_for(&home).await;
     let uri = uri_of(&real_path(&file));
 
@@ -1264,7 +1333,10 @@ async fn a_file_is_asked_for_by_a_path_through_a_link_and_answered_under_the_uri
             lua_path(&real.join("a.lua"))
         ),
     );
-    wait_until("the adapter registers", || !home.lock_files().is_empty()).await;
+    wait_until(&home, "the adapter registers", || {
+        !home.lock_files().is_empty()
+    })
+    .await;
     let mut claude = claude_for(&home).await;
 
     // Claude Code edited `link/a.lua`: that is the uri that it asks about, and the one that must come back.
