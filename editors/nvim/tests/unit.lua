@@ -107,6 +107,17 @@ do
     selection.current(image, { mode = 'v', visual = pos(1, 1), cursor = pos(2, 4) }),
     { filePath = path, text = '', selection = range(0, 0, 0, 0) }
   )
+  -- The file is named by its real path, as the file of a normal buffer is, though the configuration names it by a link.
+  local target, link = vim.fn.tempname(), vim.fn.tempname()
+  vim.fn.writefile({ 'x' }, target)
+  if vim.uv.fs_symlink(target, link) then
+    files.custom_file_of = function()
+      return link
+    end
+    check('a link is named by the file that it points to', files.file_of(image), files.long_path(assert(vim.uv.fs_realpath(target))))
+    vim.uv.fs_unlink(link)
+  end
+  vim.uv.fs_unlink(target)
   files.custom_file_of = nil
   vim.api.nvim_buf_delete(image, { force = true })
 end

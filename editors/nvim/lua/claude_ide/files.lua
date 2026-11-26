@@ -51,7 +51,10 @@ function M.file_of(buf)
   -- A buffer that the configuration names a file for (an image viewer, which is not a normal buffer).
   local custom = M.custom_file_of and M.custom_file_of(buf)
   if custom and custom ~= '' then
-    return M.long_path(vim.fn.fnamemodify(custom, ':p'))
+    -- Neovim names the file of a normal buffer by its real path (on macOS the temporary directory is under a link: /var
+    -- is /private/var), and Claude Code takes two names of one file as two files: name this one the same way.
+    local path = vim.fn.fnamemodify(custom, ':p')
+    return M.long_path(vim.uv.fs_realpath(path) or path)
   end
   local name = vim.api.nvim_buf_get_name(buf)
   if name == '' or vim.bo[buf].buftype ~= '' then
